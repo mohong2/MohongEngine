@@ -5,6 +5,7 @@
 
 ## Something new
 ![](./images/6.png)
+![](./images/7.png)
 New language support. (Although the code is a bit badly written) (A bunch of ifs?)
 
 ## Installation:
