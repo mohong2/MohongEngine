@@ -1,5 +1,11 @@
+[**中文文档**](ZHREADME.md) | [English Version](README.md) 
+
 # Friday Night Funkin' - Mohong Engine It's a Fork !!!!(Psych Engine)
-Engine originally used on [Mind Games Mod](Not Gamebanana), intended to be a fix for the vanilla version's many issues while keeping the casual play aspect of it. Also aiming to be an easier alternative to newbie coders.
+(Not has Gamebanana) intended to be a fix for the vanilla version's many issues while keeping the casual play aspect of it. Also aiming to be an easier alternative to newbie coders.
+
+## Something new
+![](./images/6.png)
+New language support. (Although the code is a bit badly written) (A bunch of ifs?)
 
 ## Installation:
 You must have [the most up-to-date version of Haxe](https://haxe.org/download/), seriously, stop using 4.1.5, it misses some stuff.
@@ -18,6 +24,7 @@ If you want video support on your mod, simply do `haxelib install hxCodec` on a 
 otherwise, you can delete the "VIDEOS_ALLOWED" Line on Project.xml
 
 ## Credits:
+* mo_hong - Modification and Chinese translation
 * Shadow Mario - Programmer
 * RiverOaken - Artist
 * Yoshubs - Assistant Programmer
@@ -38,7 +45,7 @@ _____________________________________
 
 ## Attractive animated dialogue boxes:
 
-![](https://user-images.githubusercontent.com/44785097/127706669-71cd5cdb-5c2a-4ecc-871b-98a276ae8070.gif)
+![](./images/5.gif)
 
 
 ## Mod Support
@@ -68,7 +75,7 @@ _____________________________________
   * Also there's the Background girls being spooky during the "Hey!" parts of the Instrumental
 
 ## Cool new Chart Editor changes and countless bug fixes
-![](https://github.com/ShadowMario/FNF-PsychEngine/blob/main/docs/img/chart.png?raw=true)
+![](./images/chart.png)
 * You can now chart "Event" notes, which are bookmarks that trigger specific actions that usually were hardcoded on the vanilla version of the game.
 * Your song's BPM can now have decimal values
 * You can manually adjust a Note's strum time if you're really going for milisecond precision
@@ -77,16 +84,17 @@ _____________________________________
   * Hey: Forces a "Hey" animation instead of the base Sing animation, if Boyfriend hits this note, Girlfriend will do a "Hey!" too.
 
 ## Multiple editors to assist you in making your own Mod
-![Screenshot_3](https://user-images.githubusercontent.com/44785097/144629914-1fe55999-2f18-4cc1-bc70-afe616d74ae5.png)
+![Screenshot_3](./images/3.png)
 * Working both for Source code modding and Downloaded builds!
 
 ## Story mode menu rework:
-![](https://i.imgur.com/UB2EKpV.png)
+![](./images/2.png)
 * Added a different BG to every song (less Tutorial)
 * All menu characters are now in individual spritesheets, makes modding it easier.
 
 ## Credits menu
-![Screenshot_1](https://user-images.githubusercontent.com/44785097/144632635-f263fb22-b879-4d6b-96d6-865e9562b907.png)
+![Screenshot_1](./images/1.png)
+(./images/7.png)
 * You can add a head icon, name, description and a Redirect link for when the player presses Enter while the item is currently selected.
 
 ## Awards/Achievements
