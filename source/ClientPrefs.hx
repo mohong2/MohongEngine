@@ -34,6 +34,7 @@ class ClientPrefs {
 	public static var checkForUpdates:Bool = true;
 	public static var comboStacking = true;
 	public static var language:String = "English";
+	public static var luattf:String = "English TTF";
 	public static var currentFont:String = "vcr.ttf"; 
 	public static var gameplaySettings:Map<String, Dynamic> = [
 		'scrollspeed' => 1.0,
@@ -98,6 +99,7 @@ class ClientPrefs {
 	public static function saveSettings() {
 		FlxG.save.data.downScroll = downScroll;
 		FlxG.save.data.language = language;
+		FlxG.save.data.luattf = luattf;
 		FlxG.save.data.middleScroll = middleScroll;
 		FlxG.save.data.opponentStrums = opponentStrums;
 		FlxG.save.data.showFPS = showFPS;
@@ -146,6 +148,9 @@ class ClientPrefs {
 	public static function loadPrefs() {
 
 
+		if (FlxG.save.data.luattf != null) {
+    		luattf = FlxG.save.data.luattf;
+		}
 		if (FlxG.save.data.language != null) {
     		language = FlxG.save.data.language;
 		}

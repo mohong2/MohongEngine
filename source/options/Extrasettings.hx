@@ -41,7 +41,17 @@ class Extrasettings extends BaseOptionsMenu
             'English',
             ['English', 'Chinese']);
 		addOption(option);
+
+		var option:Option = new Option('Lua TTF',
+		'Change the font of lua (if lua is not set)',
+        'luattf', 
+        'string',
+        'English',
+         ['English TTF', 'Chinese TTF']);
+		addOption(option);
+
 		super();
+
 		}
 		else{
         title = 'Extra settings';
@@ -54,8 +64,19 @@ class Extrasettings extends BaseOptionsMenu
             'English',
             ['English', 'Chinese']);
 		addOption(option);
+
+				var option:Option = new Option('Lua TTF',
+		'改变lua的字体（如果lua没有设置）',
+        'luattf', 
+        'string',
+        'English',
+         ['English TTF', 'Chinese TTF']);
+		addOption(option);
+
+
 		super();
 		}
+
 	}
 
 	function onChangeHitsoundVolume()

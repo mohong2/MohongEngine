@@ -1,3 +1,14 @@
+--[[
+Mohong Engine New
+if luattf == "English TTF" then --The font of the original Chinese is not supported.
+
+end
+
+if luattf == "Chinese TTF" then --Chinese font, support Chinese, It can be used as a bilingual
+
+end
+
+--]]
 -- Lua stuff
 
 function onCreate()

@@ -42,7 +42,7 @@ public static var ch_achievementsStuff:Array<Dynamic> = [
 		["Highscore!!",					"在 Hard 上无失误地击败第 6 周。",				'week6_nomiss',			false],
 		["God Effing Damn It!",			"在 Hard 上无失误地击败第 7 周。",				'week7_nomiss',			false],
 		["What a Funkin' Disaster!",	"完成一首评分低于20%的歌。",	'ur_bad',				false],
-		["AP!!!!!!!!",				"完成一首评分100%的歌。(玩这phigros玩的)",			'ur_good',				false],
+		["AP!!!!!!!!",				"完成一首评分100%的歌。(玩phigros玩的)",			'ur_good',				false],
 		["Roadkill Enthusiast",			"看那些打手死了超过100次。",			'roadkill_enthusiast',	false],
 		["Oversinging Much...?",		"把箭头按住保持10秒钟。",					'oversinging',			false],
 		["Hyperactive",					"完成一首歌，别闲着。",				'hype',					false],
