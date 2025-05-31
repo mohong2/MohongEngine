@@ -50,7 +50,14 @@ class Extrasettings extends BaseOptionsMenu
          ['English TTF', 'Chinese TTF']);
 		addOption(option);
 
+		var option:Option = new Option('Opponent flickering effect',
+		'If unchecked, the flickering effect will be canceled after the opponent hits.',
+		'opponentfe',
+		'bool',
+		true);
+		addOption(option);
 		super();
+
 
 		}
 		else{
@@ -65,7 +72,7 @@ class Extrasettings extends BaseOptionsMenu
             ['English', 'Chinese']);
 		addOption(option);
 
-				var option:Option = new Option('Lua TTF',
+		var option:Option = new Option('Lua TTF',
 		'改变lua的字体（如果lua没有设置）',
         'luattf', 
         'string',
@@ -73,7 +80,13 @@ class Extrasettings extends BaseOptionsMenu
          ['English TTF', 'Chinese TTF']);
 		addOption(option);
 
-
+		var option:Option = new Option('Opponent flickering effect',
+		'如果未选中将会取消对手击中后的闪烁效果。',
+		'opponentfe',
+		'bool',
+		true);
+		addOption(option);
+		
 		super();
 		}
 

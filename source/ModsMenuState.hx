@@ -79,8 +79,12 @@ class ModsMenuState extends MusicBeatState
 		bg.antialiasing = ClientPrefs.globalAntialiasing;
 		add(bg);
 		bg.screenCenter();
-
+		if (ClientPrefs.language == 'English') {
 		noModsTxt = new FlxText(0, 0, FlxG.width, "NO MODS INSTALLED\nPRESS BACK TO EXIT AND INSTALL A MOD", 48);
+		}
+		else{
+		noModsTxt = new FlxText(0, 0, FlxG.width, "你似乎未安装 MOD 按 BACK 退出并安装 MOD", 48);
+		}
 		if(FlxG.random.bool(0.1)) noModsTxt.text += '\nBITCH.'; //meanie
 		noModsTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		noModsTxt.scrollFactor.set();
@@ -750,10 +754,19 @@ class ModMetadata
 				{
 					this.name = folder;
 				}
+				if (ClientPrefs.language == 'English') {
 				if(description == 'Description')
 				{
 					this.description = "No description provided.";
 				}
+			}
+			else
+			{
+				if(description == 'Description')
+				{
+					this.description = "未提供描述。";
+				}
+			}
 				if(colors != null && colors.length > 2)
 				{
 					this.color = FlxColor.fromRGB(colors[0], colors[1], colors[2]);

@@ -4,6 +4,7 @@ import flixel.graphics.FlxGraphic;
 #if desktop
 import Discord.DiscordClient;
 #end
+
 import Section.SwagSection;
 import Song.SwagSong;
 import WiggleEffect.WiggleEffectType;
@@ -60,7 +61,6 @@ import StageData;
 import FunkinLua;
 import DialogueBoxPsych;
 import Conductor.Rating;
-
 #if !flash 
 import flixel.addons.display.FlxRuntimeShader;
 import openfl.filters.ShaderFilter;
@@ -344,15 +344,12 @@ var atkText:FlxText;
 	// stores the last combo score objects in an array
 	public static var lastScore:Array<FlxSprite> = [];
 
-	
 
 	override public function create()
 	{
-	
 
 		//trace('Playback Rate: ' + playbackRate);
 		Paths.clearStoredMemory();
-
 		// for lua
 		instance = this;
 
@@ -2926,6 +2923,7 @@ var difficultyName:String = CoolUtil.difficultyString();
 
 	override public function update(elapsed:Float)
 	{
+
 		/*if (FlxG.keys.justPressed.NINE)
 		{
 			iconP1.swapOldIcon();
@@ -4562,7 +4560,7 @@ var difficultyName:String = CoolUtil.difficultyString();
 
 	function noteMiss(daNote:Note):Void { //You didn't hit the key and let it go offscreen, also used by Hurt Notes
 		//Dupe note remove
-		notes.forEachAlive(function(note:Note) {
+	notes.forEachAlive(function(note:Note) {
 			if (daNote != note && daNote.mustPress && daNote.noteData == note.noteData && daNote.isSustainNote == note.isSustainNote && Math.abs(daNote.strumTime - note.strumTime) < 1) {
 				note.kill();
 				notes.remove(note, true);
@@ -4571,7 +4569,12 @@ var difficultyName:String = CoolUtil.difficultyString();
 		});
 		combo = 0;
 		health -= daNote.missHealth * healthLoss;
-		
+		var msDiffStr:String = 'Miss';
+		msTxtKade.color = 0xFF0000;
+		 msTxtKade.text = msDiffStr;
+    	msTxtKade.alpha = 1;
+    if (msTween != null) msTween.cancel();
+    msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
 		if(instakillOnMiss)
 		{
 			vocals.volume = 0;
@@ -4649,6 +4652,8 @@ var difficultyName:String = CoolUtil.difficultyString();
 
 	function opponentNoteHit(note:Note):Void
 	{
+
+
 		if (Paths.formatToSongPath(SONG.song) != 'tutorial')
 			camZooming = true;
 
@@ -4678,7 +4683,7 @@ var difficultyName:String = CoolUtil.difficultyString();
 				char.holdTimer = 0;
 			}
 		}
-
+	
 		if (SONG.needsVoices)
 			vocals.volume = 1;
 
@@ -4697,25 +4702,40 @@ var difficultyName:String = CoolUtil.difficultyString();
 			notes.remove(note, true);
 			note.destroy();
 		}
+if (!ClientPrefs.opponentfe) {
+setOpponentStrumStatic(0);
+setOpponentStrumStatic(1);
+setOpponentStrumStatic(2);
+setOpponentStrumStatic(3);
+}
 	}
+
+public function setOpponentStrumStatic(direction:Int) {
+    var strum = opponentStrums.members[direction];
+    if (strum != null) {
+        strum.playAnim('static', true);
+        strum.resetAnim = 0;
+    }
+}
+
 
 	function goodNoteHit(note:Note):Void
 {
-
  
-	if (!note.isSustainNote) {
+if (!note.isSustainNote) {
+
 var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition);
  var rating:String = 'sick';
-    if (noteDiff > 200) {
-        rating = 'shit';
-    } else if (noteDiff > 160) {
-        rating = 'bad';
-    } else if (noteDiff > 80) {
-        rating = 'good';
-    } else {
-        rating = 'sick';
-    }
-    
+
+if (noteDiff < ClientPrefs.badWindow && noteDiff > ClientPrefs.goodWindow) {
+    rating = 'bad';
+} else if (noteDiff < ClientPrefs.goodWindow && noteDiff > ClientPrefs.sickWindow) {
+    rating = 'good';
+} else if (noteDiff < ClientPrefs.sickWindow) {
+    rating = 'sick';
+} else {
+    rating = 'shit';
+}
 
 var mscolor:FlxColor = 0x00FFFF;
 
@@ -4731,12 +4751,13 @@ var mscolor:FlxColor = 0x00FFFF;
 
 
 
+
 	var strumTime:Float = note.strumTime;
     var songPos:Float = Conductor.songPosition;
     var rOffset:Float = ClientPrefs.ratingOffset;
     var diff:Float = strumTime - songPos + rOffset;
     
-
+	
     var msDiffStr:String = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
 
     msTxtKade.text = msDiffStr;
@@ -4853,6 +4874,7 @@ var mscolor:FlxColor = 0x00FFFF;
 				note.destroy();
 			}
 		}
+
 	}
 
 	public function spawnNoteSplashOnNote(note:Note) {
@@ -5281,7 +5303,6 @@ var mscolor:FlxColor = 0x00FFFF;
 		} else {
 			spr = playerStrums.members[id];
 		}
-
 		if(spr != null) {
 			spr.playAnim('confirm', true);
 			spr.resetAnim = time;

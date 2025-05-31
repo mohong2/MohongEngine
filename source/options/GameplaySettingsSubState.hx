@@ -157,7 +157,7 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 
 		//I'd suggest using "Downscroll" as an example for making your own option since it is the simplest here
 		var option:Option = new Option('Downscroll', //Name
-			'如果勾选的话，注释就会向下而不是向上，挺简单的。', //Description
+			'如果勾选的话，箭头就会向下而不是向上，挺简单的。', //Description
 			'downScroll', //Save data variable name
 			'bool', //Variable type
 			false); //Default value
