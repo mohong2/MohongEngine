@@ -34,6 +34,7 @@ class ClientPrefs {
 	public static var checkForUpdates:Bool = true;
 	public static var comboStacking = true;
 	public static var language:String = "English";
+	public static var sidehud:Bool = true;
 	public static var luattf:String = "English TTF";
 	public static var doublebetbf:Bool = true;
 	public static var doublebetdad:Bool = true;
@@ -102,6 +103,7 @@ class ClientPrefs {
 	public static function saveSettings() {
 		FlxG.save.data.downScroll = downScroll;
 		FlxG.save.data.language = language;
+		FlxG.save.data.sidehud = sidehud;
 		FlxG.save.data.opponentfe = opponentfe;
 		FlxG.save.data.luattf = luattf;
 		FlxG.save.data.middleScroll = middleScroll;
@@ -150,9 +152,8 @@ class ClientPrefs {
 	}
 
 	public static function loadPrefs() {
-
-		if (FlxG.save.data.language != null) {
-    		luattf = FlxG.save.data.language;
+		if (FlxG.save.data.sidehud != null) {
+    		sidehud = FlxG.save.data.sidehud;
 		}
 
 		if (FlxG.save.data.luattf != null) {

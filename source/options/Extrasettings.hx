@@ -56,6 +56,15 @@ class Extrasettings extends BaseOptionsMenu
 		'bool',
 		true);
 		addOption(option);
+
+		var option:Option = new Option('Side HUD',
+		'If this is not checked, values such as sick and good on the left side of the game will not be displayed',
+		'sidehud',
+		'bool',
+		true);
+
+		addOption(option);
+
 		super();
 
 
@@ -87,6 +96,13 @@ class Extrasettings extends BaseOptionsMenu
 		true);
 		addOption(option);
 		
+		var option:Option = new Option('Side HUD',
+		'如果未选中将会不显示游戏左侧的sick，Good等之类的数值',
+		'sidehud',
+		'bool',
+		true);
+		addOption(option);
+
 		super();
 		}
 

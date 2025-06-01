@@ -116,6 +116,7 @@ class FunkinLua {
 		set('luaDeprecatedWarnings', true);
 		set('inChartEditor', false);
 
+		set('language', ClientPrefs.language);
 		// Song/Week shit
 		set('curBpm', Conductor.bpm);
 		set('bpm', PlayState.SONG.bpm);
