@@ -1415,10 +1415,6 @@ private static final cmy:Int = 20;
 
 		super.create();
 
-		if (ClientPrefs.sidehud) {
-        createSideHUD();
-    }
-
 		cacheCountdown();
 		cachePopUpScore();
 		for (key => type in precacheList)
@@ -1437,27 +1433,92 @@ private static final cmy:Int = 20;
 		Paths.clearUnusedMemory();
 		
 		CustomFadeTransition.nextCamera = camOther;
+		if (ClientPrefs.sidehud) {
+	 var totalNotesText = ClientPrefs.language == 'English' ? "Total Notes Hit: 0" : "总命中数: 0";
+    var combosText = ClientPrefs.language == 'English' ? "Combos: 0" : "连击: 0";
+    var sicksText = ClientPrefs.language == 'English' ? "Sicks!: 0" : "完美!: 0";
+    var goodsText = ClientPrefs.language == 'English' ? "Goods: 0" : "不错: 0";
+    var badsText = ClientPrefs.language == 'English' ? "Bads: 0" : "不好: 0";
+    var shitsText = ClientPrefs.language == 'English' ? "Shits: 0" : "差: 0";
+    var missesText = ClientPrefs.language == 'English' ? "Misses: 0" : "连击中断: 0";
+
+    tnh = new FlxText(tnhx + 10, 259, 250, totalNotesText, 20);
+    tnh.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    tnh.cameras = [camOther];
+	tnh.font = Paths.font("vcr.ttf"); 
+	tnh.borderSize = 2;
+    add(tnh);
+
+    cm = new FlxText(-tnh.x + cmoffset, tnh.y + cmy, 200, combosText, 20);
+    cm.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    cm.cameras = [camOther];
+	cm.font = Paths.font("vcr.ttf"); 
+	cm.borderSize = 2;
+    add(cm);
+
+    sick = new FlxText(cm.x, cm.y + 30, 200, sicksText, 20);
+    sick.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    sick.cameras = [camOther];
+	sick.font = Paths.font("vcr.ttf"); 
+	sick.borderSize = 2;
+    add(sick);
+
+    good = new FlxText(cm.x, sick.y + 30, 200, goodsText, 20);
+    good.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    good.cameras = [camOther];
+	good.font = Paths.font("vcr.ttf"); 
+	good.borderSize = 2;
+    add(good);
+
+    bad = new FlxText(cm.x, good.y + 30, 200, badsText, 20);
+    bad.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    bad.cameras = [camOther];
+	bad.font = Paths.font("vcr.ttf"); 
+	bad.borderSize = 2;
+    add(bad);
+
+    shit = new FlxText(cm.x, bad.y + 30, 200, shitsText, 20);
+    shit.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    shit.cameras = [camOther];
+	shit.font = Paths.font("vcr.ttf"); 
+	shit.borderSize = 2;
+	add(shit);
+
+    miss = new FlxText(cm.x, shit.y + 30, 200, missesText, 20);
+    miss.setFormat(20, FlxColor.RED, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+    miss.cameras = [camOther];
+	miss.font = Paths.font("vcr.ttf"); 
+	miss.borderSize = 2;
+    add(miss);
+    }
+
 
 msTxtKade = new FlxText(520, 350, 0, "", 19);
 msTxtKade.alpha = 0;
 msTxtKade.scrollFactor.set();
 msTxtKade.cameras = [camHUD];
 msTxtKade.visible = !ClientPrefs.hideHud;
-msTxtKade.font = Paths.msfont("kadems.ttf"); 
+msTxtKade.setFormat(19, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 msTxtKade.borderSize = 2;
+msTxtKade.font = Paths.msfont("kadems.ttf"); 
 add(msTxtKade);
 
 var songName:String = PlayState.SONG.song; 
 var difficultyName:String = CoolUtil.difficultyString();
-        var versionText:String = "MHE 0.1(Bata) + PE 0.6.3";
+var mohongEngineVersion:String = MainMenuState.mohongEngineVersion;
+var psychEngineVersion:String = MainMenuState.psychEngineVersion;
+
+        var versionText:String = 'MHE $mohongEngineVersion + PE $psychEngineVersion';
 		atkText = new FlxText(0, 700, 600, "", 15);
-		atkText.font = Paths.enfont("vcr.ttf"); 
        atkText.text = '$songName $difficultyName - $versionText';
         atkText.cameras = [camHUD];
 		atkText.borderSize = 2;
+		atkText.setFormat(15, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		atkText.font = Paths.enfont("vcr.ttf"); 
         add(atkText);
 	}
 
+	
 	#if (!flash && sys)
 	public var runtimeShaders:Map<String, Array<String>> = new Map<String, Array<String>>();
 	public function createRuntimeShader(name:String):FlxRuntimeShader
@@ -4771,73 +4832,6 @@ public function setOpponentStrumStatic(direction:Int) {
     }
 }
 
-	private function createSideHUD() {
-		
-    var totalNotesText = ClientPrefs.language == 'English' ? "Total Notes Hit: 0" : "总命中数: 0";
-    var combosText = ClientPrefs.language == 'English' ? "Combos: 0" : "连击: 0";
-    var sicksText = ClientPrefs.language == 'English' ? "Sicks!: 0" : "完美!: 0";
-    var goodsText = ClientPrefs.language == 'English' ? "Goods: 0" : "不错: 0";
-    var badsText = ClientPrefs.language == 'English' ? "Bads: 0" : "不好: 0";
-    var shitsText = ClientPrefs.language == 'English' ? "Shits: 0" : "差: 0";
-    var missesText = ClientPrefs.language == 'English' ? "Misses: 0" : "连击中断: 0";
-
-    tnh = new FlxText(tnhx + 10, 259, 250, totalNotesText, 20);
-    tnh.setFormat(20, FlxColor.WHITE, LEFT);
-    tnh.cameras = [camOther];
-	tnh.font = Paths.font("vcr.ttf"); 
-	tnh.borderColor = FlxColor.BLACK;
-	tnh.borderSize = 2;
-    add(tnh);
-
-    cm = new FlxText(-tnh.x + cmoffset, tnh.y + cmy, 200, combosText, 20);
-    cm.setFormat(20, FlxColor.WHITE, LEFT);
-    cm.cameras = [camOther];
-	cm.font = Paths.font("vcr.ttf"); 
-	cm.borderColor = FlxColor.BLACK;
-	cm.borderSize = 2;
-    add(cm);
-
-    sick = new FlxText(cm.x, cm.y + 30, 200, sicksText, 20);
-    sick.setFormat(20, FlxColor.WHITE, LEFT);
-    sick.cameras = [camOther];
-	sick.font = Paths.font("vcr.ttf"); 
-	sick.borderColor = FlxColor.BLACK;
-	sick.borderSize = 2;
-    add(sick);
-
-    good = new FlxText(cm.x, sick.y + 30, 200, goodsText, 20);
-    good.setFormat(20, FlxColor.WHITE, LEFT);
-    good.cameras = [camOther];
-	good.font = Paths.font("vcr.ttf"); 
-	good.borderColor = FlxColor.BLACK;
-	good.borderSize = 2;
-    add(good);
-
-    bad = new FlxText(cm.x, good.y + 30, 200, badsText, 20);
-    bad.setFormat(20, FlxColor.WHITE, LEFT);
-    bad.cameras = [camOther];
-	bad.font = Paths.font("vcr.ttf"); 
-	bad.borderColor = FlxColor.BLACK;
-	bad.borderSize = 2;
-    add(bad);
-
-    shit = new FlxText(cm.x, bad.y + 30, 200, shitsText, 20);
-    shit.setFormat(20, FlxColor.WHITE, LEFT);
-    shit.cameras = [camOther];
-	shit.font = Paths.font("vcr.ttf"); 
-	shit.borderColor = FlxColor.BLACK;
-	shit.borderSize = 2;
-	add(shit);
-
-    miss = new FlxText(cm.x, shit.y + 30, 200, missesText, 20);
-    miss.setFormat(20, FlxColor.RED, LEFT);
-    miss.cameras = [camOther];
-	miss.font = Paths.font("vcr.ttf"); 
-	miss.borderColor = FlxColor.BLACK;
-	miss.borderSize = 2;
-    add(miss);
-}
-
 	function goodNoteHit(note:Note):Void
 {
  if (ClientPrefs.sidehud && !note.isSustainNote) {
@@ -5512,7 +5506,7 @@ var mscolor:FlxColor = 0x00FFFF;
 							unlock = true;
 						}
 					case 'line_blue':
-						if(goods == 1 && !usedPractice) {
+						if(goods == 1 && bads == 0 && shits == 0 && songMisses == 0 && !usedPractice){
 							unlock = true;
 						}
 					case 'ur_good':
