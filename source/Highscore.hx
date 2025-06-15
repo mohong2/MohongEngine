@@ -7,21 +7,57 @@ using StringTools;
 class Highscore
 {
 	#if (haxe >= "4.0.0")
-	public static var weekScores:Map<String, Int> = new Map();
 	public static var songScores:Map<String, Int> = new Map();
 	public static var songRating:Map<String, Float> = new Map();
-	#else
 	public static var weekScores:Map<String, Int> = new Map();
+	public static var songSicks:Map<String, Int> = new Map();
+	public static var songGoods:Map<String, Int> = new Map();
+	public static var songBads:Map<String, Int> = new Map();
+	public static var songShits:Map<String, Int> = new Map();
+	public static var songMisses:Map<String, Int> = new Map();
+	public static var songMaxCombo:Map<String, Int> = new Map();
+	#else
 	public static var songScores:Map<String, Int> = new Map<String, Int>();
-	public static var songRating:Map<String, Float> = new Map<String, Float>();
+	public static var weekScores:Map<String, Int> = new Map();
+	public static var songRating:Map<String, Float> = new Map();
+	public static var songSicks:Map<String, Int> = new Map<String, Int>();
+	public static var songGoods:Map<String, Int> = new Map<String, Int>();
+	public static var songBads:Map<String, Int> = new Map<String, Int>();
+	public static var songShits:Map<String, Int> = new Map<String, Int>();
+	public static var songMisses:Map<String, Int> = new Map<String, Int>();
+	public static var songMaxCombo:Map<String, Int> = new Map<String, Int>();
 	#end
 
+	public static function saveFullScore(
+		song:String, diff:Int, 
+		score:Int, sicks:Int, goods:Int, 
+		bads:Int, shits:Int, misses:Int, maxCombo:Int
+	):Void
+	{
+		var daSong:String = formatSong(song, diff);
+		
+		setScore(daSong, score);
+		setSicks(daSong, sicks);
+		setGoods(daSong, goods);
+		setBads(daSong, bads);
+		setShits(daSong, shits);
+		setMisses(daSong, misses);
+		setMaxCombo(daSong, maxCombo);
+	}
+	 
 
 	public static function resetSong(song:String, diff:Int = 0):Void
 	{
 		var daSong:String = formatSong(song, diff);
 		setScore(daSong, 0);
 		setRating(daSong, 0);
+		setScore(daSong, 0);
+		setSicks(daSong, 0);
+		setGoods(daSong, 0);
+		setBads(daSong, 0);
+		setShits(daSong, 0);
+		setMisses(daSong, 0);
+		setMaxCombo(daSong, 0);
 	}
 
 	public static function resetWeek(week:String, diff:Int = 0):Void
@@ -115,6 +151,8 @@ class Highscore
 		return songScores.get(daSong);
 	}
 
+
+
 	public static function getRating(song:String, diff:Int):Float
 	{
 		var daSong:String = formatSong(song, diff);
@@ -147,5 +185,107 @@ class Highscore
 		{
 			songRating = FlxG.save.data.songRating;
 		}
+		if (FlxG.save.data.songSicks != null) songSicks = FlxG.save.data.songSicks;
+		if (FlxG.save.data.songGoods != null) songGoods = FlxG.save.data.songGoods;
+		if (FlxG.save.data.songBads != null) songBads = FlxG.save.data.songBads;
+		if (FlxG.save.data.songShits != null) songShits = FlxG.save.data.songShits;
+		if (FlxG.save.data.songMisses != null) songMisses = FlxG.save.data.songMisses;
+		if (FlxG.save.data.songMaxCombo != null) songMaxCombo = FlxG.save.data.songMaxCombo;
 	}
+	public static function getSicks(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songSicks.exists(daSong))
+			setSicks(daSong, 0);
+
+		return songSicks.get(daSong);
+	}
+
+	public static function setSicks(song:String, sicks:Int):Void
+	{
+		songSicks.set(song, sicks);
+		FlxG.save.data.songSicks = songSicks;
+		FlxG.save.flush();
+	}
+
+	public static function getGoods(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songGoods.exists(daSong))
+			setGoods(daSong, 0);
+
+		return songGoods.get(daSong);
+	}
+
+	public static function setGoods(song:String, goods:Int):Void
+	{
+		songGoods.set(song, goods);
+		FlxG.save.data.songGoods = songGoods;
+		FlxG.save.flush();
+	}
+
+	public static function getBads(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songBads.exists(daSong))
+			setBads(daSong, 0);
+
+		return songBads.get(daSong);
+	}
+
+	public static function setBads(song:String, bads:Int):Void
+	{
+		songBads.set(song, bads);
+		FlxG.save.data.songBads = songBads;
+		FlxG.save.flush();
+	}
+
+	public static function getShits(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songShits.exists(daSong))
+			setShits(daSong, 0);
+
+		return songShits.get(daSong);
+	}
+
+	public static function setShits(song:String, shits:Int):Void
+	{
+		songShits.set(song, shits);
+		FlxG.save.data.songShits = songShits;
+		FlxG.save.flush();
+	}
+
+	public static function getMisses(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songMisses.exists(daSong))
+			setMisses(daSong, 0);
+
+		return songMisses.get(daSong);
+	}
+
+	public static function setMisses(song:String, misses:Int):Void
+	{
+		songMisses.set(song, misses);
+		FlxG.save.data.songMisses = songMisses;
+		FlxG.save.flush();
+	}
+
+	public static function getMaxCombo(song:String, diff:Int):Int
+	{
+		var daSong:String = formatSong(song, diff);
+		if (!songMaxCombo.exists(daSong))
+			setMaxCombo(daSong, 0);
+
+		return songMaxCombo.get(daSong);
+	}
+
+	public static function setMaxCombo(song:String, maxCombo:Int):Void
+	{
+		songMaxCombo.set(song, maxCombo);
+		FlxG.save.data.songMaxCombo = songMaxCombo;
+		FlxG.save.flush();
+	}
+
 }

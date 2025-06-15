@@ -163,7 +163,7 @@ class StoryMenuState extends MusicBeatState
 		rightArrow.animation.addByPrefix('press', "arrow push right", 24, false);
 		rightArrow.animation.play('idle');
 		rightArrow.antialiasing = ClientPrefs.globalAntialiasing;
-		difficultySelectors.add(rightArrow);
+	 	difficultySelectors.add(rightArrow);
 
 		add(bgYellow);
 		add(bgSprite);
@@ -184,9 +184,23 @@ class StoryMenuState extends MusicBeatState
 
 		changeWeek();
 		changeDifficulty();
-
+		updateArrowVisibility();
 		super.create();
 	}
+
+	private function updateArrowVisibility():Void {
+    if (CoolUtil.difficulties.length == 1) 
+	{
+	leftArrow.visible = false;
+    rightArrow.visible = false;
+	}
+	else
+	{
+    leftArrow.visible = true;
+    rightArrow.visible = true;
+	}
+}
+
 
 	override function closeSubState() {
 		persistentUpdate = true;
@@ -196,6 +210,7 @@ class StoryMenuState extends MusicBeatState
 
 	override function update(elapsed:Float)
 	{
+		updateArrowVisibility();
 		// scoreText.setFormat('VCR OSD Mono', 32);
 		lerpScore = Math.floor(FlxMath.lerp(lerpScore, intendedScore, CoolUtil.boundTo(elapsed * 30, 0, 1)));
 		if(Math.abs(intendedScore - lerpScore) < 10) lerpScore = intendedScore;
@@ -374,7 +389,6 @@ class StoryMenuState extends MusicBeatState
 	function changeWeek(change:Int = 0):Void
 	{
 		curWeek += change;
-
 		if (curWeek >= loadedWeeks.length)
 			curWeek = 0;
 		if (curWeek < 0)

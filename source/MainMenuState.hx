@@ -25,7 +25,7 @@ using StringTools;
 
 class MainMenuState extends MusicBeatState
 {
-	public static var mohongEngineVersion:String = '0.1'; 
+	public static var mohongEngineVersion:String = '1.0b'; 
 	public static var psychEngineVersion:String = '0.6.3';
 	public static var curSelected:Int = 0;
 

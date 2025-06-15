@@ -11,9 +11,10 @@ class HealthIcon extends FlxSprite
 	private var isOldIcon:Bool = false;
 	private var isPlayer:Bool = false;
 	private var char:String = '';
+	public static var frameCount:Int = 2;
 
 	public function new(char:String = 'bf', isPlayer:Bool = false)
-	{
+	{ 
 		super();
 		isOldIcon = (char == 'bf-old');
 		this.isPlayer = isPlayer;
@@ -43,6 +44,26 @@ class HealthIcon extends FlxSprite
 			var file:Dynamic = Paths.image(name);
 
 			loadGraphic(file); //Load stupidly first for getting the file size
+			var imgWidth:Int = Math.floor(width);
+			var imgHeight:Int = Math.floor(height);
+			frameCount = Std.int(imgWidth / 150);
+			if (frameCount == 3) {
+			loadGraphic(file, true, Math.floor(width / 3), Math.floor(height));
+			iconOffsets[0] = (width - 150) / 3;
+			iconOffsets[1] = (width - 150) / 3;
+			iconOffsets[2] = (width - 150) / 3;
+			updateHitbox();
+
+			animation.add(char, [0, 1, 2], 0, false, isPlayer);
+			animation.play(char);
+			this.char = char;
+
+			antialiasing = ClientPrefs.globalAntialiasing;
+			if(char.endsWith('-pixel')) {
+				antialiasing = false;
+			}
+		}
+			else{
 			loadGraphic(file, true, Math.floor(width / 2), Math.floor(height)); //Then load it fr
 			iconOffsets[0] = (width - 150) / 2;
 			iconOffsets[1] = (width - 150) / 2;
@@ -55,6 +76,7 @@ class HealthIcon extends FlxSprite
 			antialiasing = ClientPrefs.globalAntialiasing;
 			if(char.endsWith('-pixel')) {
 				antialiasing = false;
+				}
 			}
 		}
 	}
@@ -64,7 +86,12 @@ class HealthIcon extends FlxSprite
 		super.updateHitbox();
 		offset.x = iconOffsets[0];
 		offset.y = iconOffsets[1];
-	}
+		if (frameCount == 3) {
+		offset.x = iconOffsets[0];
+		offset.y = iconOffsets[1];
+		offset.y = iconOffsets[2];
+		}
+	}	
 
 	public function getCharacter():String {
 		return char;

@@ -39,7 +39,10 @@ class ClientPrefs {
 	public static var doublebetbf:Bool = true;
 	public static var doublebetdad:Bool = true;
 	public static var opponentfe:Bool = true;
+	public static var blurnote:Bool = false;
+	public static var imv4sc:Bool = false;
 	public static var currentFont:String = "vcr.ttf"; 
+
 	public static var gameplaySettings:Map<String, Dynamic> = [
 		'scrollspeed' => 1.0,
 		'scrolltype' => 'multiplicative', 
@@ -101,6 +104,7 @@ class ClientPrefs {
 	}
 
 	public static function saveSettings() {
+		FlxG.save.data.blurnote = blurnote;
 		FlxG.save.data.downScroll = downScroll;
 		FlxG.save.data.language = language;
 		FlxG.save.data.sidehud = sidehud;
@@ -126,11 +130,13 @@ class ClientPrefs {
 		FlxG.save.data.scoreZoom = scoreZoom;
 		FlxG.save.data.noReset = noReset;
 		FlxG.save.data.healthBarAlpha = healthBarAlpha;
+
 		FlxG.save.data.comboOffset = comboOffset;
 		FlxG.save.data.achievementsMap = Achievements.achievementsMap;
 		FlxG.save.data.henchmenDeath = Achievements.henchmenDeath;
 
 		FlxG.save.data.ratingOffset = ratingOffset;
+		FlxG.save.data.imv4sc = imv4sc;
 		FlxG.save.data.sickWindow = sickWindow;
 		FlxG.save.data.goodWindow = goodWindow;
 		FlxG.save.data.badWindow = badWindow;
@@ -152,6 +158,14 @@ class ClientPrefs {
 	}
 
 	public static function loadPrefs() {
+
+		if (FlxG.save.data.imv4sc != null) {
+    		imv4sc = FlxG.save.data.imv4sc;
+		}
+		if (FlxG.save.data.blurnote != null) {
+    		blurnote = FlxG.save.data.blurnote;
+		}
+
 		if (FlxG.save.data.sidehud != null) {
     		sidehud = FlxG.save.data.sidehud;
 		}

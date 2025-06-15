@@ -23,7 +23,7 @@ class Conductor
 	public static var songPosition:Float=0;
 	public static var lastSongPos:Float;
 	public static var offset:Float = 0;
-
+	public var score:Int = 350;
 	//public static var safeFrames:Int = 10;
 	public static var safeZoneOffset:Float = (ClientPrefs.safeFrames / 60) * 1000; // is calculated in create(), is safeFrames in milliseconds
 
@@ -162,9 +162,8 @@ class Rating
 	public var counter:String = '';
 	public var hitWindow:Null<Int> = 0; //ms
 	public var ratingMod:Float = 1;
-	public var score:Int = 350;
 	public var noteSplash:Bool = true;
-
+	public var score:Int = 350;
 	public function new(name:String)
 	{
 		this.name = name;

@@ -27,6 +27,8 @@ using StringTools;
 
 class Main extends Sprite
 {
+	public static var initialWindowX:Int;
+	public static var initialWindowY:Int;
 	var gameWidth:Int = 1280; // Width of the game in pixels (might be less / more in actual pixels depending on your zoom).
 	var gameHeight:Int = 720; // Height of the game in pixels (might be less / more in actual pixels depending on your zoom).
 	var initialState:Class<FlxState> = TitleState; // The FlxState the game starts with.

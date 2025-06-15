@@ -63,6 +63,18 @@ class Extrasettings extends BaseOptionsMenu
 		'bool',
 		true);
 
+		var option:Option = new Option('Motion blur Note',
+		'If checked, the note will have a motion blur effect',
+		'blurnote',
+		'bool',
+		false);
+		addOption(option);
+
+		var option:Option = new Option('Impostor V4 scoreTxt',
+		'If checked, the color of scoreTxt will change to the color of your opponents healthBar',
+		'imv4sc',
+		'bool',
+		false);
 		addOption(option);
 
 		super();
@@ -103,8 +115,24 @@ class Extrasettings extends BaseOptionsMenu
 		true);
 		addOption(option);
 
+		var option:Option = new Option('Motion blur Note',
+		'如果选中箭头将会有动态模糊效果',
+		'blurnote',
+		'bool',
+		false);
+		addOption(option);
+
+		var option:Option = new Option('Impostor V4 scoreTxt',
+		'如果选中,scoreTxt的颜色将会变成对手healthBar的颜色',
+		'imv4sc',
+		'bool',
+		false);
+		addOption(option);
+
+
 		super();
 		}
+
 
 	}
 

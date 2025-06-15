@@ -19,6 +19,8 @@ typedef EventNote = {
 
 class Note extends FlxSprite
 {
+
+
 	public var extraData:Map<String,Dynamic> = [];
 	public var strumTime:Float = 0;
 	public var mustPress:Bool = false;
@@ -40,6 +42,7 @@ class Note extends FlxSprite
 
 	public var sustainLength:Float = 0;
 	public var isSustainNote:Bool = false;
+	public var isSustainEnd:Bool = false;
 	public var noteType(default, set):String = null;
 
 	public var eventName:String = '';
@@ -176,7 +179,7 @@ class Note extends FlxSprite
 		y -= 2000;
 		this.strumTime = strumTime;
 		if(!inEditor) this.strumTime += ClientPrefs.noteOffset;
-
+		
 		this.noteData = noteData;
 
 		if(noteData > -1) {
@@ -202,6 +205,7 @@ class Note extends FlxSprite
 			alpha = 0.6;
 			multAlpha = 0.6;
 			hitsoundDisabled = true;
+			isSustainEnd = true;
 			if(ClientPrefs.downScroll) flipY = true;
 
 			offsetX += width / 2;
@@ -218,6 +222,7 @@ class Note extends FlxSprite
 
 			if (prevNote.isSustainNote)
 			{
+				isSustainEnd = false;
 				prevNote.animation.play(colArray[prevNote.noteData % 4] + 'hold');
 
 				prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
@@ -255,8 +260,11 @@ class Note extends FlxSprite
 		var skin:String = texture;
 		if(texture.length < 1) {
 			skin = PlayState.SONG.arrowSkin;
-			if(skin == null || skin.length < 1) {
+			if(skin == null || skin.length < 1 && !ClientPrefs.blurnote) {
 				skin = 'NOTE_assets';
+			}
+			if(skin == null || skin.length < 1 && ClientPrefs.blurnote) {
+				skin = 'blur_NOTE_assets';
 			}
 		}
 
@@ -344,6 +352,11 @@ class Note extends FlxSprite
 	override function update(elapsed:Float)
 	{
 		super.update(elapsed);
+		if (isSustainNote && animation.curAnim != null)
+        {
+            isSustainEnd = animation.curAnim.name.endsWith('end') || 
+                          animation.curAnim.name.endsWith('holdend');
+        }
 
 		if (mustPress)
 		{

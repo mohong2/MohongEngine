@@ -488,6 +488,8 @@ else{
 		#end
 
 		PlayState.storyDifficulty = curDifficulty;
+		if (CoolUtil.difficulties.length == 1) diffText.text = '' + CoolUtil.difficultyString() + ' ';
+		else 
 		diffText.text = '< ' + CoolUtil.difficultyString() + ' >';
 
 		positionHighscore();
@@ -605,6 +607,7 @@ else{
 class SongMetadata
 {
 	public var songName:String = "";
+
 	public var week:Int = 0;
 	public var songCharacter:String = "";
 	public var color:Int = -7179779;

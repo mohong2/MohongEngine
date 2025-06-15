@@ -80,6 +80,7 @@ using StringTools;
 
 class PlayState extends MusicBeatState
 {
+
 	public static var STRUM_X = 42;
 	public static var STRUM_X_MIDDLESCROLL = -278;
 
@@ -114,7 +115,8 @@ class PlayState extends MusicBeatState
 
 	var msTxtKade:FlxText;
 	var msTween:FlxTween;
-var atkText:FlxText;
+	var atkText:FlxText;
+
 
 	#if (haxe >= "4.0.0")
 	public var boyfriendMap:Map<String, Boyfriend> = new Map();
@@ -168,6 +170,8 @@ var atkText:FlxText;
 	public var spawnTime:Float = 2000;
 
 	public var vocals:FlxSound;
+
+
 
 	public var dad:Character = null;
 	public var gf:Character = null;
@@ -241,6 +245,7 @@ private static final cmy:Int = 20;
 
 	public var botplaySine:Float = 0;
 	public var botplayTxt:FlxText;
+
 
 	public var iconP1:HealthIcon;
 	public var iconP2:HealthIcon;
@@ -348,7 +353,10 @@ private static final cmy:Int = 20;
 	// Less laggy controls
 	private var keysArray:Array<Dynamic>;
 	private var controlArray:Array<String>;
-
+	//
+	public var score:Int = 0;
+	public var maxcombo:Int = 0;
+	//
 	var precacheList:Map<String, String> = new Map<String, String>();
 	
 	// stores the last judgement object
@@ -398,13 +406,13 @@ private static final cmy:Int = 20;
 
 		var rating:Rating = new Rating('bad');
 		rating.ratingMod = 0.4;
-		rating.score = 100;
+		rating.score = 0;
 		rating.noteSplash = false;
 		ratingsData.push(rating);
 
 		var rating:Rating = new Rating('shit');
 		rating.ratingMod = 0;
-		rating.score = 50;
+		rating.score = 0;
 		rating.noteSplash = false;
 		ratingsData.push(rating);
 
@@ -1063,8 +1071,8 @@ private static final cmy:Int = 20;
 		strumLine.scrollFactor.set();
 
 		var showTime:Bool = (ClientPrefs.timeBarType != 'Disabled');
-		timeTxt = new FlxText(STRUM_X + (FlxG.width / 2) - 248, 19, 400, "", 32);
-		timeTxt.setFormat(Paths.enfont("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		timeTxt = new FlxText(STRUM_X + (FlxG.width / 2) - 248, 18, 400, "", 32);
+		timeTxt.setFormat(Paths.enfont("vcr.ttf"), 20, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		timeTxt.scrollFactor.set();
 		timeTxt.alpha = 0;
 		timeTxt.borderSize = 2;
@@ -1189,7 +1197,7 @@ private static final cmy:Int = 20;
 			scoreTxt.setFormat(Paths.font("vcr.ttf"), 20, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		}
 		scoreTxt.scrollFactor.set();
-		scoreTxt.borderSize = 1.25;
+		scoreTxt.borderSize = 2;
 		scoreTxt.visible = !ClientPrefs.hideHud;
 		add(scoreTxt);
 
@@ -1198,7 +1206,7 @@ private static final cmy:Int = 20;
 		botplayTxt.setFormat(Paths.enfont("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 
 		botplayTxt.scrollFactor.set();
-		botplayTxt.borderSize = 1.25;
+		botplayTxt.borderSize = 2;
 		botplayTxt.visible = cpuControlled;
 		add(botplayTxt);
 		if(ClientPrefs.downScroll) {
@@ -2427,6 +2435,11 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 	public function updateScore(miss:Bool = false)
 	{
+
+		if (ClientPrefs.imv4sc) {
+			scoreTxt.color = FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]);
+		}
+
 		if (ClientPrefs.language == 'English') {
 		scoreTxt.text = 'Score: ' + songScore
 		+ ' | Combo Breaks: ' + songMisses
@@ -3153,15 +3166,25 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 				boyfriendIdleTime = 0;
 			}
 		}
-
+		if (combo > maxcombo){
+		maxcombo = combo;
+		}
 		super.update(elapsed);
+
 
 		if (ClientPrefs.sidehud) {
 
+      var totalNotesText = ClientPrefs.language == 'English' 
+            ? "Total Notes Hit: " + notehitlol
+            : "总命中数: " + notehitlol;
+        
+        tnh.text = totalNotesText;
+
         var combosText = ClientPrefs.language == 'English' 
-            ? "Combos: " + combo 
-            : "连击: " + combo;
+            ? "Combos: " + combo + '($maxcombo)'
+            : "连击: " + combo + '($maxcombo)';
         cm.text = combosText;
+		cm.color = 0xFFFFFF;
         
         var sicksText = ClientPrefs.language == 'English' 
             ? "Sick!: " + sicks 
@@ -3179,7 +3202,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
         bad.text = badsText;
         
         var shitsText = ClientPrefs.language == 'English' 
-            ? "Shits: " + shits 
+            ? "Shits(Miss): " + shits 
             : "差: " + shits;
         shit.text = shitsText;
         
@@ -3228,7 +3251,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		if (health > 2)
 			health = 2;
-
+		var frameCount = HealthIcon.frameCount;
+		if (frameCount == 2){
 		if (healthBar.percent < 20)
 			iconP1.animation.curAnim.curFrame = 1;
 		else
@@ -3238,7 +3262,25 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			iconP2.animation.curAnim.curFrame = 1;
 		else
 			iconP2.animation.curAnim.curFrame = 0;
+	}
+	else{
+		if (healthBar.percent < 20)
+		{
+			iconP1.animation.curAnim.curFrame = 1;
+			iconP2.animation.curAnim.curFrame = 2;
+		}
+		else
+			iconP1.animation.curAnim.curFrame = 0;
 
+		if (healthBar.percent > 80){
+			iconP2.animation.curAnim.curFrame = 1;
+			iconP1.animation.curAnim.curFrame = 2;
+		}
+		else
+			iconP2.animation.curAnim.curFrame = 0;
+
+
+	}
 		if (FlxG.keys.anyJustPressed(debugKeysCharacter) && !endingSong && !inCutscene) {
 			persistentUpdate = false;
 			paused = true;
@@ -4098,7 +4140,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		} else {
 			var achieve:String = checkForAchievement(['week1_nomiss', 'week2_nomiss', 'week3_nomiss', 'week4_nomiss',
 				'week5_nomiss', 'week6_nomiss', 'week7_nomiss', 'ur_bad',
-				'ur_good', 'hype', 'two_keys', 'toastie', 'debugger']);
+				'ur_good', 'line_blue','hype', 'two_keys', 'toastie', 'debugger']);
 
 			if(achieve != null) {
 				startAchievement(achieve);
@@ -4115,6 +4157,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 				var percent:Float = ratingPercent;
 				if(Math.isNaN(percent)) percent = 0;
 				Highscore.saveScore(SONG.song, songScore, storyDifficulty, percent);
+				Highscore.saveFullScore(SONG.song, storyDifficulty,songScore, sicks, goods, bads, shits, songMisses, maxcombo);				
 				#end
 			}
 			playbackRate = 1;
@@ -4274,6 +4317,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 	private function popUpScore(note:Note = null):Void
 	{
 		var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.ratingOffset);
+
 		//trace(noteDiff, ' ' + Math.abs(note.strumTime - Conductor.songPosition));
 
 		// boyfriend.playAnim('hey');
@@ -4288,16 +4332,15 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		var rating:FlxSprite = new FlxSprite();
 		var score:Int = 350;
-
-		//tryna do MS based judgment due to popular demand
 		var daRating:Rating = Conductor.judgeNote(note, noteDiff / playbackRate);
+		//tryna do MS based judgment due to popular demand
+
 
 		totalNotesHit += daRating.ratingMod;
 		note.ratingMod = daRating.ratingMod;
 		if(!note.ratingDisabled) daRating.increase();
 		note.rating = daRating.name;
 		score = daRating.score;
-
 		if(daRating.noteSplash && !note.noteSplashDisabled)
 		{
 			spawnNoteSplashOnNote(note);
@@ -4699,7 +4742,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		//trace(daNote.missHealth);
 		songMisses++;
 		vocals.volume = 0;
-		if(!practiceMode) songScore -= 10;
+		if(!practiceMode) songScore -= 0;
 
 		totalPlayed++;
 		RecalculateRating(true);
@@ -4737,7 +4780,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			}
 			combo = 0;
 
-			if(!practiceMode) songScore -= 10;
+			if(!practiceMode) songScore -= 0;
 			if(!endingSong) {
 				songMisses++;
 			}
@@ -4822,6 +4865,7 @@ setOpponentStrumStatic(1);
 setOpponentStrumStatic(2);
 setOpponentStrumStatic(3);
 }
+
 	}
 
 public function setOpponentStrumStatic(direction:Int) {
@@ -4832,33 +4876,28 @@ public function setOpponentStrumStatic(direction:Int) {
     }
 }
 
+
 	function goodNoteHit(note:Note):Void
 {
- if (ClientPrefs.sidehud && !note.isSustainNote) {
-        notehitlol++;
-        
-        var totalNotesText = ClientPrefs.language == 'English' 
-            ? "Total Notes Hit: " + notehitlol 
-            : "总命中数: " + notehitlol;
-        
-        tnh.text = totalNotesText;
-    }
 
-if (!note.isSustainNote) {
 
-var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition);
+
+
  var rating:String = 'sick';
 
-if (noteDiff < ClientPrefs.badWindow && noteDiff > ClientPrefs.goodWindow) {
+if (!note.isSustainNote) {
+notehitlol++;
+var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.ratingOffset);
+
+if (noteDiff <= ClientPrefs.badWindow && noteDiff > ClientPrefs.goodWindow) {
     rating = 'bad';
-} else if (noteDiff < ClientPrefs.goodWindow && noteDiff > ClientPrefs.sickWindow) {
+} else if (noteDiff <= ClientPrefs.goodWindow && noteDiff > ClientPrefs.sickWindow) {
     rating = 'good';
-} else if (noteDiff < ClientPrefs.sickWindow) {
+} else if (noteDiff <= ClientPrefs.sickWindow) {
     rating = 'sick';
 } else {
     rating = 'shit';
 }
-
 var mscolor:FlxColor = 0x00FFFF;
 
  if (rating == 'sick') {
@@ -4870,9 +4909,6 @@ var mscolor:FlxColor = 0x00FFFF;
     } else if (rating == 'shit') {
         msTxtKade.color = 0xFF0000;
    }
-
-
-
 
 	var strumTime:Float = note.strumTime;
     var songPos:Float = Conductor.songPosition;
@@ -4892,6 +4928,7 @@ var mscolor:FlxColor = 0x00FFFF;
         msTxtKade.text += " (BOT)";
 }
 	}
+
 		if (!note.wasGoodHit)
 		{
 			if(cpuControlled && (note.ignoreNote || note.hitCausesMiss)) return;
@@ -4927,12 +4964,13 @@ var mscolor:FlxColor = 0x00FFFF;
 				}
 				return;
 			}
-
 			if (!note.isSustainNote)
 			{
 				combo += 1;
 				if(combo > 9999) combo = 9999;
 				popUpScore(note);
+			}else if (note.isSustainEnd) {
+			songScore += 350;
 			}
 			health += note.hitHealth * healthGain;
 
@@ -5506,7 +5544,7 @@ var mscolor:FlxColor = 0x00FFFF;
 							unlock = true;
 						}
 					case 'line_blue':
-						if(goods == 1 && bads == 0 && shits == 0 && songMisses == 0 && !usedPractice){
+						if(goods == 1 && bads == 0 && shits == 0 && songMisses == 0 && sicks > 0 && !usedPractice){
 							unlock = true;
 						}
 					case 'ur_good':
