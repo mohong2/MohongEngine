@@ -50,8 +50,6 @@ class Option
 	public var description:String = '';
 	public var name:String = 'Unknown';
 
-
-	
 	public function new(name:String, description:String = '', variable:String, type:String = 'bool', defaultValue:Dynamic = 'null variable value', ?options:Array<String> = null)
 	{
 		this.name = name;
@@ -109,14 +107,16 @@ class Option
 		}
 	}
 
-	public function getValue():Dynamic
+	public dynamic function getValue():Dynamic
 	{
 		return Reflect.getProperty(ClientPrefs, variable);
 	}
-	public function setValue(value:Dynamic)
+	
+	public dynamic function setValue(value:Dynamic)
 	{
 		Reflect.setProperty(ClientPrefs, variable, value);
 	}
+	
 
 	public function setChild(child:Alphabet)
 	{

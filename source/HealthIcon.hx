@@ -11,7 +11,7 @@ class HealthIcon extends FlxSprite
 	private var isOldIcon:Bool = false;
 	private var isPlayer:Bool = false;
 	private var char:String = '';
-	public static var frameCount:Int = 2;
+	public var frameCount:Int = 2;
 
 	public function new(char:String = 'bf', isPlayer:Bool = false)
 	{ 
@@ -35,7 +35,7 @@ class HealthIcon extends FlxSprite
 		else changeIcon('bf');
 	}
 
-	private var iconOffsets:Array<Float> = [0, 0];
+	private var iconOffsets:Array<Float> = [0, 0, 0];
 	public function changeIcon(char:String) {
 		if(this.char != char) {
 			var name:String = 'icons/' + char;
@@ -69,7 +69,7 @@ class HealthIcon extends FlxSprite
 			iconOffsets[1] = (width - 150) / 2;
 			updateHitbox();
 
-			animation.add(char, [0, 1], 0, false, isPlayer);
+			animation.add(char, [0, 1, 0], 0, false, isPlayer);
 			animation.play(char);
 			this.char = char;
 
@@ -86,11 +86,7 @@ class HealthIcon extends FlxSprite
 		super.updateHitbox();
 		offset.x = iconOffsets[0];
 		offset.y = iconOffsets[1];
-		if (frameCount == 3) {
-		offset.x = iconOffsets[0];
-		offset.y = iconOffsets[1];
 		offset.y = iconOffsets[2];
-		}
 	}	
 
 	public function getCharacter():String {

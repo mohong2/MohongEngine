@@ -121,7 +121,7 @@ class VisualsUISubState extends BaseOptionsMenu
 			"If unchecked, Ratings and Combo won't stack, saving on System Memory and making them easier to read",
 			'comboStacking',
 			'bool',
-			true);
+			false);
 		addOption(option);
 
 		super();
@@ -216,7 +216,7 @@ class VisualsUISubState extends BaseOptionsMenu
 			"如果不勾选，评分和连击不会叠加，这样可以节省系统内存，而且更容易阅读。",
 			'comboStacking',
 			'bool',
-			true);
+			false);
 		addOption(option);
 
 		super();

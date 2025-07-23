@@ -35,7 +35,14 @@ class Conductor
 
 	public static function judgeNote(note:Note, diff:Float=0):Rating // die
 	{
+
 		var data:Array<Rating> = PlayState.instance.ratingsData; //shortening cuz fuck u
+	 if (ClientPrefs.getGameplaySetting('botplay', false))
+    {
+        var data:Array<Rating> = PlayState.instance.ratingsData;
+        return data[0];
+    }
+	
 		for(i in 0...data.length-1) //skips last window (Shit)
 		{
 			if (diff <= data[i].hitWindow)

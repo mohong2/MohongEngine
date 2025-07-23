@@ -29,8 +29,10 @@ class Main extends Sprite
 {
 	public static var initialWindowX:Int;
 	public static var initialWindowY:Int;
+
 	var gameWidth:Int = 1280; // Width of the game in pixels (might be less / more in actual pixels depending on your zoom).
-	var gameHeight:Int = 720; // Height of the game in pixels (might be less / more in actual pixels depending on your zoom).
+	var gameHeight:Int = 720; 
+	// Height of the game in pixels (might be less / more in actual pixels depending on your zoom).
 	var initialState:Class<FlxState> = TitleState; // The FlxState the game starts with.
 	var zoom:Float = -1; // If -1, zoom is automatically calculated to fit the window dimensions.
 	var framerate:Int = 60; // How many frames per second the game should run at.
@@ -43,6 +45,23 @@ class Main extends Sprite
 	public static function main():Void
 	{
 		Lib.current.addChild(new Main());
+		applyWindowSettings();
+	}  
+	public static function applyWindowSettings() {
+		#if desktop
+		if (ClientPrefs.windowedmode == "borderless") {
+			Lib.application.window.borderless = true;
+			Lib.application.window.fullscreen = false;
+			Lib.application.window.maximized = true;
+		} else if (ClientPrefs.windowedmode == "fullscreen") {
+			Lib.application.window.borderless = false;
+			Lib.application.window.fullscreen = true;
+		} else if (ClientPrefs.windowedmode == "windowed") {
+			Lib.application.window.borderless = false;
+			Lib.application.window.fullscreen = false;
+			Lib.application.window.maximized = false;
+		}
+		#end
 	}
 
 	public function new()

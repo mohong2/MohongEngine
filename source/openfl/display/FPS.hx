@@ -85,9 +85,18 @@ class FPS extends TextField
 			text = "FPS: " + currentFPS;
 			var memoryMegas:Float = 0;
 			
-			#if openfl
-			memoryMegas = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
-			text += "\nMohongEngine Memory: " + memoryMegas + " MB";
+		#if openfl
+    	memoryMegas = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
+    	var memoryText:String;
+    	if (memoryMegas >= 1024) {
+        memoryText = FlxMath.roundDecimal(memoryMegas / 1024, 2) + " GB"; 
+    	} else {
+        memoryText = memoryMegas + " MB"; 
+   		 }
+
+    	text = "FPS: " + currentFPS;
+    	text += "\nMemory: " + memoryText; 
+    	text += "\nMohongEngine v" + MainMenuState.mohongEngineVersion;
 			#end
 
 			textColor = 0xFFFFFFFF;

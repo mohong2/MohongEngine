@@ -3,7 +3,6 @@ package;
 #if desktop
 import Discord.DiscordClient;
 #end
-import flash.text.TextField;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
@@ -26,6 +25,7 @@ import flash.geom.Rectangle;
 import flixel.ui.FlxButton;
 import flixel.FlxBasic;
 import sys.io.File;
+import options.ModSettingsSubState;
 /*import haxe.zip.Reader;
 import haxe.zip.Entry;
 import haxe.zip.Uncompress;
@@ -47,6 +47,9 @@ class ModsMenuState extends MusicBeatState
 	var needaReset = false;
 	private static var curSelected:Int = 0;
 	public static var defaultColor:FlxColor = 0xFF665AFF;
+	//0.7.3
+	var buttonSettings:FlxButton; 
+	var buttonIcons:Map<FlxButton, FlxSprite> = [];
 
 	var buttonDown:FlxButton;
 	var buttonTop:FlxButton;
@@ -130,10 +133,26 @@ class ModsMenuState extends MusicBeatState
 		makeSelectorGraphic();
 		add(selector);
 		visibleWhenHasMods.push(selector);
+		var settings:String = "settings";
+		var top:String = "TOP";
+		var disableAll:String = "DisableAll";
+		var enableAll:String = "EnableAll";
 
+		if (ClientPrefs.language == 'English') {
+			settings = "settings";
+			top = "TOP";
+			disableAll = "DisableAll";
+			enableAll = "EnableAll";
+		}
+		else{
+			settings = "设置";
+			top = "置顶";
+			disableAll = "关闭所有";
+			enableAll = "启用所有";
+
+		}
 		//attached buttons
 		var startX:Int = 1120;
-
 		buttonToggle = new FlxButton(startX, 0, "ON", function()
 		{
 			if(mods[curSelected].restart)
@@ -181,7 +200,7 @@ class ModsMenuState extends MusicBeatState
 		setAllLabelsOffset(buttonDown, -15, 10);
 
 		startX -= 100;
-		buttonTop = new FlxButton(startX, 0, "TOP", function() {
+		buttonTop = new FlxButton(startX, 0, top, function() {
 			var doRestart:Bool = (mods[0].restart || mods[curSelected].restart);
 			for (i in 0...curSelected) //so it shifts to the top instead of replacing the top one
 			{
@@ -203,8 +222,13 @@ class ModsMenuState extends MusicBeatState
 		visibleWhenHasMods.push(buttonTop);
 
 
+
+
 		startX -= 190;
-		buttonDisableAll = new FlxButton(startX, 0, "DISABLE ALL", function() {
+
+
+
+		buttonDisableAll = new FlxButton(startX, 0, disableAll, function() {
 			for (i in modsList)
 			{
 				i[1] = false;
@@ -230,7 +254,7 @@ class ModsMenuState extends MusicBeatState
 		visibleWhenHasMods.push(buttonDisableAll);
 
 		startX -= 190;
-		buttonEnableAll = new FlxButton(startX, 0, "ENABLE ALL", function() {
+		buttonEnableAll = new FlxButton(startX, 0, enableAll, function() {
 			for (i in modsList)
 			{
 				i[1] = true;
@@ -258,6 +282,19 @@ class ModsMenuState extends MusicBeatState
 		// more buttons
 		var startX:Int = 1100;
 
+		buttonSettings = new FlxButton(410, 10, settings, function() {
+		openModSettings();
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
+		});
+		buttonSettings.setGraphicSize(80, 50);
+		buttonSettings.updateHitbox();
+		add(buttonSettings);
+		buttonsArray.push(buttonSettings);
+		visibleWhenHasMods.push(buttonSettings);
+		buttonSettings.label.setFormat(Paths.font("vcr.ttf"), 18, FlxColor.BLACK, CENTER);
+		setAllLabelsOffset(buttonSettings, 0, 10);
+		buttonsArray.push(buttonSettings);
+		visibleWhenHasMods.push(buttonSettings);
 
 
 
@@ -313,11 +350,11 @@ class ModsMenuState extends MusicBeatState
 		visibleWhenHasMods.push(removeButton);*/
 
 		///////
-		descriptionTxt = new FlxText(148, 0, FlxG.width - 216, "", 32);
-		descriptionTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, LEFT);
-		descriptionTxt.scrollFactor.set();
-		add(descriptionTxt);
-		visibleWhenHasMods.push(descriptionTxt);
+        descriptionTxt = new FlxText(148, 0, FlxG.width - 216, "", 32);
+        descriptionTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, LEFT);
+        descriptionTxt.scrollFactor.set();
+        add(descriptionTxt);
+        visibleWhenHasMods.push(descriptionTxt);
 
 		var i:Int = 0;
 		var len:Int = modsList.length;
@@ -383,6 +420,57 @@ class ModsMenuState extends MusicBeatState
 
 		super.create();
 	}
+		function updateButtonPositions()
+	{
+		for (button in buttonsArray)
+		{
+			if (buttonIcons.exists(button))
+			{
+				var icon = buttonIcons.get(button);
+				icon.x = button.x;
+				icon.y = button.y;
+			}
+		}
+	}
+	function openModSettings()
+	{
+		if (mods.length == 0) return;
+		
+		var curMod = mods[curSelected];
+		var folder = curMod.folder;
+		
+		var settings = loadModSettings(folder);
+		if (settings != null && settings.length > 0)
+		{
+			openSubState(new ModSettingsSubState(settings, folder, curMod.name));
+		}
+		else
+		{
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+		}
+	}
+	
+	function loadModSettings(folder:String):Array<Dynamic>
+	{
+		var path = Paths.mods(folder + '/data/settings.json');
+		if (FileSystem.exists(path))
+		{
+			try
+			{
+				var rawJson = File.getContent(path);
+				return Json.parse(rawJson);
+			}
+			catch (e:Dynamic)
+			{
+				trace('Error loading settings: $e');
+			}
+		}
+		return null;
+	}
+
+
+
+
 
 	/*function getIntArray(max:Int):Array<Int>{
 		var arr:Array<Int> = [];
@@ -406,6 +494,7 @@ class ModsMenuState extends MusicBeatState
 
 	function updateButtonToggle()
 	{
+		if (ClientPrefs.language == 'English') {
 		if (modsList[curSelected][1])
 		{
 			buttonToggle.label.text = 'ON';
@@ -416,6 +505,18 @@ class ModsMenuState extends MusicBeatState
 			buttonToggle.label.text = 'OFF';
 			buttonToggle.color = FlxColor.RED;
 		}
+	}else{
+		if (modsList[curSelected][1])
+		{
+			buttonToggle.label.text = '开';
+			buttonToggle.color = FlxColor.GREEN;
+		}
+		else
+		{
+			buttonToggle.label.text = '关';
+			buttonToggle.color = FlxColor.RED;
+		}
+	}
 	}
 
 	function moveMod(change:Int, skipResetCheck:Bool = false)
@@ -566,9 +667,22 @@ class ModsMenuState extends MusicBeatState
 				mod.alphabet.alpha = 1;
 				selector.sprTracker = mod.alphabet;
 				descriptionTxt.text = mod.description;
+
+				 var displayDescription = mod.description;
+                if (ClientPrefs.language == 'Chinese' && mod.zhdescription != null) {
+                    displayDescription = mod.zhdescription;
+                }
+                
+                descriptionTxt.text = displayDescription;
+				if (ClientPrefs.language == 'English') {
 				if (mod.restart){//finna make it to where if nothing changed then it won't reset
 					descriptionTxt.text += " (This Mod will restart the game!)";
 				}
+			}else{
+				if (mod.restart){//finna make it to where if nothing changed then it won't reset
+					descriptionTxt.text += " (这个 Mod 将重新启动游戏！)";
+				}
+			}
 
 				// correct layering
 				var stuffArray:Array<FlxSprite> = [/*removeButton, installButton,*/ selector, descriptionTxt, mod.alphabet, mod.icon];
@@ -719,6 +833,7 @@ class ModMetadata
 	public var description:String;
 	public var color:FlxColor;
 	public var restart:Bool;//trust me. this is very important
+	public var zhdescription:String;
 	public var alphabet:Alphabet;
 	public var icon:AttachedSprite;
 
@@ -729,6 +844,7 @@ class ModMetadata
 		this.description = "No description provided.";
 		this.color = ModsMenuState.defaultColor;
 		this.restart = false;
+		this.zhdescription = "No description provided.";
 
 		//Try loading json
 		var path = Paths.mods(folder + '/pack.json');
@@ -741,6 +857,7 @@ class ModMetadata
 					var description:String = Reflect.getProperty(stuff, "description");
 					var name:String = Reflect.getProperty(stuff, "name");
 					var restart:Bool = Reflect.getProperty(stuff, "restart");
+				var zhdescription:String = Reflect.getProperty(stuff, "zhdescription");
 
 				if(name != null && name.length > 0)
 				{
@@ -754,6 +871,13 @@ class ModMetadata
 				{
 					this.name = folder;
 				}
+				if(description != null && description.length > 0) {
+						this.description = description;
+					}
+					if(zhdescription != null && zhdescription.length > 0) {
+						this.zhdescription = zhdescription;
+					}
+
 				if (ClientPrefs.language == 'English') {
 				if(description == 'Description')
 				{

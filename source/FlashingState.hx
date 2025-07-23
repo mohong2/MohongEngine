@@ -1,5 +1,6 @@
 package;
 
+import sys.io.Process;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.FlxSubState;
@@ -23,17 +24,22 @@ class FlashingState extends MusicBeatState
 		var bg:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
 		add(bg);
 
-		warnText = new FlxText(0, 0, FlxG.width,
-			"Hey, watch out!\n
-			This Mod contains some flashing lights!\n
-			Press ENTER to disable them now or go to Options Menu.\n
-			Press ESCAPE to ignore this message.\n
-			You've been warned!",
-			32);
-		warnText.setFormat("VCR OSD Mono", 32, FlxColor.WHITE, CENTER);
+
+		warnText = new FlxText(0, 100, FlxG.width,
+		"嘿，看这,这个Mod可能有亿点点闪光特效，眼睛瞎了别找作者\n
+		按空格键当做没看到这条警告，别怪我没提醒你，瞎了概不负责\n
+		Hey, watch out!\n
+		This Mod contains some flashing lights!\n
+		Press ENTER to disable them now or go to Options Menu.\n
+		Press ESCAPE to ignore this message.\n
+		You've been warned!",
+		32);
+		warnText.setFormat(32, FlxColor.WHITE, CENTER);
+		warnText.font = Paths.cnfont("vcr.ttf"); 
 		warnText.screenCenter(Y);
 		add(warnText);
-	}
+	
+}
 
 	override function update(elapsed:Float)
 	{

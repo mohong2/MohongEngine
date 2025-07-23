@@ -17,18 +17,20 @@
 
 若使用Lua时出现StatePointer错误，在命令提示符/PowerShell中运行 `haxelib remove linc_luajit`，然后重新安装linc_luajit。
 
-如需视频支持，在命令提示符/PowerShell中执行 `haxelip install hxCodec`
+如需视频支持，在命令提示符/PowerShell中执行 `haxelib install hxCodec` 
 
 否则可以直接删除Project.xml中的"VIDEOS_ALLOWED"行
 
-## 制作名单:
+## Mohong引擎制作名单:
 * mo_hong - 修改与中文翻译
+* Li.tmc - 引擎图标 
+## Psych引擎制作名单: 
 * Shadow Mario - 程序员
 * RiverOaken - 美术
 * Yoshubs - 助理程序员
 
 ### 特别鸣谢
-* bbpanzu - 前任程序员
+* bbpanzu - 前程序员 
 * shubs - 新输入系统
 * SqirraRNG - 崩溃处理程序和图表编辑器波形基础代码
 * KadeDev - 修复了图表编辑器等问题并提交PR
@@ -37,12 +39,11 @@
 * Keoiki - 音符飞溅动画
 * Smokey - 精灵图集支持
 * Nebula the Zorua - LUA JIT分支及部分Lua重写
-_____________________________________
+_____________________________________  
 
 # 特色功能
 
-## 炫酷的动态对话窗:
-
+## 炫酷的动态对话窗:  
 ![](./images/5.gif)
 
 
@@ -72,7 +73,7 @@ _____________________________________
   * Thorns歌曲的过场动画会隐藏HUD
   * 背景女孩在Instrumental的"Hey!"段落会有惊悚表现
 
-## 图表编辑器升级与海量BUG修复
+## 图表编辑器升级与大量错误修复 
 ![](./images/chart.png)
 * 新增"事件"音符标注功能，可触发原版硬编码的特殊动作
 * 歌曲BPM现在支持小数精度
@@ -92,11 +93,12 @@ _____________________________________
 
 ## 制作名单界面
 ![Screenshot_1](./images/1.png)
-
+![](./images/7.png)  
 * 可添加头像图标、名称、描述，以及玩家选中时按Enter键触发的跳转链接
 
 ## 成就系统
-* 引擎内置16个示例成就供参考（查看Achievements.hx并在PlayState.hx中搜索"checkForAchievement"）
+* 引擎内置16个示例成就供学习和参考使用  
+  （查看Achievements.hx并在PlayState.hx中搜索"checkForAchievement"）
 
 ## 选项菜单:
 * 可调整音符颜色、输入延迟、连击偏移、控件设置等

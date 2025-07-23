@@ -114,7 +114,7 @@ var canInput:Bool = true;
 
 		for (i in 0...songs.length)
 		{
-			var songText:Alphabet = new Alphabet(90, 320, songs[i].songName, true);
+			var songText:Alphabet = new Alphabet(90, 325, songs[i].songName, true);
 			songText.isMenuItem = true;
 			songText.targetY = i - curSelected;
 			grpSongs.add(songText);
@@ -148,7 +148,7 @@ var canInput:Bool = true;
 		add(scoreBG);
 
 		diffText = new FlxText(scoreText.x, scoreText.y + 36, 0, "", 24);
-		diffText.font = scoreText.font;
+		diffText.font = Paths.enfont("vcr.ttf"); 
 		add(diffText);
 
 		add(scoreText);
@@ -518,6 +518,37 @@ else{
 				}
 			});
 		}
+		for (i in 0...grpSongs.length) {
+        var item = grpSongs.members[i];
+        var icon = iconArray[i];
+		var targetScale = (i == curSelected) ? 1.2 : 0.85;
+        FlxTween.cancelTweensOf(item.scale);
+        FlxTween.cancelTweensOf(icon.scale);
+        
+        FlxTween.tween(item.scale, {x: targetScale, y: targetScale}, 0.25, {
+            ease: FlxEase.quadOut
+        });
+        
+        FlxTween.tween(icon.scale, {x: targetScale, y: targetScale}, 0.25, {
+            ease: FlxEase.quadOut
+        });
+    }
+
+
+    for (i in 0...iconArray.length) {
+        iconArray[i].alpha = 0.6;
+        
+        if (iconArray[i].frameCount == 3) {
+            iconArray[i].animation.curAnim.curFrame = 0;
+        }
+    }
+
+    iconArray[curSelected].alpha = 1;
+    
+    if (iconArray[curSelected].frameCount == 3) {
+        iconArray[curSelected].animation.curAnim.curFrame = 2;
+    }
+
 
 		// selector.y = (70 * curSelected) + 30;
 

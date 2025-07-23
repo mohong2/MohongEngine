@@ -1,5 +1,7 @@
 [**中文文档**](ZHREADME.md) | [English Version](README.md) 
 
+![](./images/8.png)
+
 # Friday Night Funkin' - Mohong Engine It's a Fork !!!!(Psych Engine)
 (Not has Gamebanana) intended to be a fix for the vanilla version's many issues while keeping the casual play aspect of it. Also aiming to be an easier alternative to newbie coders.
 
@@ -23,9 +25,10 @@ If you get an error about StatePointer when using Lua, run `haxelib remove linc_
 If you want video support on your mod, simply do `haxelib install hxCodec` on a Command prompt/PowerShell
 
 otherwise, you can delete the "VIDEOS_ALLOWED" Line on Project.xml
-
-## Credits:
+## Mohong Engine Credits:
 * mo_hong - Modification and Chinese translation
+* Li.tmc - Engine icon
+## Psych Engine Credits:
 * Shadow Mario - Programmer
 * RiverOaken - Artist
 * Yoshubs - Assistant Programmer
@@ -75,7 +78,7 @@ _____________________________________
   * On Thorns, the HUD is hidden during the cutscene
   * Also there's the Background girls being spooky during the "Hey!" parts of the Instrumental
 
-## Cool new Chart Editor changes and countless bug fixes
+## Cool new Chart Editor changes and countless bug fixes(This looks like Psych Engine 1.0)
 ![](./images/chart.png)
 * You can now chart "Event" notes, which are bookmarks that trigger specific actions that usually were hardcoded on the vanilla version of the game.
 * Your song's BPM can now have decimal values

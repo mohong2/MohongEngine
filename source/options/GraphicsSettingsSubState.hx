@@ -72,6 +72,21 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
 		option.maxValue = 240;
 		option.displayFormat = '%v FPS';
 		option.onChange = onChangeFramerate;
+			/*
+		var option:Option = new Option('GPU Caching', 
+		"If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.", //Description
+		'cacheOnGPU',
+		'bool');
+		addOption(option);
+			*/
+
+		var option:Option = new Option('Windowed mode',
+		"Choose your window mod(The game needs to be restarted)(Has bugs)",
+		'windowedmode',
+        'string',
+        'windowed',
+         ['windowed', 'fullscreen', 'borderless']);
+		addOption(option);
 		#end
 		
 		super();
@@ -110,9 +125,25 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
 		addOption(option);
 
 		option.minValue = 60;
-		option.maxValue = 320;
+		option.maxValue = 360;
 		option.displayFormat = '%v FPS';
 		option.onChange = onChangeFramerate;
+		/*	
+		var option:Option = new Option('GPU Caching', 
+		"如果选中，则允许将GPU用于缓存纹理，从而减少RAM使用量。如果你有一个糟糕的显卡，请不要打开它。", //Description
+		'cacheOnGPU',
+		'bool');
+		addOption(option);
+			*/
+		
+		var option:Option = new Option('Windowed mode',
+		"选择你的窗口模式(需要重启游戏)(存在bug)",
+		'windowedmode',
+        'string',
+        'windowed',
+         ['windowed', 'fullscreen', 'borderless']);
+		addOption(option);
+		
 		#end
 		
 		super();

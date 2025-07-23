@@ -17,7 +17,6 @@ class Highscore
 	public static var songMisses:Map<String, Int> = new Map();
 	public static var songMaxCombo:Map<String, Int> = new Map();
 	#else
-	public static var songScores:Map<String, Int> = new Map<String, Int>();
 	public static var weekScores:Map<String, Int> = new Map();
 	public static var songRating:Map<String, Float> = new Map();
 	public static var songSicks:Map<String, Int> = new Map<String, Int>();
@@ -29,14 +28,12 @@ class Highscore
 	#end
 
 	public static function saveFullScore(
-		song:String, diff:Int, 
-		score:Int, sicks:Int, goods:Int, 
+		song:String, diff:Int, sicks:Int, goods:Int, 
 		bads:Int, shits:Int, misses:Int, maxCombo:Int
 	):Void
 	{
 		var daSong:String = formatSong(song, diff);
-		
-		setScore(daSong, score);
+	
 		setSicks(daSong, sicks);
 		setGoods(daSong, goods);
 		setBads(daSong, bads);

@@ -60,13 +60,15 @@ import Discord;
 using StringTools;
 
 class FunkinLua {
+	public static var modSettings = ClientPrefs.modSettings;
+	public var callbacks:Map<String, Dynamic> = new Map<String, Dynamic>();
 	public static var Function_Stop:Dynamic = 1;
 	public static var Function_Continue:Dynamic = 0;
 	public static var Function_StopLua:Dynamic = 2;
-
 	//public var errorHandler:String->Void;
 	#if LUA_ALLOWED
 	public var lua:State = null;
+	public var modFolder:String = null;
 	#end
 	public var camTarget:FlxCamera;
 	public var scriptName:String = '';
@@ -75,7 +77,8 @@ class FunkinLua {
 	#if hscript
 	public static var hscript:HScript = null;
 	#end
-	
+
+
 	public function new(script:String) {
 		#if LUA_ALLOWED
 		lua = LuaL.newstate();
@@ -107,6 +110,12 @@ class FunkinLua {
 		initHaxeModule();
 
 		trace('lua file loaded succesfully:' + script);
+
+		var myFolder:Array<String> = this.scriptName.split('/');
+		#if MODS_ALLOWED
+		if(myFolder[0] + '/' == Paths.mods() && (Paths.currentModDirectory == myFolder[1] || Paths.getGlobalMods().contains(myFolder[1]))) //is inside mods folder
+			this.modFolder = myFolder[1];
+		#end
 
 		// Lua shit
 		set('Function_StopLua', Function_StopLua);
@@ -1518,6 +1527,22 @@ class FunkinLua {
 			}
 			return key;
 		});
+		#if MODS_ALLOWED
+		addLocalCallback("getModSetting", function(saveTag:String, ?modName:String = null) {
+			if(modName == null)
+			{
+				if(this.modFolder == null)
+				{
+					luaTrace('getModSetting: Argument #2 is null and script is not inside a packed Mod folder!', false, false, FlxColor.RED);
+					return null;
+				}
+				modName = this.modFolder;
+			}
+			return getModSetting(saveTag, modName);
+		});
+		#end
+
+
 		Lua_helper.add_callback(lua, "addCharacterToList", function(name:String, type:String) {
 			var charType:Int = 0;
 			switch(type.toLowerCase()) {
@@ -2793,7 +2818,48 @@ class FunkinLua {
 		}
 	}
 	#end
+	public function addLocalCallback(name:String, myFunction:Dynamic) {
+    callbacks.set(name, myFunction);
+    Lua_helper.add_callback(lua, name, myFunction); 
+}
 
+public static function getModSetting(saveTag:String, ?modName:String = null):Dynamic {
+	#if MODS_ALLOWED
+    var settings:Map<String, Dynamic> = FlxG.save.data.modSettings.get(modName);
+    var path:String = Paths.mods('$modName/data/settings.json');
+    
+    if(FileSystem.exists(path)) {
+        if(settings == null || !settings.exists(saveTag)) {
+            if(settings == null) settings = new Map<String, Dynamic>();
+            try {
+                var rawJson:String = File.getContent(path);
+                var parsedJson:Array<Dynamic> = haxe.Json.parse(rawJson); 
+                
+                for(item in parsedJson) {
+                    if(item.save == saveTag) {
+                        if(item.type == 'keybind' || item.type == 'key') {
+                            settings.set(item.save, {
+                            });
+                        } else {
+                            settings.set(item.save, item.value);
+                        }
+                        break; 
+                    }
+                }
+                FlxG.save.data.modSettings.set(settings, modName);
+                FlxG.save.flush(); 
+            } catch(e:Dynamic) {
+                trace('Failed to load mod settings: ${e.message}');
+            }
+        }
+        return settings.get(saveTag);
+    } else {
+        trace('Mod settings not found: $path');
+
+        return null;
+    }
+	#end
+}
 	public static function setVarInArray(instance:Dynamic, variable:String, value:Dynamic):Any
 	{
 		var shit:Array<String> = variable.split('[');

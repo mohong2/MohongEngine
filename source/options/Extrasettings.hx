@@ -30,6 +30,7 @@ class Extrasettings extends BaseOptionsMenu
 {
 	public function new()
 	{
+		var language:String = ClientPrefs.language;
 		if (ClientPrefs.language == 'English') {
         title = 'Extra settings';
         rpcTitle = 'Extra settings Menu';
@@ -38,7 +39,7 @@ class Extrasettings extends BaseOptionsMenu
 			'Select the game display language.',
             'language', 
             'string',
-            'English',
+            '$language',
             ['English', 'Chinese']);
 		addOption(option);
 
@@ -50,8 +51,8 @@ class Extrasettings extends BaseOptionsMenu
          ['English TTF', 'Chinese TTF']);
 		addOption(option);
 
-		var option:Option = new Option('Opponent flickering effect',
-		'If unchecked, the flickering effect will be canceled after the opponent hits.',
+		var option:Option = new Option('Bot flickering effect',
+		'If unchecked, the flickering effect will be canceled after the Bot hits.',
 		'opponentfe',
 		'bool',
 		true);
@@ -89,7 +90,7 @@ class Extrasettings extends BaseOptionsMenu
 			'选择游戏显示语言。',
             'language', 
             'string',
-            'English',
+            '$language',
             ['English', 'Chinese']);
 		addOption(option);
 
@@ -101,8 +102,8 @@ class Extrasettings extends BaseOptionsMenu
          ['English TTF', 'Chinese TTF']);
 		addOption(option);
 
-		var option:Option = new Option('Opponent flickering effect',
-		'如果未选中将会取消对手击中后的闪烁效果。',
+		var option:Option = new Option('Bot flickering effect',
+		'如果未选中将会取消Bot击中后的闪烁效果。',
 		'opponentfe',
 		'bool',
 		true);

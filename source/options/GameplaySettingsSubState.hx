@@ -76,6 +76,19 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'bool',
 			false);
 		addOption(option);
+		
+		/*var option:Option = new Option('Sustains as One Note(0.7.x)',
+		"If checked, Hold Notes can't be pressed if you miss,\nand count as a single Hit/Miss.\nUncheck this if you prefer the old Input System.",
+			'guitarHeroSustains',
+			'bool',
+			false);
+		addOption(option);*/
+		var option:Option = new Option('Smooth HP Bar',
+			"If checked, the HP bar and icon movements will become smoother\nFor some levels, there may be unspeakable bugs and performance penalty",
+			'smoothhpbar',
+			'bool',
+			false);
+		addOption(option);
 
 		var option:Option = new Option('Hitsound Volume',
 			'Funny notes does \"Tick!\" when you hit them."',
@@ -116,7 +129,7 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'Changes the amount of time you have\nfor hitting a "Good" in milliseconds.',
 			'goodWindow',
 			'int',
-			80);
+			90);
 		option.displayFormat = '%vms';
 		option.scrollSpeed = 30;
 		option.minValue = 15;
@@ -127,11 +140,11 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'Changes the amount of time you have\nfor hitting a "Bad" in milliseconds.',
 			'badWindow',
 			'int',
-			100);
+			130);
 		option.displayFormat = '%vms';
 		option.scrollSpeed = 60;
 		option.minValue = 15;
-		option.maxValue = 130;
+		option.maxValue = 135;
 		addOption(option);
 
 		var option:Option = new Option('Safe Frames',
@@ -191,6 +204,20 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			false);
 		addOption(option);
 
+		var option:Option = new Option('Smooth HP Bar',
+			"如果选中，HP bar和icon运动会变得更加流畅\n对于某些关卡可能会出现不可言喻的bug和性能损失",
+			'smoothhpbar',
+			'bool',
+			false);
+		addOption(option);
+
+		/*var option:Option = new Option('Sustains as One Note (0.7.x)',
+			"如果选中，则错过了 Hold Notes（保持音符），\n 就不能按下，并计为一次 Hit/Miss（命中/未命中）。\n 如果您更喜欢旧的输入系统，请取消选中此选项。",
+			'guitarHeroSustains',
+			'bool',
+			false);
+		addOption(option); */                                    
+
 		var option:Option = new Option('Hitsound Volume',
 			'打箭头时会发出 \"滴!\" 的声音。"',
 			'hitsoundVolume',
@@ -219,7 +246,7 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'改变你在毫秒内击中“sick”的时间(判定区间)(这里的sick指的是perfect)',
 			'sickWindow',
 			'int',
-			80);
+			45);
 		option.displayFormat = '%vms';
 		option.scrollSpeed = 15;
 		option.minValue = 15;
@@ -230,7 +257,7 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'改变你在毫秒内击中“good”的时间。(判定区间)',
 			'goodWindow',
 			'int',
-			160);
+			90);
 		option.displayFormat = '%vms';
 		option.scrollSpeed = 30;
 		option.minValue = 15;
@@ -241,11 +268,11 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 			'改变你在毫秒内击中“bad”的时间。(判定区间)',
 			'badWindow',
 			'int',
-			180);
+			130);
 		option.displayFormat = '%vms';
 		option.scrollSpeed = 60;
 		option.minValue = 15;
-		option.maxValue = 130;
+		option.maxValue = 135;
 		addOption(option);
 
 		var option:Option = new Option('Safe Frames',
@@ -258,6 +285,8 @@ class GameplaySettingsSubState extends BaseOptionsMenu
 		option.maxValue = 10;
 		option.changeValue = 0.1;
 		addOption(option);
+
+
 
 		super();
 

@@ -73,7 +73,10 @@ import sys.io.File;
 #end
 
 #if VIDEOS_ALLOWED
-import vlc.MP4Handler;
+#if (hxCodec >= "3.0.0") import hxcodec.flixel.FlxVideo as VideoHandler;
+#elseif (hxCodec >= "2.6.1") import hxcodec.VideoHandler as VideoHandler;
+#elseif (hxCodec == "2.6.0") import VideoHandler;
+#else import vlc.MP4Handler as VideoHandler; #end
 #end
 
 using StringTools;
@@ -170,7 +173,8 @@ class PlayState extends MusicBeatState
 	public var spawnTime:Float = 2000;
 
 	public var vocals:FlxSound;
-
+	public var vocalsPlayer:FlxSound;
+	public var vocalsOpponent:FlxSound;
 
 
 	public var dad:Character = null;
@@ -216,18 +220,19 @@ class PlayState extends MusicBeatState
 	public var bads:Int = 0;
 	public var shits:Int = 0;
 
-private var sideHUDVisible:Bool = false;
-private var notehitlol:Int = 0;
-private var tnh:FlxText;
-private var cm:FlxText;
-private var sick:FlxText;
-private var good:FlxText;
-private var bad:FlxText;
-private var shit:FlxText;
-private var miss:FlxText;
-private static final tnhx:Int = -10;
-private static final cmoffset:Int = -4;
-private static final cmy:Int = 20;
+	public var sustainNotescore:Int = 0;
+	private var sideHUDVisible:Bool = false;
+	private var notehitlol:Int = 0;
+	private var tnh:FlxText;
+	private var cm:FlxText;
+	private var sick:FlxText;
+	private var good:FlxText;
+	private var bad:FlxText;
+	private var shit:FlxText;
+	private var miss:FlxText;
+	private static final tnhx:Int = -10;
+	private static final cmoffset:Int = -4;
+	private static final cmy:Int = 20;
 
 	private var generatedMusic:Bool = false;
 	public var endingSong:Bool = false;
@@ -246,6 +251,18 @@ private static final cmy:Int = 20;
 	public var botplaySine:Float = 0;
 	public var botplayTxt:FlxText;
 
+	var smoothHPSettings = {
+    denpaMiss: true,
+    flipBar: false,
+    verticalBar: false
+	};
+	var smoothHealth:Float = 1;
+	var hpSmooth:Float = 50; 
+	var flinch:Bool = false;
+	var iconP1SmoothX:Float = 0;
+	var iconP1SmoothY:Float = 0;
+	var iconP2SmoothX:Float = 0;
+	var iconP2SmoothY:Float = 0;
 
 	public var iconP1:HealthIcon;
 	public var iconP2:HealthIcon;
@@ -365,6 +382,7 @@ private static final cmy:Int = 20;
 	public static var lastCombo:FlxSprite;
 	// stores the last combo score objects in an array
 	public static var lastScore:Array<FlxSprite> = [];
+
 
 
 	override public function create()
@@ -1422,7 +1440,15 @@ private static final cmy:Int = 20;
 		callOnLuas('onCreatePost', []);
 
 		super.create();
+		if (ClientPrefs.smoothhpbar){
+    	smoothHealth = health;
+    	hpSmooth = health * 50;
 
+    	iconP1SmoothX = iconP1.x;
+    	iconP1SmoothY = iconP1.y;
+    	iconP2SmoothX = iconP2.x;
+    	iconP2SmoothY = iconP2.y;
+		}
 		cacheCountdown();
 		cachePopUpScore();
 		for (key => type in precacheList)
@@ -1617,6 +1643,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		if(generatedMusic)
 		{
 			if(vocals != null) vocals.pitch = value;
+			if(vocalsPlayer != null) vocalsPlayer.pitch = value;
+			if(vocalsOpponent != null) vocalsOpponent.pitch = value;
 			FlxG.sound.music.pitch = value;
 		}
 		playbackRate = value;
@@ -1751,13 +1779,25 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			return;
 		}
 
-		var video:MP4Handler = new MP4Handler();
-		video.playVideo(filepath);
-		video.finishCallback = function()
-		{
-			startAndEnd();
-			return;
-		}
+		var video:VideoHandler = new VideoHandler();
+			#if (hxCodec >= "3.0.0")
+			// Recent versions
+			video.play(filepath);
+			video.onEndReached.add(function()
+			{
+				video.dispose();
+				startAndEnd();
+				return;
+			}, true);
+			#else
+			// Older versions
+			video.playVideo(filepath);
+			video.finishCallback = function()
+			{
+				startAndEnd();
+				return;
+			}
+			#end
 		#else
 		FlxG.log.warn('Platform not supported!');
 		startAndEnd();
@@ -2436,10 +2476,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 	public function updateScore(miss:Bool = false)
 	{
 
-		if (ClientPrefs.imv4sc) {
-			scoreTxt.color = FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]);
-		}
-
+		
 		if (ClientPrefs.language == 'English') {
 		scoreTxt.text = 'Score: ' + songScore
 		+ ' | Combo Breaks: ' + songMisses
@@ -2472,6 +2509,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		FlxG.sound.music.pause();
 		vocals.pause();
+		vocalsPlayer.pause();
+		vocalsOpponent.pause();
 
 		FlxG.sound.music.time = time;
 		FlxG.sound.music.pitch = playbackRate;
@@ -2482,7 +2521,22 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			vocals.time = time;
 			vocals.pitch = playbackRate;
 		}
+		
+		if (Conductor.songPosition <= vocalsOpponent.length)
+		{
+			vocalsOpponent.time = time;
+			vocalsOpponent.pitch = playbackRate;
+		}
+		
+		if (Conductor.songPosition <= vocalsPlayer.length)
+		{
+			vocalsPlayer.time = time;
+			vocalsPlayer.pitch = playbackRate;
+		}
 		vocals.play();
+		vocalsPlayer.play();
+		vocalsOpponent.play();
+
 		Conductor.songPosition = time;
 		songTime = time;
 	}
@@ -2511,6 +2565,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		FlxG.sound.music.pitch = playbackRate;
 		FlxG.sound.music.onComplete = finishSong.bind();
 		vocals.play();
+		vocalsPlayer.play();
+		vocalsOpponent.play();
 
 		if(startOnTime > 0)
 		{
@@ -2521,7 +2577,9 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		if(paused) {
 			//trace('Oopsie doopsie! Paused sound');
 			FlxG.sound.music.pause();
-			vocals.pause();
+		vocals.pause();
+		vocalsPlayer.pause();
+		vocalsOpponent.pause();
 		}
 
 		// Song duration in a float, useful for the time left feature
@@ -2568,13 +2626,22 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		curSong = songData.song;
 
-		if (SONG.needsVoices)
+		if (SONG.needsVoices){
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
-		else
-			vocals = new FlxSound();
+		    vocalsPlayer = new FlxSound().loadEmbedded(Paths.playervoices(PlayState.SONG.song));
+            vocalsOpponent = new FlxSound().loadEmbedded(Paths.opponentvoices(PlayState.SONG.song));
 
+		}else{
+			vocals = new FlxSound();
+			vocalsPlayer = new FlxSound();
+            vocalsOpponent = new FlxSound();
+		}
 		vocals.pitch = playbackRate;
+		vocalsPlayer.pitch = playbackRate;
+		vocalsOpponent.pitch = playbackRate;
 		FlxG.sound.list.add(vocals);
+		FlxG.sound.list.add(vocalsPlayer);
+        FlxG.sound.list.add(vocalsOpponent);
 		FlxG.sound.list.add(new FlxSound().loadEmbedded(Paths.inst(PlayState.SONG.song)));
 
 		notes = new FlxTypedGroup<Note>();
@@ -2882,7 +2949,9 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			if (FlxG.sound.music != null)
 			{
 				FlxG.sound.music.pause();
-				vocals.pause();
+			vocals.pause();
+			vocalsPlayer.pause();
+			vocalsOpponent.pause();
 			}
 
 			if (startTimer != null && !startTimer.finished)
@@ -2997,6 +3066,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		if(finishTimer != null) return;
 
 		vocals.pause();
+		vocalsPlayer.pause();
+		vocalsOpponent.pause();
 
 		FlxG.sound.music.play();
 		FlxG.sound.music.pitch = playbackRate;
@@ -3006,7 +3077,19 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			vocals.time = Conductor.songPosition;
 			vocals.pitch = playbackRate;
 		}
+		if (Conductor.songPosition <= vocalsPlayer.length)
+		{
+			vocalsPlayer.time = Conductor.songPosition;
+			vocalsPlayer.pitch = playbackRate;
+		}
+		if (Conductor.songPosition <= vocalsOpponent.length)
+		{
+			vocalsOpponent.time = Conductor.songPosition;
+			vocalsOpponent.pitch = playbackRate;
+		}
 		vocals.play();
+		vocalsPlayer.play();
+		vocalsOpponent.play();
 	}
 
 	public var paused:Bool = false;
@@ -3023,7 +3106,9 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			iconP1.swapOldIcon();
 		}*/
 		callOnLuas('onUpdate', [elapsed]);
-
+		if (ClientPrefs.imv4sc) {
+			scoreTxt.color = FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]);
+		}
 		switch (curStage)
 		{
 			case 'tank':
@@ -3170,8 +3255,27 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		maxcombo = combo;
 		}
 		super.update(elapsed);
+	if (ClientPrefs.smoothhpbar){
+    if (health < 2) {
+        smoothHealth = lerp(smoothHealth, health, boundTo(elapsed * 20, 0, 1));
+    } else {
+        smoothHealth = 2;
+    }
+    
+    if (smoothHPSettings.denpaMiss && flinch) {
+        iconP1.animation.curAnim.curFrame = 1;
+    }
+    
+    healthBar.numDivisions = 10000;
+    
 
-
+    hpSmooth = lerp(hpSmooth, health * 50, elapsed * 20);
+    healthBar.percent = hpSmooth;
+    
+    if (smoothHPSettings.denpaMiss && flinch) {
+        iconP1.animation.curAnim.curFrame = 1;
+    }
+}
 		if (ClientPrefs.sidehud) {
 
       var totalNotesText = ClientPrefs.language == 'English' 
@@ -3202,7 +3306,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
         bad.text = badsText;
         
         var shitsText = ClientPrefs.language == 'English' 
-            ? "Shits(Miss): " + shits 
+            ? "Shits: " + shits 
             : "差: " + shits;
         shit.text = shitsText;
         
@@ -3248,39 +3352,25 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		iconP1.x = healthBar.x + (healthBar.width * (FlxMath.remapToRange(healthBar.percent, 0, 100, 100, 0) * 0.01)) + (150 * iconP1.scale.x - 150) / 2 - iconOffset;
 		iconP2.x = healthBar.x + (healthBar.width * (FlxMath.remapToRange(healthBar.percent, 0, 100, 100, 0) * 0.01)) - (150 * iconP2.scale.x) / 2 - iconOffset * 2;
-
+		if (ClientPrefs.smoothhpbar) updateHealthBarPosition();
 		if (health > 2)
 			health = 2;
-		var frameCount = HealthIcon.frameCount;
-		if (frameCount == 2){
-		if (healthBar.percent < 20)
-			iconP1.animation.curAnim.curFrame = 1;
-		else
-			iconP1.animation.curAnim.curFrame = 0;
 
-		if (healthBar.percent > 80)
-			iconP2.animation.curAnim.curFrame = 1;
-		else
-			iconP2.animation.curAnim.curFrame = 0;
-	}
-	else{
-		if (healthBar.percent < 20)
-		{
+		if (healthBar.percent < 20){
 			iconP1.animation.curAnim.curFrame = 1;
 			iconP2.animation.curAnim.curFrame = 2;
 		}
-		else
-			iconP1.animation.curAnim.curFrame = 0;
 
 		if (healthBar.percent > 80){
-			iconP2.animation.curAnim.curFrame = 1;
 			iconP1.animation.curAnim.curFrame = 2;
+			iconP2.animation.curAnim.curFrame = 1;
 		}
-		else
+
+		if (healthBar.percent > 20 && healthBar.percent < 80){
+			iconP1.animation.curAnim.curFrame = 0;
 			iconP2.animation.curAnim.curFrame = 0;
+		}
 
-
-	}
 		if (FlxG.keys.anyJustPressed(debugKeysCharacter) && !endingSong && !inCutscene) {
 			persistentUpdate = false;
 			paused = true;
@@ -3531,6 +3621,65 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		callOnLuas('onUpdatePost', [elapsed]);
 	}
 
+function updateHealthBarPosition() {
+    var percent:Float;
+    
+    if (smoothHPSettings.flipBar) {
+        percent = smoothHealth / 2;
+        healthBar.flipX = true;
+    } else {
+        percent = 1 - (smoothHealth / 2);
+        healthBar.flipX = false;
+    }
+    
+    var targetP1X:Float;
+    var targetP1Y:Float;
+    var targetP2X:Float;
+    var targetP2Y:Float;
+    
+    if (smoothHPSettings.verticalBar) {
+        healthBar.angle = 90;
+        healthBar.x = -220;
+        healthBar.y = 360;
+        
+        iconP1.flipX = false;
+        iconP2.flipX = false;
+        
+        if (smoothHPSettings.flipBar) {
+            healthBar.flipX = true;
+            targetP2Y = 395 + healthBar.x + (healthBar.width * percent) - (150 * iconP2.scale.x) / 2 - 26 * 2;
+            targetP1Y = 205 + healthBar.x + (healthBar.width * percent) + (150 * iconP1.scale.x - 150) / 2 - 26;
+            targetP1X = healthBar.x + 220;
+            targetP2X = healthBar.x + 220;
+        } else {
+            healthBar.flipX = false;
+            targetP2Y = 305 + healthBar.x + (healthBar.width * percent) - (150 * iconP2.scale.x) / 2 - 26 * 2;
+            targetP1Y = 295 + healthBar.x + (healthBar.width * percent) + (150 * iconP1.scale.x - 150) / 2 - 26;
+            targetP1X = healthBar.x + 220;
+            targetP2X = healthBar.x + 220;
+        }
+    } else {
+        healthBar.angle = 0;
+        iconP1.flipX = smoothHPSettings.flipBar;
+        iconP2.flipX = smoothHPSettings.flipBar;
+        
+        targetP1X = healthBar.x + (healthBar.width * percent) + (150 * iconP1.scale.x - 150) / 2 - 26;
+        targetP2X = healthBar.x + (healthBar.width * percent) - (150 * iconP2.scale.x) / 2 - 26 * 2;
+        targetP1Y = iconP1.y; 
+        targetP2Y = iconP2.y; 
+    }
+    
+    var iconSmoothFactor:Float = boundTo(FlxG.elapsed * 30, 0, 1);
+    
+    iconP1SmoothX = lerp(iconP1SmoothX, targetP1X, iconSmoothFactor);
+    iconP1SmoothY = lerp(iconP1SmoothY, targetP1Y, iconSmoothFactor);
+    iconP2SmoothX = lerp(iconP2SmoothX, targetP2X, iconSmoothFactor);
+    iconP2SmoothY = lerp(iconP2SmoothY, targetP2Y, iconSmoothFactor);
+    
+    iconP1.setPosition(iconP1SmoothX, iconP1SmoothY);
+    iconP2.setPosition(iconP2SmoothX, iconP2SmoothY);
+}
+
 	function openPauseMenu()
 	{
 		persistentUpdate = false;
@@ -3548,6 +3697,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		if(FlxG.sound.music != null) {
 			FlxG.sound.music.pause();
 			vocals.pause();
+			vocalsPlayer.pause();
+			vocalsOpponent.pause();
 		}
 		openSubState(new PauseSubState(boyfriend.getScreenPosition().x, boyfriend.getScreenPosition().y));
 		//}
@@ -3582,6 +3733,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 				paused = true;
 
 				vocals.stop();
+				vocalsPlayer.stop();
+				vocalsOpponent.stop();
 				FlxG.sound.music.stop();
 
 				persistentUpdate = false;
@@ -4090,7 +4243,11 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		updateTime = false;
 		FlxG.sound.music.volume = 0;
 		vocals.volume = 0;
+		vocalsPlayer.volume = 0;
+		vocalsOpponent.volume = 0;
 		vocals.pause();
+		vocalsPlayer.pause();
+		vocalsOpponent.pause();
 		if(ClientPrefs.noteOffset <= 0 || ignoreNoteOffset) {
 			finishCallback();
 		} else {
@@ -4157,7 +4314,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 				var percent:Float = ratingPercent;
 				if(Math.isNaN(percent)) percent = 0;
 				Highscore.saveScore(SONG.song, songScore, storyDifficulty, percent);
-				Highscore.saveFullScore(SONG.song, storyDifficulty,songScore, sicks, goods, bads, shits, songMisses, maxcombo);				
+				Highscore.saveFullScore(SONG.song, storyDifficulty, sicks, goods, bads, shits, songMisses, maxcombo);				
 				#end
 			}
 			playbackRate = 1;
@@ -4322,6 +4479,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 		// boyfriend.playAnim('hey');
 		vocals.volume = 1;
+		vocalsPlayer.volume = 1;
+		vocalsOpponent.volume = 1;
 
 		var placement:String = Std.string(combo);
 
@@ -4717,6 +4876,9 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 	function noteMiss(daNote:Note):Void { //You didn't hit the key and let it go offscreen, also used by Hurt Notes
 		//Dupe note remove
+	if (smoothHPSettings.denpaMiss && ClientPrefs.smoothhpbar) {
+        triggerFlinch();
+    }
 	notes.forEachAlive(function(note:Note) {
 			if (daNote != note && daNote.mustPress && daNote.noteData == note.noteData && daNote.isSustainNote == note.isSustainNote && Math.abs(daNote.strumTime - note.strumTime) < 1) {
 				note.kill();
@@ -4735,6 +4897,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		if(instakillOnMiss)
 		{
 			vocals.volume = 0;
+			vocalsPlayer.volume = 0;
 			doDeathCheck(true);
 		}
 
@@ -4742,6 +4905,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 		//trace(daNote.missHealth);
 		songMisses++;
 		vocals.volume = 0;
+		vocalsPlayer.volume = 0;
 		if(!practiceMode) songScore -= 0;
 
 		totalPlayed++;
@@ -4763,6 +4927,9 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
 	{
+	if (smoothHPSettings.denpaMiss && ClientPrefs.smoothhpbar) {
+        triggerFlinch();
+    }
 		if(ClientPrefs.ghostTapping) return; //fuck it
 
 		if (!boyfriend.stunned)
@@ -4771,6 +4938,7 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			if(instakillOnMiss)
 			{
 				vocals.volume = 0;
+				vocalsPlayer.volume = 0;
 				doDeathCheck(true);
 			}
 
@@ -4803,10 +4971,26 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 				boyfriend.playAnim(singAnimations[Std.int(Math.abs(direction))] + 'miss', true);
 			}
 			vocals.volume = 0;
+			vocalsPlayer.volume = 0;
 		}
 		callOnLuas('noteMissPress', [direction]);
 	}
+function triggerFlinch() {
+    flinch = true;
+    new FlxTimer().start(0.5, function(tmr:FlxTimer) {
+        flinch = false;
+    });
+}
 
+function lerp(a:Float, b:Float, ratio:Float):Float {
+    return a + ratio * (b - a);
+}
+
+function boundTo(value:Float, min:Float, max:Float):Float {
+    if (value < min) return min;
+    if (value > max) return max;
+    return value;
+}
 	function opponentNoteHit(note:Note):Void
 	{
 
@@ -4843,7 +5027,8 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 	
 		if (SONG.needsVoices)
 			vocals.volume = 1;
-
+			vocalsPlayer.volume = 1;
+			vocalsOpponent.volume = 1;
 		var time:Float = 0.15;
 		if(note.isSustainNote && !note.animation.curAnim.name.endsWith('end')) {
 			time += 0.15;
@@ -4859,14 +5044,12 @@ var psychEngineVersion:String = MainMenuState.psychEngineVersion;
 			notes.remove(note, true);
 			note.destroy();
 		}
-if (!ClientPrefs.opponentfe) {
-setOpponentStrumStatic(0);
-setOpponentStrumStatic(1);
-setOpponentStrumStatic(2);
-setOpponentStrumStatic(3);
-}
-
+		if (!ClientPrefs.opponentfe) {
+		for (i in 0...4) {
+		setOpponentStrumStatic(i);
+		}
 	}
+}
 
 public function setOpponentStrumStatic(direction:Int) {
     var strum = opponentStrums.members[direction];
@@ -4875,29 +5058,37 @@ public function setOpponentStrumStatic(direction:Int) {
         strum.resetAnim = 0;
     }
 }
+public function setgoodnoteStrumStatic(direction:Int) {
+    var strum = playerStrums.members[direction];
+    if (strum != null) {
+        strum.playAnim('static', true);
+        strum.resetAnim = 0;
+    }
+}
+
 
 
 	function goodNoteHit(note:Note):Void
 {
-
-
-
-
+if (note.isSustainNote) {
+sustainNotescore += 10;
+}
  var rating:String = 'sick';
 
-if (!note.isSustainNote) {
+if (!note.isSustainNote && !(note.ignoreNote || note.hitCausesMiss))  {
 notehitlol++;
 var noteDiff:Float = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.ratingOffset);
-
-if (noteDiff <= ClientPrefs.badWindow && noteDiff > ClientPrefs.goodWindow) {
+sustainNotescore = 0;
+if (noteDiff <= ClientPrefs.badWindow && noteDiff > ClientPrefs.goodWindow && !cpuControlled) {
     rating = 'bad';
-} else if (noteDiff <= ClientPrefs.goodWindow && noteDiff > ClientPrefs.sickWindow) {
+} else if (noteDiff <= ClientPrefs.goodWindow && noteDiff > ClientPrefs.sickWindow && !cpuControlled) {
     rating = 'good';
 } else if (noteDiff <= ClientPrefs.sickWindow) {
     rating = 'sick';
-} else {
+} else if (noteDiff > ClientPrefs.badWindow && !cpuControlled) {
     rating = 'shit';
 }
+
 var mscolor:FlxColor = 0x00FFFF;
 
  if (rating == 'sick') {
@@ -4917,15 +5108,16 @@ var mscolor:FlxColor = 0x00FFFF;
     
 	
     var msDiffStr:String = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
-
+	if (!cpuControlled) {
     msTxtKade.text = msDiffStr;
+	}
     msTxtKade.alpha = 1;
 
     if (msTween != null) msTween.cancel();
     msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
 
     if (cpuControlled) {
-        msTxtKade.text += " (BOT)";
+      msTxtKade.text =  "0ms (BOT)";
 }
 	}
 
@@ -4969,8 +5161,18 @@ var mscolor:FlxColor = 0x00FFFF;
 				combo += 1;
 				if(combo > 9999) combo = 9999;
 				popUpScore(note);
-			}else if (note.isSustainEnd) {
-			songScore += 350;
+			} 
+			if (note.isSustainEnd && !cpuControlled && !practiceMode) {
+			songScore += sustainNotescore;
+			updateScore();
+			sustainNotescore = 0;
+			if(ClientPrefs.noteSplashes && note != null && !cpuControlled) {
+			var strum:StrumNote = playerStrums.members[note.noteData];
+			if(strum != null) {
+				spawnNoteSplash(strum.x, strum.y, note.noteData, note);
+			}
+		}
+
 			}
 			health += note.hitHealth * healthGain;
 
@@ -5021,6 +5223,8 @@ var mscolor:FlxColor = 0x00FFFF;
 			}
 			note.wasGoodHit = true;
 			vocals.volume = 1;
+			vocalsPlayer.volume = 1;
+			vocalsOpponent.volume = 1;
 
 			var isSus:Bool = note.isSustainNote; //GET OUT OF MY HEAD, GET OUT OF MY HEAD, GET OUT OF MY HEAD
 			var leData:Int = Math.round(Math.abs(note.noteData));
@@ -5034,11 +5238,15 @@ var mscolor:FlxColor = 0x00FFFF;
 				note.destroy();
 			}
 		}
-
+		if (cpuControlled && !ClientPrefs.opponentfe) {
+        for (i in 0...4) {
+			setgoodnoteStrumStatic(i);
+		}
 	}
+}
 
 	public function spawnNoteSplashOnNote(note:Note) {
-		if(ClientPrefs.noteSplashes && note != null) {
+		if(ClientPrefs.noteSplashes && note != null && !cpuControlled) {
 			var strum:StrumNote = playerStrums.members[note.noteData];
 			if(strum != null) {
 				spawnNoteSplash(strum.x, strum.y, note.noteData, note);
@@ -5575,7 +5783,7 @@ var mscolor:FlxColor = 0x00FFFF;
 							}
 						}
 					case 'toastie':
-						if(/*ClientPrefs.framerate <= 60 &&*/ !ClientPrefs.shaders && ClientPrefs.lowQuality && !ClientPrefs.globalAntialiasing) {
+						if(/*ClientPrefs.framerate <= 60 && !ClientPrefs.cacheOnGPU &&*/!ClientPrefs.shaders && ClientPrefs.lowQuality && !ClientPrefs.globalAntialiasing) {
 							unlock = true;
 						}
 					case 'debugger':

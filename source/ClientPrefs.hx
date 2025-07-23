@@ -5,8 +5,12 @@ import flixel.util.FlxSave;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
+#if sys
+import sys.io.Process;
+#end
 
 class ClientPrefs {
+	public static var modSettings:Map<String, Map<String, Dynamic>> = new Map();
 	public static var downScroll:Bool = false;
 	public static var middleScroll:Bool = false;
 	public static var opponentStrums:Bool = true;
@@ -32,8 +36,9 @@ class ClientPrefs {
 	public static var hitsoundVolume:Float = 0;
 	public static var pauseMusic:String = 'Tea Time';
 	public static var checkForUpdates:Bool = true;
-	public static var comboStacking = true;
+	public static var comboStacking = false;
 	public static var language:String = "English";
+
 	public static var sidehud:Bool = true;
 	public static var luattf:String = "English TTF";
 	public static var doublebetbf:Bool = true;
@@ -42,6 +47,10 @@ class ClientPrefs {
 	public static var blurnote:Bool = false;
 	public static var imv4sc:Bool = false;
 	public static var currentFont:String = "vcr.ttf"; 
+	public static var windowedmode:String = "windowed"; 
+	public static var guitarHeroSustains:Bool = false; 
+	public static var smoothhpbar:Bool = false; 
+	public static var cacheOnGPU:Bool = false; 
 
 	public static var gameplaySettings:Map<String, Dynamic> = [
 		'scrollspeed' => 1.0,
@@ -104,9 +113,41 @@ class ClientPrefs {
 	}
 
 	public static function saveSettings() {
+		FlxG.save.data.cacheOnGPU = cacheOnGPU;
+		FlxG.save.data.smoothhpbar = smoothhpbar;
+        FlxG.save.flush();
+		FlxG.save.data.guitarHeroSustains = guitarHeroSustains;
+		FlxG.save.data.windowedmode = windowedmode;
 		FlxG.save.data.blurnote = blurnote;
 		FlxG.save.data.downScroll = downScroll;
-		FlxG.save.data.language = language;
+
+		#if sys
+		if (FlxG.save.data.hasAutoDetectedLanguage == null) {
+			var locale:String = "en";
+			try {
+			#if windows
+			var proc = new Process("powershell", ["-Command", "[System.Globalization.CultureInfo]::InstalledUICulture.Name"]);
+			locale = proc.stdout.readLine();
+			proc.close();
+			#elseif linux
+			var proc = new Process("bash", ["-c", "echo $LANG"]);
+			locale = proc.stdout.readLine();
+			proc.close();
+			#elseif mac 
+			var proc = new Process("defaults", ["read", "-g", "AppleLocale"]);
+			locale = proc.stdout.readLine();
+			proc.close();
+			#end
+			} catch(e:Dynamic) {
+			locale = "en";
+			}
+			language = locale.indexOf("zh") != -1 ? "Chinese" : "English";
+			FlxG.save.data.hasAutoDetectedLanguage = true;
+			FlxG.save.data.language = language;
+			FlxG.save.flush();
+		}
+		#end
+
 		FlxG.save.data.sidehud = sidehud;
 		FlxG.save.data.opponentfe = opponentfe;
 		FlxG.save.data.luattf = luattf;
@@ -157,8 +198,23 @@ class ClientPrefs {
 		FlxG.log.add("Settings saved!");
 	}
 
-	public static function loadPrefs() {
 
+
+	public static function loadPrefs() {
+		
+		if (FlxG.save.data.cacheOnGPU != null) {
+            cacheOnGPU = FlxG.save.data.cacheOnGPU;
+        }
+
+		if (FlxG.save.data.smoothhpbar != null) {
+            smoothhpbar = FlxG.save.data.smoothhpbar;
+        }
+		 if (FlxG.save.data.guitarHeroSustains != null) {
+            guitarHeroSustains = FlxG.save.data.guitarHeroSustains;
+        }
+		 if (FlxG.save.data.windowedmode != null) {
+            windowedmode = FlxG.save.data.windowedmode;
+        }
 		if (FlxG.save.data.imv4sc != null) {
     		imv4sc = FlxG.save.data.imv4sc;
 		}
@@ -317,6 +373,9 @@ class ClientPrefs {
 			reloadControls();
 		}
 	}
+
+
+
 
 	inline public static function getGameplaySetting(name:String, defaultValue:Dynamic):Dynamic {
 		return /*PlayState.isStoryMode ? defaultValue : */ (gameplaySettings.exists(name) ? gameplaySettings.get(name) : defaultValue);

@@ -224,6 +224,18 @@ class Paths
 		var voices = returnSound('songs', songKey);
 		return voices;
 	}
+		inline static public function opponentvoices(song:String):Any
+	{
+		var songKey:String = '${formatToSongPath(song)}/Voices-Opponent';
+		var voices = returnSound('songs', songKey);
+		return voices;
+	}
+		inline static public function playervoices(song:String):Any
+	{
+		var songKey:String = '${formatToSongPath(song)}/Voices-Player';
+		var voices = returnSound('songs', songKey);
+		return voices;
+	}
 
 	inline static public function inst(song:String):Any
 	{
@@ -271,8 +283,12 @@ class Paths
 	{
 		#if MODS_ALLOWED
 		var file:String = modsFont(key);
-		if(FileSystem.exists(file)) {
+		var cnfile = modsFont("vcrcn.ttf");
+		if(FileSystem.exists(file) && ClientPrefs.language == 'English') {
 			return file;
+		}
+		if(FileSystem.exists(cnfile) && ClientPrefs.language == 'Chinese'){
+			return cnfile;
 		}
 		#end
 		if (ClientPrefs.language == 'English') {
@@ -288,6 +304,10 @@ class Paths
 		return 'assets/fonts/kadems.ttf';
 	}
 
+	inline static public function cnfont(key:String)
+	{
+		return 'assets/fonts/vcrcn.ttf';
+	}
 
 	inline static public function enfont(key:String)
 	{
