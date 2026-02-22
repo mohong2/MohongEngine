@@ -1,18 +1,19 @@
 package;
 
+import openfl.display3D.textures.RectangleTexture;
 import animateatlas.AtlasFrameMaker;
-import flixel.math.FlxPoint;
+ 
 import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
 import openfl.geom.Rectangle;
 import flixel.math.FlxRect;
 import haxe.xml.Access;
 import openfl.system.System;
-import flixel.FlxG;
+ 
 import flixel.graphics.frames.FlxAtlasFrames;
 import openfl.utils.AssetType;
 import openfl.utils.Assets as OpenFlAssets;
 import lime.utils.Assets;
-import flixel.FlxSprite;
+ 
 #if sys
 import sys.io.File;
 import sys.FileSystem;
@@ -46,6 +47,7 @@ class Paths
 		'weeks',
 		'fonts',
 		'scripts',
+		'hscript',
 		'achievements'
 	];
 	#end
@@ -119,7 +121,7 @@ class Paths
 		currentLevel = name.toLowerCase();
 	}
 
-	public static function getPath(file:String, type:AssetType, ?library:Null<String> = null)
+	public static function getPath(file:String, ?type:AssetType = TEXT, ?library:Null<String> = null)
 	{
 		if (library != null)
 			return getLibraryPath(file, library);
@@ -243,14 +245,146 @@ class Paths
 		var inst = returnSound('songs', songKey);
 		return inst;
 	}
-
+	/*
 	inline static public function image(key:String, ?library:String):FlxGraphic
 	{
 		// streamlined the assets process more
 		var returnAsset:FlxGraphic = returnGraphic(key, library);
 		return returnAsset;
+	}*/
+	inline public static function getSharedPath(file:String = '')
+	{
+		return 'assets/shared/$file';
 	}
 
+	inline public static function mergeAllTextsNamed(path:String, defaultDirectory:String = null, allowDuplicates:Bool = false)
+	{
+		if(defaultDirectory == null) defaultDirectory =	getSharedPath();
+		defaultDirectory = defaultDirectory.trim();
+		if(!defaultDirectory.endsWith('/')) defaultDirectory += '/';
+		if(!defaultDirectory.startsWith('assets/')) defaultDirectory = 'assets/$defaultDirectory';
+
+		var mergedList:Array<String> = [];
+		var paths:Array<String> = directoriesWithFile(defaultDirectory, path);
+
+		var defaultPath:String = defaultDirectory + path;
+		if(paths.contains(defaultPath))
+		{
+			paths.remove(defaultPath);
+			paths.insert(0, defaultPath);
+		}
+
+		for (file in paths)
+		{
+			var list:Array<String> = CoolUtil.coolTextFile(file);
+			for (value in list)
+				if((allowDuplicates || !mergedList.contains(value)) && value.length > 0)
+					mergedList.push(value);
+		}
+		return mergedList;
+	}
+	inline public static function directoriesWithFile(path:String, fileToFind:String, mods:Bool = true)
+	{
+		var foldersToCheck:Array<String> = [];
+		#if sys
+		if(FileSystem.exists(path + fileToFind))
+		#end
+			foldersToCheck.push(path + fileToFind);
+
+		#if MODS_ALLOWED
+		if(mods)
+		{
+			// Global mods first
+			for(mod in getGlobalMods())
+			{
+				var folder:String = modFolders(mod + '/' + fileToFind);
+				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
+			}
+
+			// Then "PsychEngine/mods/" main folder
+			var folder:String = modFolders(fileToFind);
+			if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(Paths.mods(fileToFind));
+
+			// And lastly, the loaded mod's folder
+			if(currentModDirectory != null && currentModDirectory.length > 0)
+			{
+				var folder:String = modFolders(currentModDirectory + '/' + fileToFind);
+				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
+			}
+		}
+		#end
+		return foldersToCheck;
+	}
+
+
+	static public function image(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxGraphic
+	{
+		var bitmap:BitmapData = null;
+		var file:String = null;
+
+		#if MODS_ALLOWED
+		file = modsImages(key);
+		if (currentTrackedAssets.exists(file))
+		{
+			localTrackedAssets.push(file);
+			return currentTrackedAssets.get(file);
+		}
+		else if (FileSystem.exists(file))
+			bitmap = BitmapData.fromFile(file);
+		else
+		#end
+		{
+			file = getPath('images/$key.png', IMAGE, library);
+			if (currentTrackedAssets.exists(file))
+			{
+				localTrackedAssets.push(file);
+				return currentTrackedAssets.get(file);
+			}
+			else if (OpenFlAssets.exists(file, IMAGE))
+				bitmap = OpenFlAssets.getBitmapData(file);
+		}
+
+		if (bitmap != null)
+		{
+			var retVal = cacheBitmap(file, bitmap, allowGPU);
+			if(retVal != null) return retVal;
+		}
+
+		trace('oh no its returning null NOOOO ($file)');
+		return null;
+	}
+	static public function cacheBitmap(file: String, ?bitmap: BitmapData = null, ?allowGPU: Bool = true): FlxGraphic {
+			if (currentTrackedAssets.exists(file)) {
+				localTrackedAssets.push(file);
+				return currentTrackedAssets.get(file);
+			}
+
+			if (bitmap == null) {
+				#if MODS_ALLOWED
+				if (FileSystem.exists(file)) bitmap = BitmapData.fromFile(file);
+				else
+				#end {
+					if (OpenFlAssets.exists(file, IMAGE)) bitmap = OpenFlAssets.getBitmapData(file);
+				}
+				if (bitmap == null) return null;
+			}
+
+			localTrackedAssets.push(file);
+
+			if (allowGPU && ClientPrefs.data.cacheOnGPU) {
+				var texture: RectangleTexture = FlxG.stage.context3D.createRectangleTexture(bitmap.width, bitmap.height, BGRA, true);
+				texture.uploadFromBitmapData(bitmap);
+				bitmap.image.data = null;
+				bitmap.dispose();
+				bitmap.disposeImage();
+				bitmap = BitmapData.fromTexture(texture);
+			}
+			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file); 
+			newGraphic.persist = true;
+			newGraphic.destroyOnNoUse = false;
+			currentTrackedAssets.set(file, newGraphic);
+			return newGraphic;
+		}
 	static public function getTextFromFile(key:String, ?ignoreMods:Bool = false):String
 	{
 		#if sys
@@ -278,40 +412,50 @@ class Paths
 		#end
 		return Assets.getText(getPath(key, TEXT));
 	}
+	inline static public function getSparrowAtlas(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
+	{
+		var imageLoaded:FlxGraphic = image(key, library, allowGPU);
+		#if MODS_ALLOWED
+		var xmlExists:Bool = false;
+
+		var xml:String = modsXml(key);
+		if(FileSystem.exists(xml)) xmlExists = true;
+
+		return FlxAtlasFrames.fromSparrow(imageLoaded, (xmlExists ? File.getContent(xml) : getPath('images/$key.xml', library)));
+		#else
+		return FlxAtlasFrames.fromSparrow(imageLoaded, getPath('images/$key.xml', library));
+		#end
+	}
+
+	inline static public function languageFont()
+	{
+		var language_ttf:String = Language.get("ttf", "vcr");
+		return 'assets/fonts/$language_ttf.ttf';
+	}
 
 	inline static public function font(key:String)
 	{
 		#if MODS_ALLOWED
 		var file:String = modsFont(key);
-		var cnfile = modsFont("vcrcn.ttf");
-		if(FileSystem.exists(file) && ClientPrefs.language == 'English') {
+		if(FileSystem.exists(file)) {
 			return file;
 		}
-		if(FileSystem.exists(cnfile) && ClientPrefs.language == 'Chinese'){
-			return cnfile;
-		}
 		#end
-		if (ClientPrefs.language == 'English') {
 		return 'assets/fonts/$key';
-		}else{
-		return 'assets/fonts/vcrcn.ttf';
-		}
-
 	}
 
-	inline static public function msfont(key:String)
+	inline static public function optionsfont()
 	{
-		return 'assets/fonts/kadems.ttf';
+		var options_ttf:String = Language.get("option.ttf", "vcr");
+		return 'assets/fonts/$options_ttf.ttf';
 	}
-
-	inline static public function cnfont(key:String)
+	inline static public function locale(key:String, ?library:String)
 	{
-		return 'assets/fonts/vcrcn.ttf';
+		return getPath('lang/$key', TEXT, library);
 	}
-
-	inline static public function enfont(key:String)
+	inline static public function localeMod(key:String)
 	{
-		return 'assets/fonts/vcr.ttf';
+		return modFolders('lang/$key');
 	}
 
 	inline static public function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?library:String)
@@ -327,22 +471,6 @@ class Paths
 		}
 		return false;
 	}
-
-	inline static public function getSparrowAtlas(key:String, ?library:String):FlxAtlasFrames
-	{
-		#if MODS_ALLOWED
-		var imageLoaded:FlxGraphic = returnGraphic(key);
-		var xmlExists:Bool = false;
-		if(FileSystem.exists(modsXml(key))) {
-			xmlExists = true;
-		}
-
-		return FlxAtlasFrames.fromSparrow((imageLoaded != null ? imageLoaded : image(key, library)), (xmlExists ? File.getContent(modsXml(key)) : file('images/$key.xml', library)));
-		#else
-		return FlxAtlasFrames.fromSparrow(image(key, library), file('images/$key.xml', library));
-		#end
-	}
-
 
 	inline static public function getPackerAtlas(key:String, ?library:String)
 	{
@@ -417,7 +545,7 @@ class Paths
 		// trace(gottenPath);
 		if(!currentTrackedSounds.exists(gottenPath))
 		#if MODS_ALLOWED
-			currentTrackedSounds.set(gottenPath, Sound.fromFile('./' + gottenPath));
+			currentTrackedSounds.set(gottenPath, Sound.fromFile(gottenPath));
 		#else
 		{
 			var folder:String = '';
@@ -432,7 +560,7 @@ class Paths
 
 	#if MODS_ALLOWED
 	inline static public function mods(key:String = '') {
-		return 'mods/' + key;
+		return Sys.getCwd() + 'mods/' + key;
 	}
 
 	inline static public function modsFont(key:String) {
@@ -463,6 +591,7 @@ class Paths
 		return modFolders('images/' + key + '.txt');
 	}
 
+
 	/* Goes unused for now
 
 	inline static public function modsShaderFragment(key:String, ?library:String)
@@ -491,7 +620,7 @@ class Paths
 				return fileToCheck;
 
 		}
-		return 'mods/' + key;
+		return Sys.getCwd() + 'mods/' + key;
 	}
 
 	public static var globalMods:Array<String> = [];

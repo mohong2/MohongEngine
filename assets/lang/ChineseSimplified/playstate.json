@@ -1,0 +1,12 @@
+{
+    "scorelangtxt": "分数",
+    "acclangtxt": "准确度",
+    "combobtxt": "连击中断",
+    "totalNotesText" : "总命中数: ",
+    "combosText" : "连击: ",
+    "sicksText" : "完美!: ",
+    "goodsText" : "不错: ",
+    "badsText" : "不好: ",
+    "shitsText" : "差: ",
+    "missesText" : "连击中断: "
+}

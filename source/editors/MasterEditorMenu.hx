@@ -1,17 +1,14 @@
 package editors;
 
-#if desktop
+import states.FreeplayState;
+import states.MainMenuState;
+#if cpp
 import Discord.DiscordClient;
 #end
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
-import flixel.system.FlxSound;
+ 
+import flixel.sound.FlxSound;
 #if MODS_ALLOWED
 import sys.FileSystem;
 #end
@@ -26,7 +23,8 @@ class MasterEditorMenu extends MusicBeatState
 		'Dialogue Editor',
 		'Dialogue Portrait Editor',
 		'Character Editor',
-		'Chart Editor'
+		'Chart Editor',
+		'Credits Editor'
 	];
 	private var grpTexts:FlxTypedGroup<Alphabet>;
 	private var directories:Array<String> = [null];
@@ -38,7 +36,7 @@ class MasterEditorMenu extends MusicBeatState
 	override function create()
 	{
 		FlxG.camera.bgColor = FlxColor.BLACK;
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Editors Main Menu", null);
 		#end
@@ -66,7 +64,7 @@ class MasterEditorMenu extends MusicBeatState
 		add(textBG);
 
 		directoryTxt = new FlxText(textBG.x, textBG.y + 4, FlxG.width, '', 32);
-		directoryTxt.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER);
+		directoryTxt.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, CENTER);
 		directoryTxt.scrollFactor.set();
 		add(directoryTxt);
 		
@@ -80,8 +78,10 @@ class MasterEditorMenu extends MusicBeatState
 		changeDirectory();
 		#end
 		changeSelection();
-
 		FlxG.mouse.visible = false;
+		#if android
+		addVirtualPad(LEFT_FULL, A_B);
+		#end
 		super.create();
 	}
 
@@ -126,6 +126,8 @@ class MasterEditorMenu extends MusicBeatState
 					LoadingState.loadAndSwitchState(new DialogueEditorState(), false);
 				case 'Chart Editor'://felt it would be cool maybe
 					LoadingState.loadAndSwitchState(new ChartingState(), false);
+				case 'Credits Editor':
+				MusicBeatState.switchState(new CreditsEditorState());
 			}
 			FlxG.sound.music.volume = 0;
 			#if PRELOAD_ALL

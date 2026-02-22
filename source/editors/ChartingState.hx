@@ -1,6 +1,8 @@
 package editors;
 
-#if desktop
+
+ 
+#if cpp
 import Discord.DiscordClient;
 #end
 import flash.geom.Rectangle;
@@ -10,9 +12,7 @@ import haxe.io.Bytes;
 import Conductor.BPMChangeEvent;
 import Section.SwagSection;
 import Song.SwagSong;
-import flixel.FlxG;
 import flixel.FlxObject;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
 import flixel.addons.ui.FlxInputText;
@@ -24,19 +24,12 @@ import flixel.addons.ui.FlxUINumericStepper;
 import flixel.addons.ui.FlxUISlider;
 import flixel.addons.ui.FlxUITabMenu;
 import flixel.addons.ui.FlxUITooltip.FlxUITooltipStyle;
-import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.group.FlxGroup;
-import flixel.group.FlxSpriteGroup;
 import flixel.input.keyboard.FlxKey;
-import flixel.math.FlxMath;
-import flixel.math.FlxPoint;
 import flixel.system.FlxSound;
-import flixel.text.FlxText;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
 import flixel.ui.FlxButton;
 import flixel.ui.FlxSpriteButton;
-import flixel.util.FlxColor;
+ 
 import flixel.util.FlxSort;
 import lime.media.AudioBuffer;
 import lime.utils.Assets;
@@ -206,6 +199,7 @@ class ChartingState extends MusicBeatState
 	public var mouseQuant:Bool = false;
 	override function create()
 	{
+		 
 		if (PlayState.SONG != null)
 			_song = PlayState.SONG;
 		else
@@ -225,6 +219,7 @@ class ChartingState extends MusicBeatState
 				gfVersion: 'gf',
 				speed: 1,
 				stage: 'stage',
+				format: 'na',
 				validScore: false
 			};
 			addSection();
@@ -233,7 +228,7 @@ class ChartingState extends MusicBeatState
 
 		// Paths.clearMemory();
 
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Chart Editor", StringTools.replace(_song.song, '-', ' '));
 		#end
@@ -340,45 +335,12 @@ class ChartingState extends MusicBeatState
 		UI_box.y = 25;
 		UI_box.scrollFactor.set();
 
-		if (ClientPrefs.language == 'English') {
-		text =
-		"W/S or Mouse Wheel - Change Conductor's strum time
-		\nA/D - Go to the previous/next section
-		\nLeft/Right - Change Snap
-		\nUp/Down - Change Conductor's Strum Time with Snapping
-		\nLeft Bracket / Right Bracket - Change Song Playback Rate (SHIFT to go Faster)
-		\nALT + Left Bracket / Right Bracket - Reset Song Playback Rate
-		\nHold Shift to move 4x faster
-		\nHold Control and click on an arrow to select it
-		\nZ/X - Zoom in/out
-		\n
-		\nEsc - Test your chart inside Chart Editor
-		\nEnter - Play your chart
-		\nQ/E - Decrease/Increase Note Sustain Length
-		\nSpace - Stop/Resume song";
-		}
-		else{
-		text =
-		"W/S 或 鼠标滚轮 - 调整谱面时间轴（Conductor's strum time）
-		\nA/D - 跳转到上一/下一段落（Section）
-		\n左箭头/右箭头 - 更改吸附精度（Snap）
-		\n上箭头/下箭头 - 带吸附调整谱面时间轴（Conductor's Strum Time）
-		\n左方括号 [ / 右方括号 ] - 更改歌曲播放速率（Playback Rate）（按住 Shift 加速调整）
-		\nALT + 左方括号 [ / 右方括号 ] - 重置歌曲播放速率（Reset Playback Rate）
-		\n按住 Shift 可进行 4 倍速移动
-		\n按住 Control 并点击音符箭头可选中它
-		\nZ/X - 放大/缩小视图
-		\n
-		\nEsc - 在编辑器内测试当前谱面（Test Chart）
-		\nEnter - 播放当前谱面（Play Chart）
-		\nQ/E - 减少/增加长按音符长度（Note Sustain Length）
-		\n空格键 - 暂停/继续歌曲播放（Stop/Resume Song）";
-		}
+		text = Language.get("ChartingState.text", "W/S or Mouse Wheel - Adjust Conductor's strum time\nA/D - Jump to Previous/Next Section\nLeft Arrow/Right Arrow - Change Snap\nUp Arrow/Down Arrow - Adjust Conductor's Strum Time with Snap\n[ / ] - Change Playback Rate (Hold Shift for faster adjustment)\nALT + [ / ] - Reset Playback Rate\nHold Shift for 4x Speed Movement\nHold Control and click a note arrow to select it\nZ/X - Zoom In/Out\n\nEsc - Test Chart in Editor\nEnter - Play Chart\nQ/E - Decrease/Increase Note Sustain Length\nSpacebar - Stop/Resume Song");
 		var tipTextArray:Array<String> = text.split('\n');
 		for (i in 0...tipTextArray.length) {
 			var tipText:FlxText = new FlxText(UI_box.x, UI_box.y + UI_box.height + 8, 0, tipTextArray[i], 16);
 			tipText.y += i * 12;
-			tipText.setFormat(Paths.font("vcr.ttf"), 14, FlxColor.WHITE, LEFT/*, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK*/);
+			tipText.setFormat(Paths.languageFont(), 14, FlxColor.WHITE, LEFT/*, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK*/);
 			//tipText.borderSize = 2;
 			tipText.scrollFactor.set();
 			add(tipText);
@@ -408,8 +370,10 @@ class ChartingState extends MusicBeatState
 		zoomTxt = new FlxText(10, 40, 0, "Zoom: 1 / 1", 16);
 		zoomTxt.scrollFactor.set();
 		add(zoomTxt);
-
 		updateGrid();
+		#if android
+		addVirtualPad(LEFT_FULL, CHART_EDITOR);
+		#end
 		super.create();
 	}
 
@@ -456,7 +420,7 @@ class ChartingState extends MusicBeatState
 
 		var loadAutosaveBtn:FlxButton = new FlxButton(reloadSongJson.x, reloadSongJson.y + 30, 'Load Autosave', function()
 		{
-			PlayState.SONG = Song.parseJSONshit(FlxG.save.data.autosave);
+			PlayState.SONG = Song.parseJSON(FlxG.save.data.autosave);
 			MusicBeatState.resetState();
 		});
 
@@ -1196,10 +1160,8 @@ class ChartingState extends MusicBeatState
 	var metronomeStepper:FlxUINumericStepper;
 	var metronomeOffsetStepper:FlxUINumericStepper;
 	var disableAutoScrolling:FlxUICheckBox;
-	#if desktop
 	var waveformUseInstrumental:FlxUICheckBox;
 	var waveformUseVoices:FlxUICheckBox;
-	#end
 	var instVolume:FlxUINumericStepper;
 	var voicesVolume:FlxUINumericStepper;
 	var playerVolume:FlxUINumericStepper;
@@ -1208,7 +1170,6 @@ class ChartingState extends MusicBeatState
 		var tab_group_chart = new FlxUI(null, UI_box);
 		tab_group_chart.name = 'Charting';
 
-		#if desktop
 		if (FlxG.save.data.chart_waveformInst == null) FlxG.save.data.chart_waveformInst = false;
 		if (FlxG.save.data.chart_waveformVoices == null) FlxG.save.data.chart_waveformVoices = false;
 
@@ -1231,7 +1192,6 @@ class ChartingState extends MusicBeatState
 			FlxG.save.data.chart_waveformVoices = waveformUseVoices.checked;
 			updateWaveform();
 		};
-		#end
 
 		check_mute_inst = new FlxUICheckBox(10, 310, null, null, "Mute Instrumental (in editor)", 100);
 		check_mute_inst.checked = false;
@@ -1363,10 +1323,8 @@ class ChartingState extends MusicBeatState
 		tab_group_chart.add(disableAutoScrolling);
 		tab_group_chart.add(metronomeStepper);
 		tab_group_chart.add(metronomeOffsetStepper);
-		#if desktop
 		tab_group_chart.add(waveformUseInstrumental);
 		tab_group_chart.add(waveformUseVoices);
-		#end
 		tab_group_chart.add(instVolume);
 		tab_group_chart.add(voicesVolume);
 
@@ -1647,6 +1605,7 @@ function generateSong() {
 		FlxG.watch.addQuick('daStep', curStep);
 
 
+
 		if (FlxG.mouse.x > gridBG.x
 			&& FlxG.mouse.x < gridBG.x + gridBG.width
 			&& FlxG.mouse.y > gridBG.y
@@ -1654,7 +1613,7 @@ function generateSong() {
 		{
 			dummyArrow.visible = true;
 			dummyArrow.x = Math.floor(FlxG.mouse.x / GRID_SIZE) * GRID_SIZE;
-			if (FlxG.keys.pressed.SHIFT)
+			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT)
 				dummyArrow.y = FlxG.mouse.y;
 			else
 			{
@@ -1673,7 +1632,7 @@ function generateSong() {
 				{
 					if (FlxG.mouse.overlaps(note))
 					{
-						if (FlxG.keys.pressed.CONTROL)
+						if (#if android virtualPad.buttonF.pressed || #end FlxG.keys.pressed.CONTROL)
 						{
 							selectNote(note);
 						}
@@ -1691,7 +1650,7 @@ function generateSong() {
 					}
 				});
 			}
-			else
+			else #if android if(!virtualPad.buttonF.pressed) #end
 			{
 				if (FlxG.mouse.x > gridBG.x
 					&& FlxG.mouse.x < gridBG.x + gridBG.width
@@ -1744,12 +1703,12 @@ function generateSong() {
 
 		if (!blockInput)
 		{
-			if (FlxG.keys.justPressed.ESCAPE)
+			if (#if android virtualPad.buttonC.justPressed || #end FlxG.keys.justPressed.ESCAPE)
 			{
 				autosaveSong();
 				LoadingState.loadAndSwitchState(new editors.EditorPlayState(sectionStartTime()));
 			}
-			if (FlxG.keys.justPressed.ENTER)
+			if (#if android virtualPad.buttonA.justPressed || #end FlxG.keys.justPressed.ENTER)
 			{
 				autosaveSong();
 				FlxG.mouse.visible = false;
@@ -1765,18 +1724,18 @@ function generateSong() {
 			}
 
 			if(curSelectedNote != null && curSelectedNote[1] > -1) {
-				if (FlxG.keys.justPressed.E)
+				if (#if android virtualPad.buttonDown2.justPressed || #end FlxG.keys.justPressed.E)
 				{
 					changeNoteSustain(Conductor.stepCrochet);
 				}
-				if (FlxG.keys.justPressed.Q)
+				if (#if android virtualPad.buttonUp2.justPressed || #end FlxG.keys.justPressed.Q)
 				{
 					changeNoteSustain(-Conductor.stepCrochet);
 				}
 			}
 
 
-			if (FlxG.keys.justPressed.BACKSPACE) {
+			if (#if android virtualPad.buttonB.justPressed ||#end FlxG.keys.justPressed.BACKSPACE) {
 				PlayState.chartingMode = false;
 				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));
@@ -1784,17 +1743,15 @@ function generateSong() {
 				return;
 			}
 
-			if(FlxG.keys.justPressed.Z && FlxG.keys.pressed.CONTROL) {
+			if(#if android virtualPad.buttonZ.justPressed ||#end (FlxG.keys.justPressed.Z && FlxG.keys.pressed.CONTROL)) {
 				undo();
 			}
 
-
-
-			if(FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL) {
+			if(#if android virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL) {
 				--curZoom;
 				updateZoom();
 			}
-			if(FlxG.keys.justPressed.X && curZoom < zoomList.length-1) {
+			if(#if android virtualPad.buttonD.justPressed  ||#end FlxG.keys.justPressed.X && curZoom < zoomList.length-1) {
 				curZoom++;
 				updateZoom();
 			}
@@ -1815,7 +1772,7 @@ function generateSong() {
 				}
 			}
 
-			if (FlxG.keys.justPressed.SPACE)
+			if (#if android virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.SPACE)
 			{
 				if (FlxG.sound.music.playing)
 				{
@@ -1894,17 +1851,17 @@ function generateSong() {
 
 
 
-			if (FlxG.keys.pressed.W || FlxG.keys.pressed.S)
+			if ((FlxG.keys.pressed.W || FlxG.keys.pressed.S) #if android || (virtualPad.buttonUp.pressed || virtualPad.buttonDown.pressed) #end)
 			{
 				FlxG.sound.music.pause();
 
 				var holdingShift:Float = 1;
 				if (FlxG.keys.pressed.CONTROL) holdingShift = 0.25;
-				else if (FlxG.keys.pressed.SHIFT) holdingShift = 4;
+				else if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT) holdingShift = 4;
 
 				var daTime:Float = 700 * FlxG.elapsed * holdingShift;
 
-				if (FlxG.keys.pressed.W)
+				if (#if android virtualPad.buttonUp.pressed ||#end FlxG.keys.pressed.W)
 				{
 					FlxG.sound.music.time -= daTime;
 				}
@@ -1947,7 +1904,7 @@ function generateSong() {
 
 			var style = currentType;
 
-			if (FlxG.keys.pressed.SHIFT){
+			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT){
 				style = 3;
 			}
 
@@ -2050,12 +2007,12 @@ function generateSong() {
 				}
 			}
 			var shiftThing:Int = 1;
-			if (FlxG.keys.pressed.SHIFT)
+			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT)
 				shiftThing = 4;
 
-			if (FlxG.keys.justPressed.D)
+			if (#if android virtualPad.buttonRight.justPressed || #end FlxG.keys.justPressed.D)
 				changeSection(curSec + shiftThing);
-			if (FlxG.keys.justPressed.A) {
+			if (#if android virtualPad.buttonLeft.justPressed ||#end FlxG.keys.justPressed.A) {
 				if(curSec <= 0) {
 					changeSection(_song.notes.length-1);
 				} else {
@@ -2102,7 +2059,7 @@ function generateSong() {
 			playbackSpeed -= 0.01;
 		if (!holdingShift && pressedRB || holdingShift && holdingRB)
 			playbackSpeed += 0.01;
-		if (FlxG.keys.pressed.ALT && (pressedLB || pressedRB || holdingLB || holdingRB))
+		if (#if android virtualPad.buttonG.justPressed || #end (FlxG.keys.pressed.ALT && (pressedLB || pressedRB || holdingLB || holdingRB)))
 			playbackSpeed = 1;
 		//
 
@@ -2235,11 +2192,9 @@ function generateSong() {
 		gridLayer.clear();
 		gridBG = FlxGridOverlay.create(GRID_SIZE, GRID_SIZE, GRID_SIZE * 9, Std.int(GRID_SIZE * getSectionBeats() * 4 * zoomList[curZoom]));
 
-		#if desktop
 		if(FlxG.save.data.chart_waveformInst || FlxG.save.data.chart_waveformVoices) {
 			updateWaveform();
 		}
-		#end
 
 		var leHeight:Int = Std.int(gridBG.height);
 		var foundNextSec:Bool = false;
@@ -2290,7 +2245,6 @@ function generateSong() {
 	var waveformPrinted:Bool = true;
 	var wavData:Array<Array<Array<Float>>> = [[[0], [0]], [[0], [0]]];
 	function updateWaveform() {
-		#if desktop
 		if(waveformPrinted) {
 			waveformSprite.makeGraphic(Std.int(GRID_SIZE * 8), Std.int(gridBG.height), 0x00FFFFFF);
 			waveformSprite.pixels.fillRect(new Rectangle(0, 0, gridBG.width, gridBG.height), 0x00FFFFFF);
@@ -2409,7 +2363,6 @@ function generateSong() {
 		}
 
 		waveformPrinted = true;
-		#end
 	}
 
 	function waveformData(buffer:AudioBuffer, bytes:Bytes, time:Float, endTime:Float, multiply:Float = 1, ?array:Array<Array<Array<Float>>>, ?steps:Float):Array<Array<Array<Float>>>
@@ -2756,7 +2709,7 @@ function generateSong() {
 				if(typeInt == null) theType = '?';
 
 				var daText:AttachedFlxText = new AttachedFlxText(0, 0, 100, theType, 24);
-				daText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+				daText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 				daText.xAdd = -32;
 				daText.yAdd = 6;
 				daText.borderSize = 1;
@@ -2781,7 +2734,7 @@ function generateSong() {
 				if(note.eventLength > 1) text = note.eventLength + ' Events:\n' + note.eventName;
 
 				var daText:AttachedFlxText = new AttachedFlxText(0, 0, 400, text, 12);
-				daText.setFormat(Paths.font("vcr.ttf"), 12, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
+				daText.setFormat(Paths.languageFont(), 12, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 				daText.xAdd = -410;
 				daText.borderSize = 1;
 				if(note.eventLength > 1) daText.yAdd += 8;
@@ -3140,11 +3093,15 @@ function generateSong() {
 
 		if ((data != null) && (data.length > 0))
 		{
+			#if android
+			SUtil.saveContent(Paths.formatToSongPath(_song.song), '.json', data.trim());
+			#else
 			_file = new FileReference();
 			_file.addEventListener(Event.COMPLETE, onSaveComplete);
 			_file.addEventListener(Event.CANCEL, onSaveCancel);
 			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 			_file.save(data.trim(), Paths.formatToSongPath(_song.song) + ".json");
+			#end
 		}
 	}
 
@@ -3152,7 +3109,25 @@ function generateSong() {
 	{
 		return FlxSort.byValues(FlxSort.ASCENDING, Obj1[0], Obj2[0]);
 	}
+	#if android
+	private function saveEvents()
+	{
+		if(_song.events != null && _song.events.length > 1) _song.events.sort(sortByTime);
+		var eventsSong:Dynamic = {
+			events: _song.events
+		};
+		var json = {
+			"song": eventsSong
+		}
 
+		var data:String = Json.stringify(json, "\t");
+
+		if ((data != null) && (data.length > 0))
+		{
+			SUtil.saveContent('events', '.json', data.trim());
+		}
+	}
+	#else
 	private function saveEvents()
 	{
 		if(_song.events != null && _song.events.length > 1) _song.events.sort(sortByTime);
@@ -3174,6 +3149,9 @@ function generateSong() {
 			_file.save(data.trim(), "events.json");
 		}
 	}
+
+	#end
+	
 
 	function onSaveComplete(_):Void
 	{

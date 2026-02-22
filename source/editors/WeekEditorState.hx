@@ -1,16 +1,16 @@
 package editors;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import flixel.system.FlxSound;
 import openfl.utils.Assets;
 import flixel.addons.ui.FlxInputText;
@@ -32,7 +32,7 @@ import sys.io.File;
 import sys.FileSystem;
 #end
 import WeekData;
-
+ 
 using StringTools;
 
 class WeekEditorState extends MusicBeatState
@@ -62,11 +62,11 @@ class WeekEditorState extends MusicBeatState
 		var ui_tex = Paths.getSparrowAtlas('campaign_menu_UI_assets');
 		var bgYellow:FlxSprite = new FlxSprite(0, 56).makeGraphic(FlxG.width, 386, 0xFFF9CF51);
 		bgSprite = new FlxSprite(0, 56);
-		bgSprite.antialiasing = ClientPrefs.globalAntialiasing;
+		bgSprite.antialiasing = ClientPrefs.data.globalAntialiasing;
 
 		weekThing = new MenuItem(0, bgSprite.y + 396, weekFileName);
 		weekThing.y += weekThing.height + 20;
-		weekThing.antialiasing = ClientPrefs.globalAntialiasing;
+		weekThing.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(weekThing);
 
 		var blackBarThingie:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, 56, FlxColor.BLACK);
@@ -78,11 +78,11 @@ class WeekEditorState extends MusicBeatState
 		lock.frames = ui_tex;
 		lock.animation.addByPrefix('lock', 'lock');
 		lock.animation.play('lock');
-		lock.antialiasing = ClientPrefs.globalAntialiasing;
+		lock.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(lock);
 		
 		missingFileText = new FlxText(0, 0, FlxG.width, "");
-		missingFileText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		missingFileText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		missingFileText.borderSize = 2;
 		missingFileText.visible = false;
 		add(missingFileText); 
@@ -100,12 +100,12 @@ class WeekEditorState extends MusicBeatState
 		add(grpWeekCharacters);
 
 		var tracksSprite:FlxSprite = new FlxSprite(FlxG.width * 0.07, bgSprite.y + 435).loadGraphic(Paths.image('Menu_Tracks'));
-		tracksSprite.antialiasing = ClientPrefs.globalAntialiasing;
+		tracksSprite.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(tracksSprite);
 
 		txtTracklist = new FlxText(FlxG.width * 0.05, tracksSprite.y + 60, 0, "", 32);
 		txtTracklist.alignment = CENTER;
-		txtTracklist.font = Paths.font("vcr.ttf");
+		txtTracklist.font = Paths.languageFont();
 		txtTracklist.color = 0xFFe55777;
 		add(txtTracklist);
 		add(txtWeekTitle);
@@ -114,7 +114,9 @@ class WeekEditorState extends MusicBeatState
 		reloadAllShit();
 
 		FlxG.mouse.visible = true;
-
+		#if android
+		addVirtualPad(UP_DOWN, B);
+		#end
 		super.create();
 	}
 
@@ -365,7 +367,7 @@ class WeekEditorState extends MusicBeatState
 		}
 		recalculateStuffPosition();
 
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Week Editor", "Editting: " + weekFileName);
 		#end
@@ -445,7 +447,7 @@ class WeekEditorState extends MusicBeatState
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(FlxG.keys.justPressed.ESCAPE) {
+			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
 				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			}
@@ -537,11 +539,15 @@ class WeekEditorState extends MusicBeatState
 		var data:String = Json.stringify(weekFile, "\t");
 		if (data.length > 0)
 		{
+			#if android
+			SUtil.saveContent(weekFileName, ".json", data);
+			#else
 			_file = new FileReference();
 			_file.addEventListener(Event.COMPLETE, onSaveComplete);
 			_file.addEventListener(Event.CANCEL, onSaveCancel);
 			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 			_file.save(data, weekFileName + ".json");
+			#end
 		}
 	}
 	
@@ -596,7 +602,7 @@ class WeekEditorFreeplayState extends MusicBeatState
 
 	override function create() {
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		bg.antialiasing = ClientPrefs.globalAntialiasing;
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 
 		bg.color = FlxColor.WHITE;
 		add(bg);
@@ -626,6 +632,9 @@ class WeekEditorFreeplayState extends MusicBeatState
 
 		addEditorBox();
 		changeSelection();
+		#if android
+		addVirtualPad(UP_DOWN, B);
+		#end
 		super.create();
 	}
 	
@@ -808,7 +817,7 @@ class WeekEditorFreeplayState extends MusicBeatState
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(FlxG.keys.justPressed.ESCAPE) {
+			if(#if android virtualPad.buttonB.justPressed ||#end FlxG.keys.justPressed.ESCAPE) {
 				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			}

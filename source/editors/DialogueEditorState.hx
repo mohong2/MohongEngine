@@ -1,16 +1,16 @@
 package editors;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import flixel.system.FlxSound;
 import flixel.addons.ui.FlxInputText;
 import flixel.addons.ui.FlxUI9SliceSprite;
@@ -31,7 +31,7 @@ import Alphabet;
 #if sys
 import sys.io.File;
 #end
-
+ 
 using StringTools;
 
 class DialogueEditorState extends MusicBeatState
@@ -72,7 +72,7 @@ class DialogueEditorState extends MusicBeatState
 		box = new FlxSprite(70, 370);
 		box.frames = Paths.getSparrowAtlas('speech_bubble');
 		box.scrollFactor.set();
-		box.antialiasing = ClientPrefs.globalAntialiasing;
+		box.antialiasing = ClientPrefs.data.globalAntialiasing;
 		box.animation.addByPrefix('normal', 'speech bubble normal', 24);
 		box.animation.addByPrefix('angry', 'AHH speech bubble', 24);
 		box.animation.addByPrefix('center', 'speech bubble middle', 24);
@@ -86,17 +86,17 @@ class DialogueEditorState extends MusicBeatState
 		FlxG.mouse.visible = true;
 
 		var addLineText:FlxText = new FlxText(10, 10, FlxG.width - 20, 'Press O to remove the current dialogue line, Press P to add another line after the current one.', 8);
-		addLineText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		addLineText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		addLineText.scrollFactor.set();
 		add(addLineText);
 
 		selectedText = new FlxText(10, 32, FlxG.width - 20, '', 8);
-		selectedText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		selectedText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		selectedText.scrollFactor.set();
 		add(selectedText);
 
 		animText = new FlxText(10, 62, FlxG.width - 20, '', 8);
-		animText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		animText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		animText.scrollFactor.set();
 		add(animText);
 		
@@ -105,6 +105,9 @@ class DialogueEditorState extends MusicBeatState
 		daText.scaleY = 0.7;
 		add(daText);
 		changeText();
+		#if android
+		addVirtualPad(LEFT_FULL, A_B_X_Y);
+		#end
 		super.create();
 	}
 
@@ -254,7 +257,7 @@ class DialogueEditorState extends MusicBeatState
 		daText.y = DialogueBoxPsych.DEFAULT_TEXT_Y;
 		if(daText.rows > 2) daText.y -= DialogueBoxPsych.LONG_TEXT_ADD;
 
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		var rpcText:String = lineInputText.text;
 		if(rpcText == null || rpcText.length < 1) rpcText = '(Empty)';
@@ -352,17 +355,17 @@ class DialogueEditorState extends MusicBeatState
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(FlxG.keys.justPressed.SPACE) {
+			if(#if android virtualPad.buttonY.justPressed || #end FlxG.keys.justPressed.SPACE) {
 				reloadText(false);
 			}
-			if(FlxG.keys.justPressed.ESCAPE) {
+			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
 				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'), 1);
 				transitioning = true;
 			}
 			var negaMult:Array<Int> = [1, -1];
-			var controlAnim:Array<Bool> = [FlxG.keys.justPressed.W, FlxG.keys.justPressed.S];
-			var controlText:Array<Bool> = [FlxG.keys.justPressed.D, FlxG.keys.justPressed.A];
+			var controlAnim:Array<Bool> = [FlxG.keys.justPressed.W #if android || virtualPad.buttonUp.justPressed #end, FlxG.keys.justPressed.S #if android || virtualPad.buttonDown.justPressed#end ];
+			var controlText:Array<Bool> = [FlxG.keys.justPressed.D	#if android || virtualPad.buttonRight.justPressed #end , FlxG.keys.justPressed.A #if android || virtualPad.buttonLeft.justPressed #end];
 			for (i in 0...controlAnim.length) {
 				if(controlAnim[i] && character.jsonFile.animations.length > 0) {
 					curAnim -= negaMult[i];
@@ -381,7 +384,7 @@ class DialogueEditorState extends MusicBeatState
 				}
 			}
 
-			if(FlxG.keys.justPressed.O) {
+			if(#if android virtualPad.buttonA.justPressed ||#end FlxG.keys.justPressed.O) {
 				dialogueFile.dialogue.remove(dialogueFile.dialogue[curSelected]);
 				if(dialogueFile.dialogue.length < 1) //You deleted everything, dumbo!
 				{
@@ -390,7 +393,7 @@ class DialogueEditorState extends MusicBeatState
 					];
 				}
 				changeText();
-			} else if(FlxG.keys.justPressed.P) {
+			} else if(#if android virtualPad.buttonX.justPressed ||#end FlxG.keys.justPressed.P) {
 				dialogueFile.dialogue.insert(curSelected + 1, copyDefaultLine());
 				changeText(1);
 			}
@@ -521,11 +524,7 @@ class DialogueEditorState extends MusicBeatState
 		var data:String = Json.stringify(dialogueFile, "\t");
 		if (data.length > 0)
 		{
-			_file = new FileReference();
-			_file.addEventListener(Event.COMPLETE, onSaveComplete);
-			_file.addEventListener(Event.CANCEL, onSaveCancel);
-			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-			_file.save(data, "dialogue.json");
+			SUtil.saveContent('dialogue', '.json', data);
 		}
 	}
 

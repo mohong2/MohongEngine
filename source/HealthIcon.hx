@@ -1,6 +1,5 @@
 package;
 
-import flixel.FlxSprite;
 import openfl.utils.Assets as OpenFlAssets;
 
 using StringTools;
@@ -43,40 +42,45 @@ class HealthIcon extends FlxSprite
 			if(!Paths.fileExists('images/' + name + '.png', IMAGE)) name = 'icons/icon-face'; //Prevents crash from missing icon
 			var file:Dynamic = Paths.image(name);
 
-			loadGraphic(file); //Load stupidly first for getting the file size
+			loadGraphic(file);
 			var imgWidth:Int = Math.floor(width);
 			var imgHeight:Int = Math.floor(height);
-			frameCount = Std.int(imgWidth / 150);
-			if (frameCount == 3) {
-			loadGraphic(file, true, Math.floor(width / 3), Math.floor(height));
-			iconOffsets[0] = (width - 150) / 3;
-			iconOffsets[1] = (width - 150) / 3;
-			iconOffsets[2] = (width - 150) / 3;
-			updateHitbox();
-
-			animation.add(char, [0, 1, 2], 0, false, isPlayer);
-			animation.play(char);
-			this.char = char;
-
-			antialiasing = ClientPrefs.globalAntialiasing;
-			if(char.endsWith('-pixel')) {
-				antialiasing = false;
+			
+			frameCount = Math.round(imgWidth / imgHeight);
+			
+			if (frameCount < 2) frameCount = 2;
+			if (frameCount > 3) frameCount = 3;
+			
+			var frameWidth:Int = Math.round(imgWidth / frameCount);
+			
+			loadGraphic(file, true, frameWidth, imgHeight);
+			
+			var offsetX:Float = (frameWidth - 150) / 2;
+			var offsetY:Float = (imgHeight - 150) / 2;
+			
+			for (i in 0...iconOffsets.length) {
+				iconOffsets[i] = 0;
 			}
-		}
-			else{
-			loadGraphic(file, true, Math.floor(width / 2), Math.floor(height)); //Then load it fr
-			iconOffsets[0] = (width - 150) / 2;
-			iconOffsets[1] = (width - 150) / 2;
+			iconOffsets[0] = offsetX;
+			iconOffsets[1] = offsetY;
+			if (frameCount == 3) {
+				iconOffsets[2] = 0; 
+			}
+			
 			updateHitbox();
 
-			animation.add(char, [0, 1, 0], 0, false, isPlayer);
+
+			if (frameCount == 3) {
+				animation.add(char, [0, 1, 2], 0, false, isPlayer);
+			} else {
+				animation.add(char, [0, 1, 0], 0, false, isPlayer);
+			}
 			animation.play(char);
 			this.char = char;
 
-			antialiasing = ClientPrefs.globalAntialiasing;
+			antialiasing = ClientPrefs.data.globalAntialiasing;
 			if(char.endsWith('-pixel')) {
 				antialiasing = false;
-				}
 			}
 		}
 	}
@@ -86,8 +90,7 @@ class HealthIcon extends FlxSprite
 		super.updateHitbox();
 		offset.x = iconOffsets[0];
 		offset.y = iconOffsets[1];
-		offset.y = iconOffsets[2];
-	}	
+	}
 
 	public function getCharacter():String {
 		return char;

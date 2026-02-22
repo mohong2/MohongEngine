@@ -1,7 +1,9 @@
 package;
 
+ 
+import states.CopyState;
 import flixel.graphics.FlxGraphic;
-import flixel.FlxG;
+ 
 import flixel.FlxGame;
 import flixel.FlxState;
 import openfl.Assets;
@@ -17,7 +19,9 @@ import lime.app.Application;
 import openfl.events.UncaughtErrorEvent;
 import haxe.CallStack;
 import haxe.io.Path;
+#if cpp
 import Discord.DiscordClient;
+#end
 import sys.FileSystem;
 import sys.io.File;
 import sys.io.Process;
@@ -29,34 +33,38 @@ class Main extends Sprite
 {
 	public static var initialWindowX:Int;
 	public static var initialWindowY:Int;
-
 	var gameWidth:Int = 1280; // Width of the game in pixels (might be less / more in actual pixels depending on your zoom).
 	var gameHeight:Int = 720; 
 	// Height of the game in pixels (might be less / more in actual pixels depending on your zoom).
 	var initialState:Class<FlxState> = TitleState; // The FlxState the game starts with.
-	var zoom:Float = -1; // If -1, zoom is automatically calculated to fit the window dimensions.
+	#if !android
+	var zoom:Float = 1; // If -1, zoom is automatically calculated to fit the window dimensions.
+	#else
+	var zoom:Float = 1;
+	#end
 	var framerate:Int = 60; // How many frames per second the game should run at.
 	var skipSplash:Bool = true; // Whether to skip the flixel splash screen that appears in release mode.
 	var startFullscreen:Bool = false; // Whether to start the game in fullscreen on desktop targets
 	public static var fpsVar:FPS;
-
 	// You can pretty much ignore everything from here on - your code should go in your states.
 
 	public static function main():Void
 	{
 		Lib.current.addChild(new Main());
+		#if !android
 		applyWindowSettings();
+		#end
 	}  
 	public static function applyWindowSettings() {
-		#if desktop
-		if (ClientPrefs.windowedmode == "borderless") {
+		#if !android
+		if (ClientPrefs.data.windowedmode == "borderless") {
 			Lib.application.window.borderless = true;
 			Lib.application.window.fullscreen = false;
 			Lib.application.window.maximized = true;
-		} else if (ClientPrefs.windowedmode == "fullscreen") {
+		} else if (ClientPrefs.data.windowedmode == "fullscreen") {
 			Lib.application.window.borderless = false;
 			Lib.application.window.fullscreen = true;
-		} else if (ClientPrefs.windowedmode == "windowed") {
+		} else if (ClientPrefs.data.windowedmode == "windowed") {
 			Lib.application.window.borderless = false;
 			Lib.application.window.fullscreen = false;
 			Lib.application.window.maximized = false;
@@ -66,8 +74,17 @@ class Main extends Sprite
 
 	public function new()
 	{
+		#if android
+		SUtil.doPermissionsShit();
+		#end
+		Sys.setCwd(SUtil.getStorageDirectory());
+		
 		super();
+		
 
+		#if HSCRIPT_ALLOWED
+        HScript.initialize();
+        #end
 		if (stage != null)
 		{
 			init();
@@ -101,23 +118,24 @@ class Main extends Sprite
 			gameWidth = Math.ceil(stageWidth / zoom);
 			gameHeight = Math.ceil(stageHeight / zoom);
 		}
-	
 		ClientPrefs.loadDefaultKeys();
-		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, framerate, framerate, skipSplash, startFullscreen));
 
-		#if !mobile
+		addChild(new FlxGame(gameWidth, gameHeight, #if android !CopyState.checkExistingFiles() ? CopyState : #end initialState, zoom, framerate, framerate, skipSplash, startFullscreen));
+
 		fpsVar = new FPS(10, 3, 0xFFFFFF);
 		addChild(fpsVar);
+
 		Lib.current.stage.align = "tl";
 		Lib.current.stage.scaleMode = StageScaleMode.NO_SCALE;
 		if(fpsVar != null) {
-			fpsVar.visible = ClientPrefs.showFPS;
+			fpsVar.visible = ClientPrefs.data.showFPS;
 		}
-		#end
 
 		#if html5
 		FlxG.autoPause = false;
 		FlxG.mouse.visible = false;
+		#else
+		FlxG.mouse.visible = true;
 		#end
 		
 		#if CRASH_HANDLER
@@ -162,7 +180,9 @@ class Main extends Sprite
 		Sys.println("Crash dump saved in " + Path.normalize(path));
 
 		Application.current.window.alert(errMsg, "Error!");
+		#if cpp
 		DiscordClient.shutdown();
+		#end
 		Sys.exit(1);
 	}
 	#end

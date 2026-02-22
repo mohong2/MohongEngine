@@ -1,7 +1,5 @@
 package;
 
-import flixel.FlxG;
-
 using StringTools;
 
 class Highscore
@@ -27,28 +25,12 @@ class Highscore
 	public static var songMaxCombo:Map<String, Int> = new Map<String, Int>();
 	#end
 
-	public static function saveFullScore(
-		song:String, diff:Int, sicks:Int, goods:Int, 
-		bads:Int, shits:Int, misses:Int, maxCombo:Int
-	):Void
-	{
-		var daSong:String = formatSong(song, diff);
-	
-		setSicks(daSong, sicks);
-		setGoods(daSong, goods);
-		setBads(daSong, bads);
-		setShits(daSong, shits);
-		setMisses(daSong, misses);
-		setMaxCombo(daSong, maxCombo);
-	}
-	 
 
 	public static function resetSong(song:String, diff:Int = 0):Void
 	{
 		var daSong:String = formatSong(song, diff);
 		setScore(daSong, 0);
 		setRating(daSong, 0);
-		setScore(daSong, 0);
 		setSicks(daSong, 0);
 		setGoods(daSong, 0);
 		setBads(daSong, 0);
@@ -79,7 +61,7 @@ class Highscore
 		return newValue / tempMult;
 	}
 
-	public static function saveScore(song:String, score:Int = 0, ?diff:Int = 0, ?rating:Float = -1):Void
+	public static function saveScore(song:String, score:Int = 0, ?diff:Int = 0, ?rating:Float = -1, ?sicks:Int = -1, ?goods:Int = -1, ?bads:Int = -1, ?shits:Int = -1, ?misses:Int = -1, ?maxCombo:Int = -1):Void
 	{
 		var daSong:String = formatSong(song, diff);
 
@@ -87,11 +69,23 @@ class Highscore
 			if (songScores.get(daSong) < score) {
 				setScore(daSong, score);
 				if(rating >= 0) setRating(daSong, rating);
+				if(sicks >= 0) setSicks(daSong, sicks);
+				if(goods >= 0) setGoods(daSong, goods);
+				if(bads >= 0) setBads(daSong, bads);
+				if(shits >= 0) setShits(daSong, shits);
+				if(misses >= 0) setMisses(daSong, misses);
+				if(maxCombo >= 0) setMaxCombo(daSong, maxCombo);
 			}
 		}
 		else {
 			setScore(daSong, score);
 			if(rating >= 0) setRating(daSong, rating);
+			if(sicks >= 0) setSicks(daSong, sicks);
+			if(goods >= 0) setGoods(daSong, goods);
+			if(bads >= 0) setBads(daSong, bads);
+			if(shits >= 0) setShits(daSong, shits);
+			if(misses >= 0) setMisses(daSong, misses);
+			if(maxCombo >= 0) setMaxCombo(daSong, maxCombo);
 		}
 	}
 
@@ -118,6 +112,7 @@ class Highscore
 		FlxG.save.data.songScores = songScores;
 		FlxG.save.flush();
 	}
+	
 	static function setWeekScore(week:String, score:Int):Void
 	{
 		// Reminder that I don't need to format this song, it should come formatted!
@@ -147,8 +142,6 @@ class Highscore
 
 		return songScores.get(daSong);
 	}
-
-
 
 	public static function getRating(song:String, diff:Int):Float
 	{
@@ -189,6 +182,7 @@ class Highscore
 		if (FlxG.save.data.songMisses != null) songMisses = FlxG.save.data.songMisses;
 		if (FlxG.save.data.songMaxCombo != null) songMaxCombo = FlxG.save.data.songMaxCombo;
 	}
+	
 	public static function getSicks(song:String, diff:Int):Int
 	{
 		var daSong:String = formatSong(song, diff);
@@ -284,5 +278,4 @@ class Highscore
 		FlxG.save.data.songMaxCombo = songMaxCombo;
 		FlxG.save.flush();
 	}
-
 }

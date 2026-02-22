@@ -1,27 +1,27 @@
 package options;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
 import flash.text.TextField;
-import flixel.FlxCamera;
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
+ 
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.util.FlxSave;
 import haxe.Json;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
+ 
+ 
+ 
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
@@ -31,127 +31,68 @@ using StringTools;
 
 class GraphicsSettingsSubState extends BaseOptionsMenu
 {
-	public function new()
+public function new()
 	{
+		 
+		
 		title = 'Graphics';
-		rpcTitle = 'Graphics Settings Menu'; //for Discord Rich Presence
-		if (ClientPrefs.language == 'English') {
-		//I'd suggest using "Low Quality" as an example for making your own option since it is the simplest here
-		var option:Option = new Option('Low Quality', //Name
-			'If checked, disables some background details,\ndecreases loading times and improves performance.', //Description
-			'lowQuality', //Save data variable name
-			'bool', //Variable type
-			false); //Default value
+		rpcTitle = 'Graphics Settings Menu';
+		
+		var option:Option = new Option('Low Quality',
+			Language.get("option.lowQuality.desc", "If checked, disables some background details,\ndecreases loading times and improves performance."),
+			'lowQuality',
+			'bool',
+			false);
 		addOption(option);
 
 		var option:Option = new Option('Anti-Aliasing',
-			'If unchecked, disables anti-aliasing, increases performance\nat the cost of sharper visuals.',
+			Language.get("option.globalAntialiasing.desc", "If unchecked, disables anti-aliasing, increases performance\nat the cost of sharper visuals."),
 			'globalAntialiasing',
 			'bool',
 			true);
 		option.showBoyfriend = true;
-		option.onChange = onChangeAntiAliasing; //Changing onChange is only needed if you want to make a special interaction after it changes the value
+		option.onChange = onChangeAntiAliasing;
 		addOption(option);
 
-		var option:Option = new Option('Shaders', //Name
-			'If unchecked, disables shaders.\nIt\'s used for some visual effects, and also CPU intensive for weaker PCs.', //Description
-			'shaders', //Save data variable name
-			'bool', //Variable type
-			true); //Default value
+		var option:Option = new Option('Shaders',
+			Language.get("option.shaders.desc", "If unchecked, disables shaders.\nIt's used for some visual effects, and also CPU intensive for weaker PCs."),
+			'shaders',
+			'bool',
+			true);
 		addOption(option);
 
-		#if !html5 //Apparently other framerates isn't correctly supported on Browser? Probably it has some V-Sync shit enabled by default, idk
+		var option:Option = new Option('GPU Caching',
+			Language.get("option.cacheOnGPU.desc", "If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card."),
+			'cacheOnGPU',
+			'bool');
+		addOption(option);
+
+		#if !html5
 		var option:Option = new Option('Framerate',
-			"Pretty self explanatory, isn't it?",
+			Language.get("option.framerate.desc", "Pretty self explanatory, isn't it?"),
 			'framerate',
 			'int',
 			60);
 		addOption(option);
 
 		option.minValue = 60;
-		option.maxValue = 240;
-		option.displayFormat = '%v FPS';
-		option.onChange = onChangeFramerate;
-			/*
-		var option:Option = new Option('GPU Caching', 
-		"If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.", //Description
-		'cacheOnGPU',
-		'bool');
-		addOption(option);
-			*/
-
-		var option:Option = new Option('Windowed mode',
-		"Choose your window mod(The game needs to be restarted)(Has bugs)",
-		'windowedmode',
-        'string',
-        'windowed',
-         ['windowed', 'fullscreen', 'borderless']);
-		addOption(option);
-		#end
-		
-		super();
-		}
-		else {
-
-		var option:Option = new Option('Low Quality', 
-			'如果选中，则禁用一些背景细节，减少加载时间并提高性能。', 
-			'lowQuality', 
-			'bool', 
-			false); 
-		addOption(option);
-
-		var option:Option = new Option('Anti-Aliasing',
-			'如果不勾选，就会禁用抗锯齿，虽然性能会提高，但画面会显得不那么清晰。',
-			'globalAntialiasing',
-			'bool',
-			true);
-		option.showBoyfriend = true;
-		option.onChange = onChangeAntiAliasing; 
-		addOption(option);
-
-		var option:Option = new Option('Shaders', 
-			'如果不勾选，会禁用着色器。这是用来实现一些视觉效果的，对于较弱的电脑来说还挺消耗CPU的。', 
-			'shaders', 
-			'bool', 
-			true); 
-		addOption(option);
-
-		#if !html5 
-		var option:Option = new Option('Framerate',
-			"这很简单明了，不是吗？",
-			'framerate',
-			'int',
-			120);
-		addOption(option);
-
-		option.minValue = 60;
 		option.maxValue = 360;
 		option.displayFormat = '%v FPS';
 		option.onChange = onChangeFramerate;
-		/*	
-		var option:Option = new Option('GPU Caching', 
-		"如果选中，则允许将GPU用于缓存纹理，从而减少RAM使用量。如果你有一个糟糕的显卡，请不要打开它。", //Description
-		'cacheOnGPU',
-		'bool');
-		addOption(option);
-			*/
-		
+		#if !android
 		var option:Option = new Option('Windowed mode',
-		"选择你的窗口模式(需要重启游戏)(存在bug)",
-		'windowedmode',
-        'string',
-        'windowed',
-         ['windowed', 'fullscreen', 'borderless']);
+			Language.get("option.windowedmode.desc", "Choose your window mod(The game needs to be restarted)(Has bugs)"),
+			'windowedmode',
+			'string',
+			'windowed',
+			['windowed', 'fullscreen', 'borderless']);
 		addOption(option);
-		
 		#end
-		
+		#end
+
 		super();
-
-
-		}
 	}
-
+	
 	function onChangeAntiAliasing()
 	{
 		for (sprite in members)
@@ -159,22 +100,22 @@ class GraphicsSettingsSubState extends BaseOptionsMenu
 			var sprite:Dynamic = sprite; //Make it check for FlxSprite instead of FlxBasic
 			var sprite:FlxSprite = sprite; //Don't judge me ok
 			if(sprite != null && (sprite is FlxSprite) && !(sprite is FlxText)) {
-				sprite.antialiasing = ClientPrefs.globalAntialiasing;
+				sprite.antialiasing = ClientPrefs.data.globalAntialiasing;
 			}
 		}
 	}
 
 	function onChangeFramerate()
 	{
-		if(ClientPrefs.framerate > FlxG.drawFramerate)
+		if(ClientPrefs.data.framerate > FlxG.drawFramerate)
 		{
-			FlxG.updateFramerate = ClientPrefs.framerate;
-			FlxG.drawFramerate = ClientPrefs.framerate;
+			FlxG.updateFramerate = ClientPrefs.data.framerate;
+			FlxG.drawFramerate = ClientPrefs.data.framerate;
 		}
 		else
 		{
-			FlxG.drawFramerate = ClientPrefs.framerate;
-			FlxG.updateFramerate = ClientPrefs.framerate;
+			FlxG.drawFramerate = ClientPrefs.data.framerate;
+			FlxG.updateFramerate = ClientPrefs.data.framerate;
 		}
 	}
 }

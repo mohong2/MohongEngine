@@ -1,6 +1,6 @@
 package;
 
-import flixel.util.FlxColor;
+ 
 import openfl.display.ShaderParameter;
 
 typedef BlendModeShader =

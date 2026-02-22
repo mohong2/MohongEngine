@@ -1,63 +1,39 @@
-import flixel.FlxG;
-import flixel.FlxSprite;
-import flixel.FlxCamera;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.group.FlxSpriteGroup;
-import flixel.util.FlxColor;
-import flixel.text.FlxText;
-
-using StringTools;
+package;
 
 class Achievements {
-	
-	
-	public static var achievementsStuff:Array<Dynamic> = [ //Name, Description, Achievement save tag, Hidden achievement
-		
-		["Freaky on a Friday Night",	"Play on a Friday... Night.",						'friday_night_play',	 true],
-		["She Calls Me Daddy Too",		"Beat Week 1 on Hard with no Misses.",				'week1_nomiss',			false],
-		["No More Tricks",				"Beat Week 2 on Hard with no Misses.",				'week2_nomiss',			false],
-		["Call Me The Hitman",			"Beat Week 3 on Hard with no Misses.",				'week3_nomiss',			false],
-		["Lady Killer",					"Beat Week 4 on Hard with no Misses.",				'week4_nomiss',			false],
-		["Missless Christmas",			"Beat Week 5 on Hard with no Misses.",				'week5_nomiss',			false],
-		["Highscore!!",					"Beat Week 6 on Hard with no Misses.",				'week6_nomiss',			false],
-		["God Effing Damn It!",			"Beat Week 7 on Hard with no Misses.",				'week7_nomiss',			false],
-		["What a Funkin' Disaster!",	"Complete a Song with a rating lower than 20%.",	'ur_bad',				false],
-		["You have a good one(phigros)",	"The song is just a good 。",			'line_blue',				false],
-		["Perfectionist",				"Complete a Song with a rating of 100%.",			'ur_good',				false],
-		["Roadkill Enthusiast",			"Watch the Henchmen die over 100 times.",			'roadkill_enthusiast',	false],
-		["Oversinging Much...?",		"Hold down a note for 10 seconds.",					'oversinging',			false],
-		["Hyperactive",					"Finish a Song without going Idle.",				'hype',					false],
-		["Just the Two of Us",			"Finish a Song pressing only two keys.",			'two_keys',				false],
-		["Toaster Gamer",				"Have you tried to run the game on a toaster?",		'toastie',				false],
-		["Debugger",					"Beat the \"Test\" Stage from the Chart Editor.",	'debugger',				 true]
-		];
-		
-public static var ch_achievementsStuff:Array<Dynamic> = [
-		["Freaky on a Friday Night",	"在星期五玩...晚上。",						'friday_night_play',	 true],
-		["She Calls Me Daddy Too",		"在 Hard 上无失误地击败第 1 周。",				'week1_nomiss',			false],
-		["No More Tricks",				"在 Hard 上无失误地击败第 2 周。",				'week2_nomiss',			false],
-		["Call Me The Hitman",			"在 Hard 上无失误地击败第 3 周。",				'week3_nomiss',			false],
-		["Lady Killer",					"在 Hard 上无失误地击败第 4 周。",				'week4_nomiss',			false],
-		["Missless Christmas",			"在 Hard 上无失误地击败第 5 周。",				'week5_nomiss',			false],
-		["Highscore!!",					"在 Hard 上无失误地击败第 6 周。",				'week6_nomiss',			false],
-		["God Effing Damn It!",			"在 Hard 上无失误地击败第 7 周。",				'week7_nomiss',			false],
-		["What a Funkin' Disaster!",	"完成一首评分低于20%的歌。",	'ur_bad',				false],
-		["You have a good one(phigros)",	"你有一个好(玩phigros玩的)在歌曲只有一个good的前提下",			'line_blue',				false],
-		["AP!!!!!!!",					"完成一首评分100%的歌。(玩phigros玩的)",			'ur_good',				false],
-		["Roadkill Enthusiast",			"看那些打手死了超过100次。",			'roadkill_enthusiast',	false],
-		["Oversinging Much...?",		"把箭头按住保持10秒钟。",					'oversinging',			false],
-		["Hyperactive",					"完成一首歌，别闲着。",				'hype',					false],
-		["Just the Two of Us",			"只用两个键就能完成一首歌.",			'two_keys',				false],
-		["Toaster Gamer",				"你试过在烤面包机上运行这个游戏吗？",		'toastie',				false],
-		["Debugger",					"在编辑器中打开 \"Test\" ",	'debugger',				 true]
-		];
-		
-		
-	
-	public static var achievementsMap:Map<String, Bool> = new Map<String, Bool>();
 
+	public static function getAchievementsStuff():Array<Dynamic> {
+			Language.load();
+			return [
+				//Name, Description, Achievement save tag, Hidden achievement
+				["Freaky on a Friday Night",    Language.get("friday_night_play", "Play on a Friday... Night."),                        'friday_night_play',     true],
+				["She Calls Me Daddy Too",      Language.get("week1_nomiss", "Beat Week 1 on Hard with no Misses."),                'week1_nomiss',         false],
+				["No More Tricks",              Language.get("week2_nomiss", "Beat Week 2 on Hard with no Misses."),                'week2_nomiss',         false],
+				["Call Me The Hitman",          Language.get("week3_nomiss", "Beat Week 3 on Hard with no Misses."),                'week3_nomiss',         false],
+				["Lady Killer",                 Language.get("week4_nomiss", "Beat Week 4 on Hard with no Misses."),                'week4_nomiss',         false],
+				["Missless Christmas",          Language.get("week5_nomiss", "Beat Week 5 on Hard with no Misses."),                'week5_nomiss',         false],
+				["Highscore!!",                 Language.get("week6_nomiss", "Beat Week 6 on Hard with no Misses."),                'week6_nomiss',         false],
+				["God Effing Damn It!",         Language.get("week7_nomiss", "Beat Week 7 on Hard with no Misses."),                'week7_nomiss',         false],
+				["What a Funkin' Disaster!",    Language.get("ur_bad", "Complete a Song with a rating lower than 20%."),    'ur_bad',               false],
+				["You have a good one(phigros)",Language.get("line_blue", "The song is just a good 。"),            'line_blue',               false],
+				["Perfectionist",               Language.get("ur_good", "Complete a Song with a rating of 100%."),            'ur_good',               false],
+				["Roadkill Enthusiast",         Language.get("roadkill_enthusiast", "Watch the Henchmen die over 100 times."),            'roadkill_enthusiast', false],
+				["Oversinging Much...?",        Language.get("oversinging", "Hold down a note for 10 seconds."),                    'oversinging',          false],
+				["Hyperactive",                 Language.get("hype", "Finish a Song without going Idle."),                'hype',                  false],
+				["Just the Two of Us",          Language.get("two_keys", "Finish a Song pressing only two keys."),            'two_keys',              false],
+				["Toaster Gamer",               Language.get("toastie", "Have you tried to run the game on a toaster?"),    'toastie',              false],
+				["Debugger",                    Language.get("debugger", "Beat the \"Test\" Stage from the Chart Editor."), 'debugger',               true]
+			];
+		}
+
+		public static var achievementsStuff(get, never):Array<Dynamic>;
+		private static function get_achievementsStuff():Array<Dynamic> {
+			return getAchievementsStuff();
+		}
+
+	public static var achievementsMap:Map<String, Bool> = new Map<String, Bool>();
 	public static var henchmenDeath:Int = 0;
+	
 	public static function unlockAchievement(name:String):Void {
 		FlxG.log.add('Completed achievement "' + name +'"');
 		achievementsMap.set(name, true);
@@ -72,7 +48,6 @@ public static var ch_achievementsStuff:Array<Dynamic> = [
 	}
 
 	public static function getAchievementIndex(name:String) {
-		if (ClientPrefs.language == 'English') {
 		for (i in 0...achievementsStuff.length) {
 			if(achievementsStuff[i][2] == name) {
 				return i;
@@ -80,20 +55,10 @@ public static var ch_achievementsStuff:Array<Dynamic> = [
 		}
 		return -1;
 	}
-	else{
-
-			for (i in 0...ch_achievementsStuff.length) {
-			if(ch_achievementsStuff[i][2] == name) {
-				return i;
-			}
-		}
-		return -1;
-
-	}
-
-	}
+	
 
 	public static function loadAchievements():Void {
+		 
 		if(FlxG.save.data != null) {
 			if(FlxG.save.data.achievementsMap != null) {
 				achievementsMap = FlxG.save.data.achievementsMap;
@@ -110,9 +75,8 @@ class AttachedAchievement extends FlxSprite {
 	private var tag:String;
 	public function new(x:Float = 0, y:Float = 0, name:String) {
 		super(x, y);
-
 		changeAchievement(name);
-		antialiasing = ClientPrefs.globalAntialiasing;
+		antialiasing = ClientPrefs.data.globalAntialiasing;
 	}
 
 	public function changeAchievement(tag:String) {
@@ -144,8 +108,9 @@ class AchievementObject extends FlxSpriteGroup {
 	public function new(name:String, ?camera:FlxCamera = null)
 	{
 		super(x, y);
-		ClientPrefs.saveSettings();
+		Language.load();
 
+		ClientPrefs.saveSettings();
 		var id:Int = Achievements.getAchievementIndex(name);
 		var achievementBG:FlxSprite = new FlxSprite(60, 50).makeGraphic(420, 120, FlxColor.BLACK);
 		achievementBG.scrollFactor.set();
@@ -154,57 +119,22 @@ class AchievementObject extends FlxSpriteGroup {
 		achievementIcon.scrollFactor.set();
 		achievementIcon.setGraphicSize(Std.int(achievementIcon.width * (2 / 3)));
 		achievementIcon.updateHitbox();
-		achievementIcon.antialiasing = ClientPrefs.globalAntialiasing;
-	
-if (ClientPrefs.language == 'English') {
+		achievementIcon.antialiasing = ClientPrefs.data.globalAntialiasing;
+
 		var achievementName:FlxText = new FlxText(achievementIcon.x + achievementIcon.width + 20, achievementIcon.y + 16, 280, Achievements.achievementsStuff[id][0], 16);
-		achievementName.setFormat(Paths.enfont("vcr.ttf"), 16, FlxColor.WHITE, LEFT);
-		achievementName.scrollFactor.set();
-
-		var achievementText:FlxText = new FlxText(achievementName.x, achievementName.y + 32, 280, Achievements.achievementsStuff[id][1], 16);
-		achievementText.setFormat(Paths.enfont("vcr.ttf"), 16, FlxColor.WHITE, LEFT);
-		achievementText.scrollFactor.set();
-
-		add(achievementBG);
-		add(achievementName);
-		add(achievementText);
-		add(achievementIcon);
-
-		var cam:Array<FlxCamera> = FlxCamera.defaultCameras;
-		if(camera != null) {
-			cam = [camera];
-		}
-		alpha = 0;
-		achievementBG.cameras = cam;
-		achievementName.cameras = cam;
-		achievementText.cameras = cam;
-		achievementIcon.cameras = cam;
-		alphaTween = FlxTween.tween(this, {alpha: 1}, 0.5, {onComplete: function (twn:FlxTween) {
-			alphaTween = FlxTween.tween(this, {alpha: 0}, 0.5, {
-				startDelay: 2.5,
-				onComplete: function(twn:FlxTween) {
-					alphaTween = null;
-					remove(this);
-					if(onFinish != null) onFinish();
-				}
-			});
-		}});
-}else{
-		var achievementName:FlxText = new FlxText(achievementIcon.x + achievementIcon.width + 20, achievementIcon.y + 16, 280, Achievements.ch_achievementsStuff[id][0], 16);
 		achievementName.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT);
 		achievementName.scrollFactor.set();
 
-		var achievementText:FlxText = new FlxText(achievementName.x, achievementName.y + 32, 280, Achievements.ch_achievementsStuff[id][1], 16);
+		var achievementText:FlxText = new FlxText(achievementName.x, achievementName.y + 32, 280, Achievements.achievementsStuff[id][1], 16);
 		achievementText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, LEFT);
 		achievementText.scrollFactor.set();
 
-	
 		add(achievementBG);
 		add(achievementName);
 		add(achievementText);
 		add(achievementIcon);
 
-		var cam:Array<FlxCamera> = FlxCamera.defaultCameras;
+		var cam:Array<FlxCamera> = FlxG.cameras.list;
 		if(camera != null) {
 			cam = [camera];
 		}
@@ -224,7 +154,7 @@ if (ClientPrefs.language == 'English') {
 			});
 		}});
 	}
-	}
+
 
 	override function destroy() {
 		if(alphaTween != null) {

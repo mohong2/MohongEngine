@@ -1,144 +1,95 @@
 package options;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.util.FlxSave;
 import haxe.Json;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
+ 
+ 
+ 
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
-
+import Language;
 using StringTools;
 
 class Extrasettings extends BaseOptionsMenu
 {
+
 	public function new()
 	{
-		var language:String = ClientPrefs.language;
-		if (ClientPrefs.language == 'English') {
+		 
+
         title = 'Extra settings';
         rpcTitle = 'Extra settings Menu';
 
+		var lang:Array<String> = Paths.mergeAllTextsNamed('lang/list.txt', "assets");
 		var option:Option = new Option('Language',
-			'Select the game display language.',
+			Language.get("option.language.desc", "Select the game display language."),
             'language', 
             'string',
-            '$language',
-            ['English', 'Chinese']);
+            ClientPrefs.data.language,
+            lang);
+		option.onChange = function() {
+			 
+			#if android
+			removeVirtualPad();
+			#end
+			Language.load();
+			//FlxG.resetState();
+			closeSubState();
+			openSubState(new options.Extrasettings());
+			
+		};
 		addOption(option);
 
 		var option:Option = new Option('Lua TTF',
-		'Change the font of lua (if lua is not set)',
+		Language.get("option.luattf.desc", "Change the font of lua (if lua is not set)"),
         'luattf', 
         'string',
         'English',
-         ['English TTF', 'Chinese TTF']);
+         ['Default TTF', 'Language TTF']);
 		addOption(option);
 
 		var option:Option = new Option('Bot flickering effect',
-		'If unchecked, the flickering effect will be canceled after the Bot hits.',
+		Language.get("option.opponentfe.desc", "If unchecked, the flickering effect will be canceled after the Bot hits."),
 		'opponentfe',
 		'bool',
 		true);
 		addOption(option);
 
 		var option:Option = new Option('Side HUD',
-		'If this is not checked, values such as sick and good on the left side of the game will not be displayed',
-		'sidehud',
-		'bool',
-		true);
-
-		var option:Option = new Option('Motion blur Note',
-		'If checked, the note will have a motion blur effect',
-		'blurnote',
-		'bool',
-		false);
-		addOption(option);
-
-		var option:Option = new Option('Impostor V4 scoreTxt',
-		'If checked, the color of scoreTxt will change to the color of your opponents healthBar',
-		'imv4sc',
-		'bool',
-		false);
-		addOption(option);
-
-		super();
-
-
-		}
-		else{
-        title = 'Extra settings';
-        rpcTitle = 'Extra settings Menu';
-
-		var option:Option = new Option('Language',
-			'选择游戏显示语言。',
-            'language', 
-            'string',
-            '$language',
-            ['English', 'Chinese']);
-		addOption(option);
-
-		var option:Option = new Option('Lua TTF',
-		'改变lua的字体（如果lua没有设置）',
-        'luattf', 
-        'string',
-        'English',
-         ['English TTF', 'Chinese TTF']);
-		addOption(option);
-
-		var option:Option = new Option('Bot flickering effect',
-		'如果未选中将会取消Bot击中后的闪烁效果。',
-		'opponentfe',
-		'bool',
-		true);
-		addOption(option);
-		
-		var option:Option = new Option('Side HUD',
-		'如果未选中将会不显示游戏左侧的sick，Good等之类的数值',
+		Language.get("option.sidehud.desc","If this is not checked, values such as sick and good on the left side of the game will not be displayed"),
 		'sidehud',
 		'bool',
 		true);
 		addOption(option);
 
-		var option:Option = new Option('Motion blur Note',
-		'如果选中箭头将会有动态模糊效果',
-		'blurnote',
+		var option:Option = new Option('OLD Mods Menu',
+		Language.get("option.oldmodsmenu.desc" ,"If checked, the old mods menu will be used instead of the new one"),
+		'oldmodsmenu',
 		'bool',
 		false);
 		addOption(option);
-
-		var option:Option = new Option('Impostor V4 scoreTxt',
-		'如果选中,scoreTxt的颜色将会变成对手healthBar的颜色',
-		'imv4sc',
-		'bool',
-		false);
-		addOption(option);
-
 
 		super();
-		}
-
-
 	}
 
 	function onChangeHitsoundVolume()
 	{
-		FlxG.sound.play(Paths.sound('hitsound'), ClientPrefs.hitsoundVolume);
+		FlxG.sound.play(Paths.sound('hitsound'), ClientPrefs.data.hitsoundVolume);
 	}
 }

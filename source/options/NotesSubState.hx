@@ -4,23 +4,12 @@ package options;
 import Discord.DiscordClient;
 #end
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.util.FlxSave;
 import haxe.Json;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
@@ -48,7 +37,7 @@ class NotesSubState extends MusicBeatSubstate
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.color = 0xFFea71fd;
 		bg.screenCenter();
-		bg.antialiasing = ClientPrefs.globalAntialiasing;
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(bg);
 		
 		blackBG = new FlxSprite(posX - 25).makeGraphic(870, 200, FlxColor.BLACK);
@@ -60,41 +49,40 @@ class NotesSubState extends MusicBeatSubstate
 		grpNumbers = new FlxTypedGroup<Alphabet>();
 		add(grpNumbers);
 
-		for (i in 0...ClientPrefs.arrowHSV.length) {
+		for (i in 0...ClientPrefs.data.arrowHSV.length) {
 			var yPos:Float = (165 * i) + 35;
 			for (j in 0...3) {
-				var optionText:Alphabet = new Alphabet(posX + (225 * j) + 250, yPos + 60, Std.string(ClientPrefs.arrowHSV[i][j]), true);
+				var optionText:Alphabet = new Alphabet(posX + (225 * j) + 250, yPos + 60, Std.string(ClientPrefs.data.arrowHSV[i][j]), true);
 				grpNumbers.add(optionText);
 			}
 
 			var note:FlxSprite = new FlxSprite(posX, yPos);
-			if(!ClientPrefs.blurnote) {
 			note.frames = Paths.getSparrowAtlas('NOTE_assets');
-			}
-			else
-			{
-			note.frames = Paths.getSparrowAtlas('blur_NOTE_assets');
-			}
+
 			var animations:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
 			note.animation.addByPrefix('idle', animations[i]);
 			note.animation.play('idle');
-			note.antialiasing = ClientPrefs.globalAntialiasing;
+			note.antialiasing = ClientPrefs.data.globalAntialiasing;
 			grpNotes.add(note);
 
 			var newShader:ColorSwap = new ColorSwap();
 			note.shader = newShader.shader;
-			newShader.hue = ClientPrefs.arrowHSV[i][0] / 360;
-			newShader.saturation = ClientPrefs.arrowHSV[i][1] / 100;
-			newShader.brightness = ClientPrefs.arrowHSV[i][2] / 100;
+			newShader.hue = ClientPrefs.data.arrowHSV[i][0] / 360;
+			newShader.saturation = ClientPrefs.data.arrowHSV[i][1] / 100;
+			newShader.brightness = ClientPrefs.data.arrowHSV[i][2] / 100;
 			shaderArray.push(newShader);
 		}
 
-		hsbText = new Alphabet(posX + 560, 0, "Hue    Saturation  Brightness", false);
+		hsbText = new Alphabet(posX + 265, 0, "Hue    Saturation  Brightness", false);
 		hsbText.scaleX = 0.6;
 		hsbText.scaleY = 0.6;
 		add(hsbText);
-
 		changeSelection();
+		#if android
+		addVirtualPad(LEFT_FULL, A_B);
+		addPadCamera();
+		#end
+		
 	}
 
 	var changingNote:Bool = false;
@@ -179,7 +167,8 @@ class NotesSubState extends MusicBeatSubstate
 
 		if (controls.BACK || (changingNote && controls.ACCEPT)) {
 			if(!changingNote) {
-				close();
+				flixel.addons.transition.FlxTransitionableState.skipNextTransOut = true;
+				FlxG.resetState();
 			} else {
 				changeSelection();
 			}
@@ -196,11 +185,11 @@ class NotesSubState extends MusicBeatSubstate
 	function changeSelection(change:Int = 0) {
 		curSelected += change;
 		if (curSelected < 0)
-			curSelected = ClientPrefs.arrowHSV.length-1;
-		if (curSelected >= ClientPrefs.arrowHSV.length)
+			curSelected = ClientPrefs.data.arrowHSV.length-1;
+		if (curSelected >= ClientPrefs.data.arrowHSV.length)
 			curSelected = 0;
 
-		curValue = ClientPrefs.arrowHSV[curSelected][typeSelected];
+		curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
 		updateValue();
 
 		for (i in 0...grpNumbers.length) {
@@ -231,7 +220,7 @@ class NotesSubState extends MusicBeatSubstate
 		if (typeSelected > 2)
 			typeSelected = 0;
 
-		curValue = ClientPrefs.arrowHSV[curSelected][typeSelected];
+		curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
 		updateValue();
 
 		for (i in 0...grpNumbers.length) {
@@ -245,7 +234,7 @@ class NotesSubState extends MusicBeatSubstate
 
 	function resetValue(selected:Int, type:Int) {
 		curValue = 0;
-		ClientPrefs.arrowHSV[selected][type] = 0;
+		ClientPrefs.data.arrowHSV[selected][type] = 0;
 		switch(type) {
 			case 0: shaderArray[selected].hue = 0;
 			case 1: shaderArray[selected].saturation = 0;
@@ -275,7 +264,7 @@ class NotesSubState extends MusicBeatSubstate
 			curValue = max;
 		}
 		roundedValue = Math.round(curValue);
-		ClientPrefs.arrowHSV[curSelected][typeSelected] = roundedValue;
+		ClientPrefs.data.arrowHSV[curSelected][typeSelected] = roundedValue;
 
 		switch(typeSelected) {
 			case 0: shaderArray[curSelected].hue = roundedValue / 360;

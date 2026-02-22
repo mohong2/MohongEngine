@@ -1,10 +1,11 @@
 package openfl.display;
 
+import openfl.text.Font;
 import haxe.Timer;
 import openfl.events.Event;
 import openfl.text.TextField;
 import openfl.text.TextFormat;
-import flixel.math.FlxMath;
+import states.MainMenuState;
 #if gl_stats
 import openfl.display._internal.stats.Context3DStats;
 import openfl.display._internal.stats.DrawCallContext;
@@ -13,9 +14,7 @@ import openfl.display._internal.stats.DrawCallContext;
 import openfl.Lib;
 #end
 
-#if openfl
 import openfl.system.System;
-#end
 
 /**
 	The FPS class provides an easy-to-use monitor to display
@@ -35,6 +34,9 @@ class FPS extends TextField
 	@:noCompletion private var cacheCount:Int;
 	@:noCompletion private var currentTime:Float;
 	@:noCompletion private var times:Array<Float>;
+	@:noCompletion private var maxMemory:Float = 0;
+
+	@:noCompletion private var dataFont:Font;
 
 	public function new(x:Float = 10, y:Float = 10, color:Int = 0x000000)
 	{
@@ -43,10 +45,15 @@ class FPS extends TextField
 		this.x = x;
 		this.y = y;
 
+		dataFont = new Font("assets/fonts/vcrcn.ttf");
+		
 		currentFPS = 0;
 		selectable = false;
 		mouseEnabled = false;
-		defaultTextFormat = new TextFormat("_sans", 14, color);
+		
+		var labelFormat = new TextFormat("_sans", 14, color); 
+		
+		defaultTextFormat = labelFormat;
 		autoSize = LEFT;
 		multiline = true;
 		text = "FPS: ";
@@ -78,40 +85,58 @@ class FPS extends TextField
 
 		var currentCount = times.length;
 		currentFPS = Math.round((currentCount + cacheCount) / 2);
-		if (currentFPS > ClientPrefs.framerate) currentFPS = ClientPrefs.framerate;
+		if (currentFPS > ClientPrefs.data.framerate) currentFPS = ClientPrefs.data.framerate;
 
 		if (currentCount != cacheCount /*&& visible*/)
 		{
-			text = "FPS: " + currentFPS;
 			var memoryMegas:Float = 0;
+			memoryMegas = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
 			
-		#if openfl
-    	memoryMegas = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
-    	var memoryText:String;
-    	if (memoryMegas >= 1024) {
-        memoryText = FlxMath.roundDecimal(memoryMegas / 1024, 2) + " GB"; 
-    	} else {
-        memoryText = memoryMegas + " MB"; 
-   		 }
-
-    	text = "FPS: " + currentFPS;
-    	text += "\nMemory: " + memoryText; 
-    	text += "\nMohongEngine v" + MainMenuState.mohongEngineVersion;
-			#end
-
-			textColor = 0xFFFFFFFF;
-			if (memoryMegas > 3000 || currentFPS <= ClientPrefs.framerate / 2)
-			{
-				textColor = 0xFFFF0000;
+			if (memoryMegas > maxMemory) {
+				maxMemory = memoryMegas;
+			}
+			
+			var currentMemoryText:String;
+			var maxMemoryText:String;
+			
+			if (memoryMegas >= 1024) {
+				currentMemoryText = FlxMath.roundDecimal(memoryMegas / 1024, 2) + " GB"; 
+			} else {
+				currentMemoryText = memoryMegas + " MB"; 
+			}
+			
+			if (maxMemory >= 1024) {
+				maxMemoryText = FlxMath.roundDecimal(maxMemory / 1024, 2) + " GB"; 
+			} else {
+				maxMemoryText = maxMemory + " MB"; 
 			}
 
-			#if (gl_stats && !disable_cffi && (!html5 || !canvas))
-			text += "\ntotalDC: " + Context3DStats.totalDrawCalls();
-			text += "\nstageDC: " + Context3DStats.contextDrawCalls(DrawCallContext.STAGE);
-			text += "\nstage3DDC: " + Context3DStats.contextDrawCalls(DrawCallContext.STAGE3D);
-			#end
+			// 修改这里：将内存显示格式改为 "xxx GB/MB / xxx MB/GB"
+			var currentMemParts = currentMemoryText.split(" ");
+			var maxMemParts = maxMemoryText.split(" ");
+			
+			htmlText = "<font face='" + dataFont.fontName + "' size='24'>" + currentFPS + "</font>" +
+					   "<font face='_sans' size='14'> FPS</font><br/>" +
+					   "<font face='" + dataFont.fontName + "' size='24'>" + currentMemParts[0] + "</font>" +
+					   "<font face='_sans' size='14'> " + currentMemParts[1] + " / " + maxMemParts[0] + " " + maxMemParts[1] + "</font><br/>" +
+					   "<font face='_sans' size='14' color='#A9A9A9'>MohongEngine v" + MainMenuState.mohongEngineVersion + "</font>";
 
-			text += "\n";
+			textColor = 0xFFFFFFFF;
+			if (memoryMegas > 3000 || currentFPS <= ClientPrefs.data.framerate / 2)
+			{
+				textColor = 0xFFFF0000;
+			}else if(memoryMegas > 2000 || currentFPS <= ClientPrefs.data.framerate / 1.5)
+			{
+				textColor = 0xFFFFA500;
+			}
+			#if (gl_stats && !disable_cffi && (!html5 || !canvas))
+			htmlText += "<br/><font face='_sans' size='14'>totalDC: </font>" + 
+						"<font face='" + dataFont.fontName + "' size='20'>" + Context3DStats.totalDrawCalls() + "</font>";
+			htmlText += "<br/><font face='_sans' size='14'>stageDC: </font>" + 
+						"<font face='" + dataFont.fontName + "' size='20'>" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE) + "</font>";
+			htmlText += "<br/><font face='_sans' size='14'>stage3DDC: </font>" + 
+						"<font face='" + dataFont.fontName + "' size='20'>" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE3D) + "</font>";
+			#end
 		}
 
 		cacheCount = currentCount;

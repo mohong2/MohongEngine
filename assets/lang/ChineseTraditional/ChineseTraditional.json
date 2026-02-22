@@ -1,0 +1,41 @@
+{
+    
+    "ttf" : "vcrcn",
+    
+
+    "ChartingState.text": "W/S 或 滑鼠滾輪 - 調整譜面時間軸(Conductor's strum time)\n\nA/D - 跳轉到上一/下一段落(Section)\n\n左箭頭/右箭頭 - 更改吸附精度(Snap)\n\n上箭頭/下箭頭 - 帶吸附調整譜面時間軸(Conductor's Strum Time)\n\n左方括號 [ / 右方括號 ] - 更改歌曲播放速率(Playback Rate)(按住 Shift 加速調整)\n\nALT + 左方括號 [ / 右方括號 ] - 重設歌曲播放速率(Reset Playback Rate)\n\n按住 Shift 可進行 4 倍速移動\n\n按住 Control 並點擊音符箭頭可選中它\n\nZ/X - 放大/縮小視圖\n\nEsc - 在編輯器內測試當前譜面(Test Chart)\n\nEnter - 播放當前譜面(Play Chart)\n\n Q/E - 減少/增加長按音符長度(Note Sustain Length)\n空格鍵 - 暫停/繼續歌曲播放",
+    "FreeplayState.leText": "按 SPACE 鍵收聽歌曲 / 按 CTRL 鍵打開 Gameplay Changers 選單 / 按 RESET 鍵重設你的分數和準確度.",
+    "FreeplayState.leText.NOTRELOAD_ALL": "按 CTRL 打開 Gameplay Changers 選單/按 RESET 重設你的分數和準確度.",
+    "FreeplayState.leText.android": "按 X 鍵收聽歌曲 / 按 C 鍵打開 Gameplay Changers 選單 / 按 Y 鍵重設你的分數和準確度.",
+    "FreeplayState.leText.NOTRELOAD_ALL.android": "按 C 打開 Gameplay Changers 選單/按 Y 重設你的分數和準確度.",
+    "FreeplayState.scoreText": "個人最佳: ",
+
+    "Mod.noModsTxt": "沒有安裝模組\n按返回鍵退出並安裝模組",
+    "Mod.settings": "設定",
+    "Mod.top": "置頂",
+    "Mod.disableAll": "關閉所有",
+    "Mod.enableAll": "啟用所有",
+    "Mod.restart": "(此模組將重啟遊戲!)",
+    "Mod.noDescription": "未提供描述.",
+    "Mod.ON": "開",
+    "Mod.OFF": "關",
+    "Mod.description": "zhtdescription",
+
+    "friday_night_play": "在星期五的晚上...遊玩.",
+    "week1_nomiss": "在困難難度下無失誤地完成第1周.",
+    "week2_nomiss": "在困難難度下無失誤地完成第2周.",
+    "week3_nomiss": "在困難難度下無失誤地完成第3周.",
+    "week4_nomiss": "在困難難度下無失誤地完成第4周.",
+    "week5_nomiss": "在困難難度下無失誤地完成第5周.",
+    "week6_nomiss": "在困難難度下無失誤地完成第6周.",
+    "week7_nomiss": "在困難難度下無失誤地完成第7周.",
+    "ur_bad": "以低於20%的評分完成一首歌曲.",
+    "line_blue": "你有一個好(玩phigros玩的)在歌曲只有一個good的前提下.",
+    "ur_good": "以100%的評分完成一首歌曲.",
+    "roadkill_enthusiast": "觀看打手死亡超過100次.",
+    "oversinging": "按住一個音符保持10秒鐘.",
+    "hype": "完成一首歌曲,全程保持活躍.",
+    "two_keys": "只用兩個按鍵完成一首歌曲.",
+    "toastie": "你試過在烤麵包機上運行這個遊戲嗎?",
+    "debugger": "在編輯器中打開\"測試\""
+}

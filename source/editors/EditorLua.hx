@@ -7,17 +7,17 @@ import llua.State;
 import llua.Convert;
 #end
 
-import flixel.FlxG;
-import flixel.tweens.FlxTween;
-import flixel.tweens.FlxEase;
-import flixel.text.FlxText;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxPoint;
+ 
+ 
+ 
+ 
+ 
+ 
 import flixel.system.FlxSound;
-import flixel.util.FlxTimer;
-import flixel.FlxSprite;
-import flixel.FlxCamera;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import flixel.FlxBasic;
 #if sys
 import sys.FileSystem;
@@ -27,7 +27,7 @@ import Type.ValueType;
 import Controls;
 import DialogueBoxPsych;
 
-#if desktop
+#if cpp
 import Discord;
 #end
 
@@ -53,6 +53,7 @@ class EditorLua {
 		var result:Dynamic = LuaL.dofile(lua, script);
 		var resultStr:String = Lua.tostring(lua, result);
 		if(resultStr != null && result != 0) {
+			SUtil.showPopUp(resultStr, 'Error on .LUA script!');
 			lime.app.Application.current.window.alert(resultStr, 'Error on .LUA script!');
 			trace('Error on .LUA script! ' + resultStr);
 			lua = null;
@@ -83,8 +84,8 @@ class EditorLua {
 			set('defaultOpponentStrumY' + i, 0);
 		}
 
-		set('downscroll', ClientPrefs.downScroll);
-		set('middlescroll', ClientPrefs.middleScroll);
+		set('downscroll', ClientPrefs.data.downScroll);
+		set('middlescroll', ClientPrefs.data.middleScroll);
 
 		//stuff 4 noobz like you B)
 		Lua_helper.add_callback(lua, "getProperty", function(variable:String) {

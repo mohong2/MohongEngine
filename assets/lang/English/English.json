@@ -1,0 +1,40 @@
+{
+    "ttf" : "vcr",
+    
+    "ChartingState.text": "W/S or Mouse Wheel - Adjust Conductor's strum time\n\nA/D - Jump to Previous/Next Section\n\nLeft Arrow/Right Arrow - Change Snap\n\nUp Arrow/Down Arrow - Adjust Conductor's Strum Time with Snap\n\n[ / ] - Change Playback Rate (Hold Shift for faster adjustment)\n\nALT + [ / ] - Reset Playback Rate\n\nHold Shift for 4x Speed Movement\n\nHold Control and click a note arrow to select it\n\nZ/X - Zoom In/Out\n\nEsc - Test Chart in Editor\n\nEnter - Play Chart\n\nQ/E - Decrease/Increase Note Sustain Length\n\nSpacebar - Stop/Resume Song",
+    "FreeplayState.leText" : "Press SPACE to listen to the Song / Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy.",
+    "FreeplayState.leText.NOTRELOAD_ALL" : "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy.",
+    "FreeplayState.leText.android" : "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy.",
+    "FreeplayState.leText.NOTRELOAD_ALL.android": "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy.",
+    "FreeplayState.scoreText": "ERSONAL BEST: ",
+
+    "Mod.noModsTxt": "No Mods Installed\nPress Back to Exit and Install a Mod",
+    "Mod.settings": "Settings",
+    "Mod.top": "TOP",
+    "Mod.disableAll": "Disable All",
+    "Mod.enableAll": "Enable All",
+    "Mod.restart": "(This Mod will restart the game!)",
+    "Mod.noDescription": "No description provided.",
+    "Mod.ON" : "ON",
+    "Mod.OFF" : "OFF",
+    "Mod.description" : "description",
+
+    "friday_night_play" : "Play on a Friday... Night.",
+    "week1_nomiss" : "Beat Week 1 on Hard with no Misses.",
+    "week2_nomiss" : "Beat Week 2 on Hard with no Misses.",
+    "week3_nomiss" : "Beat Week 3 on Hard with no Misses.",
+    "week4_nomiss" : "Beat Week 4 on Hard with no Misses.",
+    "week5_nomiss" : "Beat Week 5 on Hard with no Misses.",
+    "week6_nomiss" : "Beat Week 6 on Hard with no Misses.",
+    "week7_nomiss" : "Beat Week 7 on Hard with no Misses.",
+    
+    "ur_bad" : "Complete a Song with a rating lower than 20%.",
+    "line_blue" : "The song is just a good .",
+    "ur_good" : "Complete a Song with a rating of 100%.",
+    "roadkill_enthusiast" : "Watch the Henchmen die over 100 times.",
+    "oversinging" : "Hold down a note for 10 seconds.",
+    "hype" : "Finish a Song without going Idle.",
+    "two_keys" : "Finish a Song pressing only two keys.",
+    "toastie" : "Have you tried to run the game on a toaster?",
+    "debugger" : "Beat the \"Test\" Stage from the Chart Editor."
+}

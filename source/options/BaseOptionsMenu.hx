@@ -1,26 +1,17 @@
 package options;
 
-#if desktop
+import states.substates.MusicBeatSubstate;
+import flixel.addons.display.FlxBackdrop;
+#if cpp
 import Discord.DiscordClient;
 #end
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.util.FlxSave;
 import haxe.Json;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
@@ -32,7 +23,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 	private var curOption:Option = null;
 	private var curSelected:Int = 0;
 	private var optionsArray:Array<Option>;
-
+	private var mouseOverOption:Int = -1;
 	private var grpOptions:FlxTypedGroup<Alphabet>;
 	private var checkboxGroup:FlxTypedGroup<CheckboxThingie>;
 	private var grpTexts:FlxTypedGroup<AttachedText>;
@@ -43,7 +34,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 
 	public var title:String;
 	public var rpcTitle:String;
-
+	public var bg:FlxSprite;
 	public function new()
 	{
 		super();
@@ -55,10 +46,10 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		DiscordClient.changePresence(rpcTitle, null);
 		#end
 		
-		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		bg.color = 0xFFea71fd;
+		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
+		bg.color = 0xff17719b;
 		bg.screenCenter();
-		bg.antialiasing = ClientPrefs.globalAntialiasing;
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(bg);
 
 		// avoids lagspikes while scrolling through menus!
@@ -82,7 +73,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		add(titleText);
 
 		descText = new FlxText(50, 600, 1180, "", 32);
-		descText.setFormat(Paths.font("vcr.ttf"), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		descText.setFormat(Paths.optionsfont(), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		descText.scrollFactor.set();
 		descText.borderSize = 2.4;
 		add(descText);
@@ -123,6 +114,10 @@ class BaseOptionsMenu extends MusicBeatSubstate
 
 		changeSelection();
 		reloadCheckboxes();
+		#if android
+		addVirtualPad(LEFT_FULL, A_B_C);
+		addPadCamera();
+		#end
 	}
 
 	public function addOption(option:Option) {
@@ -135,6 +130,67 @@ class BaseOptionsMenu extends MusicBeatSubstate
 	var holdValue:Float = 0;
 	override function update(elapsed:Float)
 	{
+		var mouseOverChanged = false;
+		if (FlxG.mouse.wheel != 0) {
+			changeSelection(-FlxG.mouse.wheel); 
+			FlxG.sound.play(Paths.sound('scrollMenu'));
+		}
+		if (mouseOverChanged && mouseOverOption != curSelected) {
+			curSelected = mouseOverOption;
+			changeSelection(0);
+		}
+		if (FlxG.mouse.justPressed) {
+			for (checkbox in checkboxGroup) {
+				if (FlxG.mouse.overlaps(checkbox)) {
+					curSelected = checkbox.ID;
+					changeSelection(0);
+					FlxG.sound.play(Paths.sound('scrollMenu'));
+					optionsArray[checkbox.ID].setValue(!optionsArray[checkbox.ID].getValue());
+					optionsArray[checkbox.ID].change();
+					reloadCheckboxes();
+					break;
+				}
+		}
+			for (text in grpTexts) {
+				if (FlxG.mouse.overlaps(text)) {
+					curSelected = text.ID;
+					changeSelection(0);
+					
+					var option = optionsArray[text.ID];
+					if (option.type != 'bool') {
+						var add:Dynamic = (option.type == 'string') ? 0 : option.changeValue;
+						
+						switch(option.type) {
+							case 'int' | 'float' | 'percent':
+								holdValue = option.getValue() + add;
+								if(holdValue < option.minValue) holdValue = option.minValue;
+								else if (holdValue > option.maxValue) holdValue = option.maxValue;
+								
+								switch(option.type) {
+									case 'int':
+										holdValue = Math.round(holdValue);
+										option.setValue(holdValue);
+										
+									case 'float' | 'percent':
+										holdValue = FlxMath.roundDecimal(holdValue, option.decimals);
+										option.setValue(holdValue);
+								}
+								
+							case 'string':
+								var num:Int = option.curOption + 1;
+								if(num >= option.options.length) num = 0;
+								option.curOption = num;
+								option.setValue(option.options[num]);
+						}
+						updateTextFrom(option);
+						option.change();
+						FlxG.sound.play(Paths.sound('scrollMenu'));
+					}
+					break;
+				}
+			}
+		}
+
 		if (controls.UI_UP_P)
 		{
 			changeSelection(-1);
@@ -145,7 +201,8 @@ class BaseOptionsMenu extends MusicBeatSubstate
 		}
 
 		if (controls.BACK) {
-			close();
+			flixel.addons.transition.FlxTransitionableState.skipNextTransOut = true;
+			FlxG.resetState();
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 		}
 
@@ -238,7 +295,7 @@ class BaseOptionsMenu extends MusicBeatSubstate
 				}
 			}
 
-			if(controls.RESET)
+			if(#if android virtualPad.buttonC.justPressed || #end controls.RESET)
 			{
 				for (i in 0...optionsArray.length)
 				{

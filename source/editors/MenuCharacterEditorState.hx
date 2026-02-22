@@ -1,16 +1,11 @@
 package editors;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
 import flixel.system.FlxSound;
 import flixel.addons.ui.FlxInputText;
 import flixel.addons.ui.FlxUI9SliceSprite;
@@ -48,7 +43,7 @@ class MenuCharacterEditorState extends MusicBeatState
 			confirm_anim: 'M Dad Idle',
 			flipX: false
 		};
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Menu Character Editor", "Editting: " + characterFile.image);
 		#end
@@ -73,14 +68,16 @@ class MenuCharacterEditorState extends MusicBeatState
 		var tipText:FlxText = new FlxText(0, 540, FlxG.width,
 			"Arrow Keys - Change Offset (Hold shift for 10x speed)
 			\nSpace - Play \"Start Press\" animation (Boyfriend Character Type)", 16);
-		tipText.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, CENTER);
+		tipText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, CENTER);
 		tipText.scrollFactor.set();
 		add(tipText);
 
 		addEditorBox();
 		FlxG.mouse.visible = true;
 		updateCharTypeBox();
-
+		#if android
+		addVirtualPad(MENU_CHARACTER_EDITOR, MENU_CHARACTER_EDITOR);
+		#end
 		super.create();
 	}
 
@@ -244,7 +241,7 @@ class MenuCharacterEditorState extends MusicBeatState
 		char.animation.play('idle');
 		updateOffset();
 		
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Menu Character Editor", "Editting: " + characterFile.image);
 		#end
@@ -285,32 +282,32 @@ class MenuCharacterEditorState extends MusicBeatState
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(FlxG.keys.justPressed.ESCAPE) {
+			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
 				MusicBeatState.switchState(new editors.MasterEditorMenu());
 				FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			}
 
 			var shiftMult:Int = 1;
-			if(FlxG.keys.pressed.SHIFT) shiftMult = 10;
+			if(#if android virtualPad.buttonC.pressed ||#end FlxG.keys.pressed.SHIFT) shiftMult = 10;
 
-			if(FlxG.keys.justPressed.LEFT) {
+			if(#if android virtualPad.buttonLeft.justPressed ||#end FlxG.keys.justPressed.LEFT) {
 				characterFile.position[0] += shiftMult;
 				updateOffset();
 			}
-			if(FlxG.keys.justPressed.RIGHT) {
+			if(#if android virtualPad.buttonRight.justPressed ||#end FlxG.keys.justPressed.RIGHT) {
 				characterFile.position[0] -= shiftMult;
 				updateOffset();
 			}
-			if(FlxG.keys.justPressed.UP) {
+			if(#if android virtualPad.buttonUp.justPressed ||#end FlxG.keys.justPressed.UP) {
 				characterFile.position[1] += shiftMult;
 				updateOffset();
 			}
-			if(FlxG.keys.justPressed.DOWN) {
+			if(#if android virtualPad.buttonDown.justPressed ||#end FlxG.keys.justPressed.DOWN) {
 				characterFile.position[1] -= shiftMult;
 				updateOffset();
 			}
 
-			if(FlxG.keys.justPressed.SPACE && curTypeSelected == 1) {
+			if(#if android virtualPad.buttonA.justPressed ||#end FlxG.keys.justPressed.SPACE && curTypeSelected == 1) {
 				grpWeekCharacters.members[curTypeSelected].animation.play('confirm', true);
 			}
 		}
@@ -407,11 +404,15 @@ class MenuCharacterEditorState extends MusicBeatState
 			var splittedImage:Array<String> = imageInputText.text.trim().split('_');
 			var characterName:String = splittedImage[splittedImage.length-1].toLowerCase().replace(' ', '');
 
+			#if android
+			SUtil.saveContent(characterName, ".json", data);
+			#else
 			_file = new FileReference();
 			_file.addEventListener(Event.COMPLETE, onSaveComplete);
 			_file.addEventListener(Event.CANCEL, onSaveCancel);
 			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 			_file.save(data, characterName + ".json");
+			#end
 		}
 	}
 

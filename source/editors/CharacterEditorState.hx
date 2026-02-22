@@ -1,20 +1,20 @@
 package editors;
 
-#if desktop
+#if cpp
 import Discord.DiscordClient;
 #end
 import animateatlas.AtlasFrameMaker;
-import flixel.FlxG;
+ 
 import flixel.FlxObject;
-import flixel.FlxSprite;
+ 
 import flixel.FlxState;
-import flixel.FlxCamera;
+ 
 import flixel.input.keyboard.FlxKey;
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
+ 
 import flixel.graphics.FlxGraphic;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
 import flixel.addons.ui.FlxInputText;
 import flixel.addons.ui.FlxUI9SliceSprite;
 import flixel.addons.ui.FlxUI;
@@ -33,6 +33,7 @@ import Character;
 import flixel.system.debug.interaction.tools.Pointer.GraphicCursorCross;
 import lime.system.Clipboard;
 import flixel.animation.FlxAnimation;
+ 
 
 #if MODS_ALLOWED
 import sys.FileSystem;
@@ -81,7 +82,7 @@ class CharacterEditorState extends MusicBeatState
 	override function create()
 	{
 		//FlxG.sound.playMusic(Paths.music('breakfast'), 0.5);
-		//if(ClientPrefs.cacheOnGPU) Paths.clearStoredMemory();
+
 		camEditor = new FlxCamera();
 		camHUD = new FlxCamera();
 		camHUD.bgColor.alpha = 0;
@@ -129,7 +130,7 @@ class CharacterEditorState extends MusicBeatState
 		dumbTexts.cameras = [camHUD];
 
 		textAnim = new FlxText(300, 16);
-		textAnim.setFormat(Paths.font("vcr.ttf"), 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		textAnim.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		textAnim.borderSize = 1;
 		textAnim.size = 32;
 		textAnim.scrollFactor.set();
@@ -200,7 +201,10 @@ class CharacterEditorState extends MusicBeatState
 
 		FlxG.mouse.visible = true;
 		reloadCharacterOptions();
-		//if(ClientPrefs.cacheOnGPU) Paths.clearUnusedMemory();
+		#if android
+		addVirtualPad(LEFT_FULL, CHARACTER_EDITOR);
+		addPadCamera();
+		#end
 		super.create();
 	}
 
@@ -555,7 +559,7 @@ class CharacterEditorState extends MusicBeatState
 		noAntialiasingCheckBox.checked = char.noAntialiasing;
 		noAntialiasingCheckBox.callback = function() {
 			char.antialiasing = false;
-			if(!noAntialiasingCheckBox.checked && ClientPrefs.globalAntialiasing) {
+			if(!noAntialiasingCheckBox.checked && ClientPrefs.data.globalAntialiasing) {
 				char.antialiasing = true;
 			}
 			char.noAntialiasing = noAntialiasingCheckBox.checked;
@@ -1079,7 +1083,7 @@ class CharacterEditorState extends MusicBeatState
 	}
 
 	function updatePresence() {
-		#if desktop
+		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("Character Editor", "Character: " + daAnim, leHealthIcon.getCharacter());
 		#end
@@ -1114,7 +1118,7 @@ class CharacterEditorState extends MusicBeatState
 		FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 
 		if(!charDropDown.dropPanel.visible) {
-			if (FlxG.keys.justPressed.ESCAPE) {
+			if (#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
 				if(goToPlayState) {
 					MusicBeatState.switchState(new PlayState());
 				} else {
@@ -1125,43 +1129,43 @@ class CharacterEditorState extends MusicBeatState
 				return;
 			}
 
-			if (FlxG.keys.justPressed.R) {
+			if (#if android virtualPad.buttonZ.justPressed || #end FlxG.keys.justPressed.R) {
 				FlxG.camera.zoom = 1;
 			}
 
-			if (FlxG.keys.pressed.E && FlxG.camera.zoom < 3) {
+			if (#if android virtualPad.buttonX.pressed || #end FlxG.keys.pressed.E && FlxG.camera.zoom < 3) {
 				FlxG.camera.zoom += elapsed * FlxG.camera.zoom;
 				if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3;
 			}
-			if (FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) {
+			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) {
 				FlxG.camera.zoom -= elapsed * FlxG.camera.zoom;
 				if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1;
 			}
 
-			if (FlxG.keys.pressed.I || FlxG.keys.pressed.J || FlxG.keys.pressed.K || FlxG.keys.pressed.L)
+			if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed) || #end FlxG.keys.pressed.I || FlxG.keys.pressed.J || FlxG.keys.pressed.K || FlxG.keys.pressed.L)
 			{
 				var addToCam:Float = 500 * elapsed;
 				if (FlxG.keys.pressed.SHIFT)
 					addToCam *= 4;
 
-				if (FlxG.keys.pressed.I)
+				if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed) || #end FlxG.keys.pressed.I)
 					camFollow.y -= addToCam;
-				else if (FlxG.keys.pressed.K)
+				else if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed) || #end FlxG.keys.pressed.K)
 					camFollow.y += addToCam;
 
-				if (FlxG.keys.pressed.J)
+				if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed) || #end FlxG.keys.pressed.J)
 					camFollow.x -= addToCam;
-				else if (FlxG.keys.pressed.L)
+				else if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed) ||	#end FlxG.keys.pressed.L)
 					camFollow.x += addToCam;
 			}
 
 			if(char.animationsArray.length > 0) {
-				if (FlxG.keys.justPressed.W)
+				if (#if android (virtualPad.buttonV.justPressed && !virtualPad.buttonG.pressed) ||  #end FlxG.keys.justPressed.W)
 				{
 					curAnim -= 1;
 				}
 
-				if (FlxG.keys.justPressed.S)
+				if (#if android (virtualPad.buttonD.justPressed && !virtualPad.buttonG.pressed ) || #end FlxG.keys.justPressed.S)
 				{
 					curAnim += 1;
 				}
@@ -1172,12 +1176,12 @@ class CharacterEditorState extends MusicBeatState
 				if (curAnim >= char.animationsArray.length)
 					curAnim = 0;
 
-				if (FlxG.keys.justPressed.S || FlxG.keys.justPressed.W || FlxG.keys.justPressed.SPACE)
+				if ((#if android virtualPad.buttonD.justPressed ||	#end FlxG.keys.justPressed.S) || (#if android virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.W) ||  FlxG.keys.justPressed.SPACE)
 				{
 					char.playAnim(char.animationsArray[curAnim].anim, true);
 					genBoyOffsets();
 				}
-				if (FlxG.keys.justPressed.T)
+				if (#if android  virtualPad.buttonA.justPressed ||  #end FlxG.keys.justPressed.T)
 				{
 					char.animationsArray[curAnim].offsets = [0, 0];
 
@@ -1186,13 +1190,11 @@ class CharacterEditorState extends MusicBeatState
 					genBoyOffsets();
 				}
 
-				var controlArray:Array<Bool> = [FlxG.keys.justPressed.LEFT, FlxG.keys.justPressed.RIGHT, FlxG.keys.justPressed.UP, FlxG.keys.justPressed.DOWN];
-
-
+				var controlArray:Array<Bool> = [#if android (virtualPad.buttonLeft.justPressed && !virtualPad.buttonG.pressed ) || #end FlxG.keys.justPressed.LEFT,#if android (virtualPad.buttonRight.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.RIGHT,#if android (virtualPad.buttonUp.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.UP, #if android (virtualPad.buttonDown.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.DOWN];
 
 				for (i in 0...controlArray.length) {
 					if(controlArray[i]) {
-						var holdShift = FlxG.keys.pressed.SHIFT;
+						var holdShift = #if android virtualPad.buttonC.pressed || #end  FlxG.keys.pressed.SHIFT;
 						var multiplier = 1;
 						if (holdShift)
 							multiplier = 10;
@@ -1291,11 +1293,15 @@ class CharacterEditorState extends MusicBeatState
 
 		if (data.length > 0)
 		{
+			#if android
+         	SUtil.saveContent(daAnim, ".json", data);
+            #else
 			_file = new FileReference();
 			_file.addEventListener(Event.COMPLETE, onSaveComplete);
 			_file.addEventListener(Event.CANCEL, onSaveCancel);
 			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
 			_file.save(data, daAnim + ".json");
+            #end
 		}
 	}
 

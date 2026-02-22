@@ -1,6 +1,5 @@
 package;
 
-import flixel.FlxSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
 #if MODS_ALLOWED
 import sys.io.File;
@@ -37,7 +36,7 @@ class MenuCharacter extends FlxSprite
 		if(character == this.character) return;
 
 		this.character = character;
-		antialiasing = ClientPrefs.globalAntialiasing;
+		antialiasing = ClientPrefs.data.globalAntialiasing;
 		visible = true;
 
 		var dontPlayAnim:Bool = false;

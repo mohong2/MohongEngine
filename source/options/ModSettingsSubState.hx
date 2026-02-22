@@ -1,8 +1,7 @@
 package options;
 
-import flixel.FlxG;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+import flixel.addons.display.FlxGridOverlay;
+import flixel.addons.display.FlxBackdrop;
 import haxe.Json;
 import sys.FileSystem;
 import sys.io.File;
@@ -12,14 +11,13 @@ class ModSettingsSubState extends BaseOptionsMenu
     var folder:String;
     var modName:String;
     var modSettings:Map<String, Dynamic> = new Map();
-    
+
     public function new(settings:Array<Dynamic>, folder:String, name:String)
     {
         this.folder = folder;
         this.modName = name;
         title = '$name Settings';
         rpcTitle = 'Mod Settings ($name)';
-        
             if(FlxG.save.data.modSettings == null) {
             FlxG.save.data.modSettings = new Map<String, Map<String, Dynamic>>();
         }
@@ -41,7 +39,7 @@ class ModSettingsSubState extends BaseOptionsMenu
             var defaultValue:Dynamic = setting.value != null ? setting.value : getDefaultValue(setting.type);
             
             var descriptionText:String = setting.description;
-            if (setting.zhdescription != null) {
+            if (setting.zhdescription != null && ClientPrefs.data.language == 'Chinese') {
                 descriptionText = setting.zhdescription;
             }
             
@@ -135,7 +133,6 @@ class ModSettingsSubState extends BaseOptionsMenu
                 addOption(option);
             }
         }
-        
         super();
     }
     

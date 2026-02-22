@@ -38,6 +38,6 @@ body:
     id: buildsummary
     attributes:
       label: "Did you edit anything in this build? If so, mention or summarize your changes."
-      placeholder: "Yes, I edited ClientPrefs.hx and tried to add a new setting"
+      placeholder: "Yes, I edited ClientPrefs.data.hx and tried to add a new setting"
     validations:
       required: false

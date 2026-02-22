@@ -1,14 +1,8 @@
 package;
 
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.text.FlxTypeText;
 import flixel.graphics.frames.FlxAtlasFrames;
-import flixel.group.FlxSpriteGroup;
 import flixel.input.FlxKeyManager;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
-import flixel.util.FlxTimer;
 
 using StringTools;
 
@@ -178,7 +172,12 @@ class DialogueBox extends FlxSpriteGroup
 			dialogueStarted = true;
 		}
 
-		if(PlayerSettings.player1.controls.ACCEPT)
+		var justTouched:Bool = false;
+		for (touch in FlxG.touches.list)
+			if (touch.justPressed)
+				justTouched = true;
+
+		if(justTouched || PlayerSettings.player1.controls.ACCEPT)
 		{
 			if (dialogueEnded)
 			{

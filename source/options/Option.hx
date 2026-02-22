@@ -1,22 +1,22 @@
 package options;
 
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
+ 
+ 
+ 
+ 
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
+ 
+ 
 import flixel.util.FlxSave;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
+ 
+ 
+ 
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
@@ -25,7 +25,7 @@ using StringTools;
 
 class Option
 {
-	private var child:Alphabet;
+	public var child:Alphabet;
 	public var text(get, set):String;
 	public var onChange:Void->Void = null; //Pressed enter (on Bool type options) or pressed/held left/right (on other types)
 
@@ -36,8 +36,11 @@ class Option
 	public var showBoyfriend:Bool = false;
 	public var scrollSpeed:Float = 50; //Only works on int/float, defines how fast it scrolls per second while holding left/right
 
-	private var variable:String = null; //Variable from ClientPrefs.hx
+	private var variable:String = null; //Variable from ClientPrefs.data.hx
 	public var defaultValue:Dynamic = null;
+
+	public var readOnly:Bool = false;
+    public var readOnlyHint:String = "";
 
 	public var curOption:Int = 0; //Don't change this
 	public var options:Array<String> = null; //Only used in string type
@@ -61,19 +64,24 @@ class Option
 
 		if(defaultValue == 'null variable value')
 		{
-			switch(type)
-			{
-				case 'bool':
-					defaultValue = false;
-				case 'int' | 'float':
-					defaultValue = 0;
-				case 'percent':
-					defaultValue = 1;
-				case 'string':
-					defaultValue = '';
-					if(options.length > 0) {
-						defaultValue = options[0];
-					}
+			var currentValue = getValue();
+			if (currentValue != null) {
+				defaultValue = currentValue;
+			} else {
+				switch(type)
+				{
+					case 'bool':
+						defaultValue = false;
+					case 'int' | 'float':
+						defaultValue = 0;
+					case 'percent':
+						defaultValue = 1;
+					case 'string':
+						defaultValue = '';
+						if(options.length > 0) {
+							defaultValue = options[0];
+						}
+				}
 			}
 		}
 
@@ -99,6 +107,7 @@ class Option
 		}
 	}
 
+
 	public function change()
 	{
 		//nothing lol
@@ -107,16 +116,22 @@ class Option
 		}
 	}
 
-	public dynamic function getValue():Dynamic
+	dynamic public function getValue():Dynamic
 	{
-		return Reflect.getProperty(ClientPrefs, variable);
+		var value = Reflect.getProperty(ClientPrefs.data, variable);
+		if (value == null)
+			value = Reflect.getProperty(ClientPrefs, variable);
+		return value;
 	}
-	
-	public dynamic function setValue(value:Dynamic)
+
+	dynamic public function setValue(value:Dynamic)
 	{
-		Reflect.setProperty(ClientPrefs, variable, value);
+		try{
+		return Reflect.setProperty(ClientPrefs.data, variable, value);
+		}catch(e){
+			return Reflect.setProperty(ClientPrefs, variable, value);
+		}
 	}
-	
 
 	public function setChild(child:Alphabet)
 	{

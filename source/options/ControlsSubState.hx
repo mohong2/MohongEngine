@@ -1,26 +1,16 @@
 package options;
 
-#if desktop
+import flixel.addons.display.FlxBackdrop;
+#if cpp
 import Discord.DiscordClient;
 #end
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.addons.display.FlxGridOverlay;
-import flixel.group.FlxGroup.FlxTypedGroup;
-import flixel.math.FlxMath;
-import flixel.text.FlxText;
-import flixel.util.FlxColor;
 import lime.utils.Assets;
 import flixel.FlxSubState;
 import flash.text.TextField;
-import flixel.FlxG;
-import flixel.FlxSprite;
 import flixel.util.FlxSave;
 import haxe.Json;
-import flixel.tweens.FlxEase;
-import flixel.tweens.FlxTween;
-import flixel.util.FlxTimer;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
@@ -72,10 +62,16 @@ class ControlsSubState extends MusicBeatSubstate {
 		super();
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		bg.color = 0xFFea71fd;
+		bg.color = 0xff17719b;
 		bg.screenCenter();
-		bg.antialiasing = ClientPrefs.globalAntialiasing;
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(bg);
+
+		var grid:FlxBackdrop = new FlxBackdrop(FlxGridOverlay.createGrid(80, 80, 160, 160, true, 0x33FFFFFF, 0x0));
+		grid.velocity.set(40, 40);
+		grid.alpha = 0;
+		FlxTween.tween(grid, {alpha: 1}, 0.5, {ease: FlxEase.quadOut});
+		add(grid);
 
 		grpOptions = new FlxTypedGroup<Alphabet>();
 		add(grpOptions);
@@ -110,7 +106,14 @@ class ControlsSubState extends MusicBeatSubstate {
 			}
 		}
 		changeSelection();
+		#if android
+		addVirtualPad(LEFT_FULL, A_B);
+		addPadCamera();
+		#end
 	}
+	var bindingBlack:FlxSprite;
+	var bindingText:Alphabet;
+	var bindingText2:Alphabet;
 
 	var leaving:Bool = false;
 	var bindingTime:Float = 0;
@@ -128,17 +131,34 @@ class ControlsSubState extends MusicBeatSubstate {
 
 			if (controls.BACK) {
 				ClientPrefs.reloadControls();
-				close();
+				flixel.addons.transition.FlxTransitionableState.skipNextTransOut = true;
+				FlxG.resetState();
 				FlxG.sound.play(Paths.sound('cancelMenu'));
 			}
 
 			if(controls.ACCEPT && nextAccept <= 0) {
 				if(optionShit[curSelected][0] == defaultKey) {
 					ClientPrefs.keyBinds = ClientPrefs.defaultKeys.copy();
+
 					reloadKeys();
 					changeSelection();
 					FlxG.sound.play(Paths.sound('confirmMenu'));
 				} else if(!unselectableCheck(curSelected)) {
+					bindingBlack = new FlxSprite().makeGraphic(1, 1, /*FlxColor.BLACK*/ FlxColor.WHITE);
+					bindingBlack.scale.set(FlxG.width, FlxG.height);
+					bindingBlack.updateHitbox();
+					bindingBlack.alpha = 0;
+					FlxTween.tween(bindingBlack, {alpha: 0.6}, 0.35, {ease: FlxEase.linear});
+					add(bindingBlack);
+
+					bindingText = new Alphabet(FlxG.width / 2, 160, "Rebinding " + optionShit[curSelected][0] , false);
+					bindingText.alignment = CENTERED;
+					add(bindingText);
+					
+					bindingText2 = new Alphabet(FlxG.width / 2, 340, "Hold ESC to Cancel\nHold Backspace to Delete", true);
+					bindingText2.alignment = CENTERED;
+					add(bindingText2);
+
 					bindingTime = 0;
 					rebindingKey = true;
 					if (curAlt) {
@@ -150,40 +170,73 @@ class ControlsSubState extends MusicBeatSubstate {
 				}
 			}
 		} else {
+		if (FlxG.keys.justPressed.ESCAPE) {
+			closeBinding();
+			rebindingKey = false;
+			if (curAlt) {
+				grpInputsAlt[getInputTextNum()].alpha = 1;
+			} else {
+				grpInputs[getInputTextNum()].alpha = 1;
+			}
+			FlxG.sound.play(Paths.sound('cancelMenu'));
+		} 
+		else if (FlxG.keys.justPressed.BACKSPACE) {
+			var keysArray:Array<FlxKey> = ClientPrefs.keyBinds.get(optionShit[curSelected][1]);
+			keysArray[curAlt ? 1 : 0] = NONE;
+			ClientPrefs.keyBinds.set(optionShit[curSelected][1], keysArray);
+			
+			reloadKeys();
+			closeBinding();
+			FlxG.sound.play(Paths.sound('confirmMenu'));
+			rebindingKey = false;
+		}
+		else {
 			var keyPressed:Int = FlxG.keys.firstJustPressed();
 			if (keyPressed > -1) {
 				var keysArray:Array<FlxKey> = ClientPrefs.keyBinds.get(optionShit[curSelected][1]);
 				keysArray[curAlt ? 1 : 0] = keyPressed;
-
+				
 				var opposite:Int = (curAlt ? 0 : 1);
 				if(keysArray[opposite] == keysArray[1 - opposite]) {
 					keysArray[opposite] = NONE;
 				}
 				ClientPrefs.keyBinds.set(optionShit[curSelected][1], keysArray);
-
+				
 				reloadKeys();
+				closeBinding();
 				FlxG.sound.play(Paths.sound('confirmMenu'));
 				rebindingKey = false;
 			}
-
-			bindingTime += elapsed;
-			if(bindingTime > 5) {
-				if (curAlt) {
-					grpInputsAlt[curSelected].alpha = 1;
-				} else {
-					grpInputs[curSelected].alpha = 1;
-				}
-				FlxG.sound.play(Paths.sound('scrollMenu'));
-				rebindingKey = false;
-				bindingTime = 0;
+		}
+		
+		bindingTime += elapsed;
+		if(bindingTime > 5) {
+			if (curAlt) {
+				grpInputsAlt[getInputTextNum()].alpha = 1;
+			} else {
+				grpInputs[getInputTextNum()].alpha = 1;
 			}
+			FlxG.sound.play(Paths.sound('scrollMenu'));
+			rebindingKey = false;
+			bindingTime = 0;
 		}
-
-		if(nextAccept > 0) {
-			nextAccept -= 1;
-		}
-		super.update(elapsed);
 	}
+	
+	if(nextAccept > 0) {
+		nextAccept -= 1;
+	}
+	super.update(elapsed);
+}
+
+	function closeBinding()
+	{
+		remove(bindingBlack);
+		bindingText.destroy();
+		remove(bindingText);
+		bindingText2.destroy();
+		remove(bindingText2);
+	}
+
 
 	function getInputTextNum() {
 		var num:Int = 0;

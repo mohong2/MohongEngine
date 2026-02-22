@@ -1,116 +1,38 @@
 [**中文文档**](ZHREADME.md) | [English Version](README.md) 
 
-![](./images/8.png)
-
-# Friday Night Funkin' - Mohong Engine It's a Fork !!!!(Psych Engine)
-(Not has Gamebanana) intended to be a fix for the vanilla version's many issues while keeping the casual play aspect of it. Also aiming to be an easier alternative to newbie coders.
-
-## Something new
-![](./images/6.png)
-![](./images/7.png)
-New language support. (Although the code is a bit badly written) (A bunch of ifs?)
-
-## Installation:
-You must have [the most up-to-date version of Haxe](https://haxe.org/download/), seriously, stop using 4.1.5, it misses some stuff.
-
-Follow a Friday Night Funkin' source code compilation tutorial, after this you will need to install LuaJIT.
-
-To install LuaJIT do this: `haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit` on a Command prompt/PowerShell
-
-...Or if you don't want your mod to be able to run .lua scripts, delete the "LUA_ALLOWED" line on Project.xml
+# Friday Night Funkin' - Mohong Engine This is a fork!!!! (Based on Psych Engine)
+This engine will stop receiving updates after the official release of the Mandela Funkin Night mod!!!
 
 
-If you get an error about StatePointer when using Lua, run `haxelib remove linc_luajit` into Command Prompt/PowerShell, then re-install linc_luajit.
+## Installation Guide:
+You must install [Haxe 4.2.5](https://haxe.org/download/). Seriously, stop using 4.1.5 as it lacks some features.
+The following libraries need to be installed via Haxelib:
+* hxCodec - Any version
+* linc_luajit - Git version (https://github.com/nebulazorua/linc_luajit)
+* flixel - 4.11.0
+* flixel-addons - 2.11.0
+* flixel-ui - 2.4.0
+* hscript-iris - 1.1.3
+* lime - 8.0.1
+* openfl - 9.2.1
+* tjson - 1.4.0 (Used for building, I'm also unsure about the exact version to use)
 
-If you want video support on your mod, simply do `haxelib install hxCodec` on a Command prompt/PowerShell
-
-otherwise, you can delete the "VIDEOS_ALLOWED" Line on Project.xml
 ## Mohong Engine Credits:
-* mo_hong - Modification and Chinese translation
+* mo_hong - Modifications and Chinese translation
 * Li.tmc - Engine icon
+
 ## Psych Engine Credits:
 * Shadow Mario - Programmer
 * RiverOaken - Artist
 * Yoshubs - Assistant Programmer
 
 ### Special Thanks
-* bbpanzu - Ex-Programmer
-* shubs - New Input System
-* SqirraRNG - Crash Handler and Base code for Chart Editor's Waveform
-* KadeDev - Fixed some cool stuff on Chart Editor and other PRs
-* iFlicky - Composer of Psync and Tea Time, also made the Dialogue Sounds
-* PolybiusProxy - .MP4 Video Loader Library (hxCodec)
-* Keoiki - Note Splash Animations
-* Smokey - Sprite Atlas Support
-* Nebula the Zorua - LUA JIT Fork and some Lua reworks
-_____________________________________
-
-# Features
-
-## Attractive animated dialogue boxes:
-
-![](./images/5.gif)
-
-
-## Mod Support
-* Probably one of the main points of this engine, you can code in .lua files outside of the source code, making your own weeks without even messing with the source!
-* Comes with a Mod Organizing/Disabling Menu.
-
-
-## Atleast one change to every week:
-### Week 1:
-  * New Dad Left sing sprite
-  * Unused stage lights are now used
-### Week 2:
-  * Both BF and Skid & Pump does "Hey!" animations
-  * Thunders does a quick light flash and zooms the camera in slightly
-  * Added a quick transition/cutscene to Monster
-### Week 3:
-  * BF does "Hey!" during Philly Nice
-  * Blammed has a cool new colors flash during that sick part of the song
-### Week 4:
-  * Better hair physics for Mom/Boyfriend (Maybe even slightly better than Week 7's :eyes:)
-  * Henchmen die during all songs. Yeah :(
-### Week 5:
-  * Bottom Boppers and GF does "Hey!" animations during Cocoa and Eggnog
-  * On Winter Horrorland, GF bops her head slower in some parts of the song.
-### Week 6:
-  * On Thorns, the HUD is hidden during the cutscene
-  * Also there's the Background girls being spooky during the "Hey!" parts of the Instrumental
-
-## Cool new Chart Editor changes and countless bug fixes(This looks like Psych Engine 1.0)
-![](./images/chart.png)
-* You can now chart "Event" notes, which are bookmarks that trigger specific actions that usually were hardcoded on the vanilla version of the game.
-* Your song's BPM can now have decimal values
-* You can manually adjust a Note's strum time if you're really going for milisecond precision
-* You can change a note's type on the Editor, it comes with two example types:
-  * Alt Animation: Forces an alt animation to play, useful for songs like Ugh/Stress
-  * Hey: Forces a "Hey" animation instead of the base Sing animation, if Boyfriend hits this note, Girlfriend will do a "Hey!" too.
-
-## Multiple editors to assist you in making your own Mod
-![Screenshot_3](./images/3.png)
-* Working both for Source code modding and Downloaded builds!
-
-## Story mode menu rework:
-![](./images/2.png)
-* Added a different BG to every song (less Tutorial)
-* All menu characters are now in individual spritesheets, makes modding it easier.
-
-## Credits menu
-![Screenshot_1](./images/1.png)
-(./images/7.png)
-* You can add a head icon, name, description and a Redirect link for when the player presses Enter while the item is currently selected.
-
-## Awards/Achievements
-* The engine comes with 16 example achievements that you can mess with and learn how it works (Check Achievements.hx and search for "checkForAchievement" on PlayState.hx)
-
-## Options menu:
-* You can change Note colors, Delay and Combo Offset, Controls and Preferences there.
- * On Preferences you can toggle Downscroll, Middlescroll, Anti-Aliasing, Framerate, Low Quality, Note Splashes, Flashing Lights, etc.
-
-## Other gameplay features:
-* When the enemy hits a note, their strum note also glows.
-* Lag doesn't impact the camera movement and player icon scaling anymore.
-* Some stuff based on Week 7's changes has been put in (Background colors on Freeplay, Note splashes)
-* You can reset your Score on Freeplay/Story Mode by pressing Reset button.
-* You can listen to a song or adjust Scroll Speed/Damage taken/etc. on Freeplay by pressing Space.
+* bbpanzu - Former Programmer
+* shubs - New input system
+* SqirraRNG - Crash handler and chart editor waveform base code
+* KadeDev - Fixed chart editor issues and submitted PRs
+* iFlicky - Composer for Psync and Tea Time, plus dialogue sound effects
+* PolybiusProxy - .MP4 video loading library (hxCodec)
+* Keoiki - Note splash animations
+* Smokey - Sprite atlas support
+* Nebula the Zorua - LUA JIT fork and partial Lua rewrites
