@@ -1,10 +1,13 @@
 package script.hscript;
 
+import backend.MusicBeatState;
+import backend.ModConfig;
 import haxe.io.Path;
 import flixel.addons.display.FlxRuntimeShader;
 import crowplexus.hscript.*;
 import crowplexus.hscript.Expr.Error;
 import crowplexus.hscript.Parser;
+import crowplexus.iris.Iris;
 import flixel.FlxG;
 import flixel.util.FlxColor;
 import Paths;
@@ -12,200 +15,825 @@ import Conductor;
 import ClientPrefs;
 import Character;
 import Alphabet;
-import script.lua.FunkinLua;
 import states.*;
-import script.tools.*;
-#if HSCRIPT_ALLOWED
+import substates.*;
+import flixel.FlxSprite;
+import flixel.text.FlxText;
+import flixel.sound.FlxSound;
+import flixel.util.FlxTimer;
+import flixel.tweens.FlxTween;
+import flixel.tweens.FlxEase;
+import flixel.effects.FlxFlicker;
+import flixel.group.FlxGroup;
+import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.group.FlxSpriteGroup;
+import flixel.util.FlxSpriteUtil;
+import flixel.util.FlxStringUtil;
+import flixel.graphics.frames.FlxAtlasFrames;
+import openfl.filters.ShaderFilter;
+import openfl.filters.ColorMatrixFilter;
+import mohong.TraceManager;
+import script.FunkinText;
+import script.FunkinSprite;
+import script.FunkinButton;
+import script.FunkinBar;
 
-enum HScriptType {
-    STATE;   
-    GLOBAL;     
-    PLAYSTATE;  
-    MODULE;     
-}
+#if LUA_ALLOWED
+import script.lua.FunkinLua;
+import psychlua.LuaUtils;
+import llua.Lua;
+import llua.LuaL;
+#end
+
+#if VIDEOS_ALLOWED
+#if (hxCodec >= "3.0.0")
+import hxcodec.flixel.FlxVideo;
+#elseif (hxCodec >= "2.6.1")
+import hxcodec.VideoHandler;
+#elseif (hxCodec == "2.6.0")
+import VideoHandler;
+#else
+import vlc.MP4Handler;
+#end
+#end
+
+#if HSCRIPT_ALLOWED
 
 class HScript
 {
-    public static var globalScripts:Array<HScript> = [];
-    private static var initialized:Bool = false;
-    
-    public static function initialize() {
-        if (initialized) return;
-        initialized = true;
-        loadGlobalScripts();
-        trace('HScript initialized with ${globalScripts.length} global scripts');
-    }
-    
-    private static function loadGlobalScripts() {
-        var filesPushed:Array<String> = [];
-        var foldersToCheck:Array<String> = [Paths.getPreloadPath('hscript/global/')];
+	public static var globalScripts:Array<HScript> = [];
+	public static var hscriptVersion:String = "0.2.0";
 
-        #if MODS_ALLOWED
-        foldersToCheck.insert(0, Paths.mods('hscript/global/'));
-        if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
-            foldersToCheck.insert(0, Paths.mods(Paths.currentModDirectory + '/hscript/global/'));
-
-        for(mod in Paths.getGlobalMods())
-            foldersToCheck.insert(0, Paths.mods(mod + '/hscript/global/'));
-        #end
-
-        for (folder in foldersToCheck) {
-            if(FileSystem.exists(folder)) {
-                for (file in FileSystem.readDirectory(folder)) {
-                    if(isHscriptFile(file) && !filesPushed.contains(file)) {
-                        try {
-                            var script = new HScript(folder + file);
-                            script.scriptType = GLOBAL;
-                            globalScripts.push(script);
-                            filesPushed.push(file);
-                        } catch (e:Dynamic) {
-                            trace('Failed to load global hscript: $file - $e');
-                        }
-                    }
-                }
-            }
-        }
-    }
-    
-    public static function callOnGlobalScript(event:String, args:Array<Dynamic> = null):Dynamic {
-        if (args == null) args = [];
-        var returnVal:Dynamic = FunkinLua.Function_Continue;
-        
-        for (script in globalScripts) {
-            if (script.closed) continue;
-            
-            var ret:Dynamic = script.call(event, args);
-            if(ret == FunkinLua.Function_StopHScript) {
-                returnVal = ret;
-                break;
-            }
-            
-            if(ret != FunkinLua.Function_Continue) {
-                returnVal = ret;
-            }
-        }
-        
-        return returnVal;
-    }
-    
-    public static function setOnGlobalScript(variable:String, arg:Dynamic) {
-        for (script in globalScripts) {
-            if (!script.closed) {
-                script.set(variable, arg);
-            }
-        }
-    }
-    
-    public static function cleanup() {
-        for (script in globalScripts) {
-            script.stop();
-        }
-        globalScripts = [];
-        initialized = false;
-    }
-    
-    public static function isHscriptFile(file:String):Bool {
-        return file.endsWith('.hx') || file.endsWith('.hscript') || 
-               file.endsWith('.hsc') || file.endsWith('.hxs');
-    }
-
-	public static var hscriptVersion:String = "0.1.2";
-	public var __importedPaths:Array<String> = [];
-    public var parser:Parser;
-    public var scriptDir:String = '';
-	public var modchartTexts:Map<String, FlxText> = new Map();
-    public var modchartSprites:Map<String, FlxSprite> = new Map();
-    public var modchartSounds:Map<String, FlxSound> = new Map();
 	public var interp:Interp;
+	public var parser:Parser;
 	public var scriptName:String = '';
+	public var scriptDir:String = '';
 	public var closed:Bool = false;
-	public var scriptType:HScriptType = STATE;
 
 	public var variables(get, never):Map<String, Dynamic>;
+	public var __importedPaths:Array<String> = [];
 
-	public function get_variables()
-	{
+	inline function get_variables():Map<String, Dynamic>
 		return interp.variables;
+
+	// ==================== Static Methods ====================
+
+	public static function initialize():Void {
+		Config.applyBlocklist();
+		loadGlobalScripts();
+		TraceManager.info('trace.hscript.initialized', 'HScript initialized with {} global scripts', [globalScripts.length]);
+
+		// ── 模组切换时切换 FPS 样式（默认使用新版 FPS） ──
+		// 只有模组通过 pack.json 明确要求旧版样式时才会切换.
+		// 全局脚本重载由 ModState.applyModPackConfig() 在配置应用后触发
+		Paths.onModDirectoryChanged.push(function(oldMod:String, newMod:String) {
+			var useOld:Bool = false;
+			if (newMod != null && newMod.length > 0)
+			{
+				var cfg = ModConfig.load(newMod);
+				useOld = cfg.useOldFPS;
+			}
+			Main.useOldFPS = useOld;
+			if (Main.fpsVar != null) {
+				Main.fpsVar.visible = ClientPrefs.data.showFPS && !useOld;
+				Main.oldFpsVar.visible = ClientPrefs.data.showFPS && useOld;
+			}
+			setOnGlobalScript('useOldFPS', useOld);
+		});
 	}
-	public function set(variable:String, data:Dynamic):Void {
-        if (closed) return;
-        interp.variables.set(variable, data);
-    }
-	function handleError(e:Dynamic) {
-        trace('HScript error: ' + e);
-        #if windows
-        if (!closed) lime.app.Application.current.window.alert(e, 'Error on hscript!');
-		return;
-        #end
-    }
 
-	public function new(?scriptPath:String = null)
+	static function loadGlobalScripts():Void {
+		var filesPushed:Array<String> = [];
+		var foldersToCheck:Array<String> = [Paths.getPreloadPath('hscripts/')];
+
+		#if MODS_ALLOWED
+		foldersToCheck.insert(0, Paths.mods('hscripts/'));
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			foldersToCheck.insert(0, Paths.mods(Paths.currentModDirectory + '/hscripts/'));
+		for (mod in Paths.getGlobalMods())
+			foldersToCheck.insert(0, Paths.mods(mod + '/hscripts/'));
+		#end
+
+		for (folder in foldersToCheck) {
+			if (!FileSystem.exists(folder)) continue;
+			for (file in FileSystem.readDirectory(folder)) {
+				if (!isHscriptFile(file) || filesPushed.contains(file)) continue;
+				try {
+					var script = new HScript(folder + file);
+					globalScripts.push(script);
+					filesPushed.push(file);
+				} catch (e:Dynamic) {
+					TraceManager.error('trace.hscript.globalFailed', 'Failed to load global hscript: {} - {}', [file, e]);
+				}
+			}
+		}
+	}
+
+	/** 重载所有全局脚本（模组切换时调用） **/
+	public static function reloadGlobalScripts():Void {
+		for (s in globalScripts) s.stop();
+		globalScripts = [];
+		loadGlobalScripts();
+	}
+
+	/**
+	 * 在 Main 启动时加载模组根目录下的引导脚本（boot.hx / Main.hx）。
+	 * 这些脚本在 TitleState 之前执行，用于模组早期初始化。
+	 */
+	public static function loadModBootScript():Void
 	{
-		interp = new Interp();
+		#if MODS_ALLOWED
+		var bootNames:Array<String> = ['Main.hx', 'boot.hx', 'boot.hscript', 'boot.hxs'];
+		var searched:Array<String> = [];
+
+		// 当前激活的 mod 目录
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+		{
+			var modRoot:String = Paths.mods(Paths.currentModDirectory + '/');
+			searched.push(modRoot);
+			for (bootName in bootNames)
+			{
+				var bootPath:String = modRoot + bootName;
+				if (FileSystem.exists(bootPath))
+				{
+					try {
+						var script = new HScript(bootPath);
+						globalScripts.push(script);
+						TraceManager.info('trace.hscript.bootLoaded', 'Loaded boot script: {}', [bootPath]);
+					} catch (e:Dynamic) {
+						TraceManager.error('trace.hscript.bootFailed', 'Failed to load boot script: {} - {}', [bootPath, e]);
+					}
+					break;
+				}
+			}
+		}
+
+		// 全局 mods 目录
+		for (mod in Paths.getGlobalMods())
+		{
+			var modRoot:String = Paths.mods(mod + '/');
+			if (searched.contains(modRoot)) continue;
+			searched.push(modRoot);
+			for (bootName in bootNames)
+			{
+				var bootPath:String = modRoot + bootName;
+				if (FileSystem.exists(bootPath))
+				{
+					try {
+						var script = new HScript(bootPath);
+						globalScripts.push(script);
+						TraceManager.info('trace.hscript.bootLoaded', 'Loaded boot script: {}', [bootPath]);
+					} catch (e:Dynamic) {
+						TraceManager.error('trace.hscript.bootFailed', 'Failed to load boot script: {} - {}', [bootPath, e]);
+					}
+					break;
+				}
+			}
+		}
+
+		// 内置 preload 路径
+		var preloadRoot:String = Paths.getPreloadPath('');
+		if (!searched.contains(preloadRoot))
+		{
+			for (bootName in bootNames)
+			{
+				var bootPath:String = preloadRoot + bootName;
+				if (FileSystem.exists(bootPath))
+				{
+					try {
+						var script = new HScript(bootPath);
+						globalScripts.push(script);
+						TraceManager.info('trace.hscript.bootLoaded', 'Loaded boot script: {}', [bootPath]);
+					} catch (e:Dynamic) {
+						TraceManager.error('trace.hscript.bootFailed', 'Failed to load boot script: {} - {}', [bootPath, e]);
+					}
+					break;
+				}
+			}
+		}
+		#end
+	}
+
+	public static function callOnGlobalScript(event:String, args:Array<Dynamic> = null):Dynamic {
+		if (args == null) args = [];
+		var returnVal:Dynamic = FunkinLua.Function_Continue;
+
+		for (script in globalScripts) {
+			if (script.closed) continue;
+			var ret = script.call(event, args);
+			if (ret == FunkinLua.Function_StopHScript) return ret;
+			if (ret != FunkinLua.Function_Continue) returnVal = ret;
+		}
+		return returnVal;
+	}
+
+	public static function setOnGlobalScript(variable:String, arg:Dynamic):Void {
+		for (script in globalScripts) {
+			if (!script.closed) script.set(variable, arg);
+		}
+	}
+
+	public static function cleanup():Void {
+		for (script in globalScripts) script.stop();
+		globalScripts = [];
+	}
+
+	public static function isHscriptFile(file:String):Bool {
+		return file.endsWith('.hx') || file.endsWith('.hscript')
+			|| file.endsWith('.hsc') || file.endsWith('.hxs');
+	}
+
+	/**
+	 * 从多个文件夹收集所有 HScript 文件并加载，返回新实例数组。
+	 * filesPushed 用于跨批次去重。
+	 */
+	public static function collectFromFolders(folders:Array<String>, filesPushed:Array<String>):Array<HScript>
+	{
+		var result:Array<HScript> = [];
+		for (folder in folders)
+		{
+			if (!FileSystem.exists(folder)) continue;
+			for (file in FileSystem.readDirectory(folder))
+			{
+				if (!isHscriptFile(file) || filesPushed.contains(file)) continue;
+				try {
+					result.push(new HScript(folder + file));
+					filesPushed.push(file);
+				} catch (e:Dynamic) {
+					TraceManager.error('trace.hscript.collectFailed', 'Failed: {} - {}', [file, e]);
+				}
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * 加载指定路径列表中的单个 HScript 文件，返回新实例数组。
+	 */
+	public static function collectStandalone(paths:Array<String>, filesPushed:Array<String>):Array<HScript>
+	{
+		var result:Array<HScript> = [];
+		for (path in paths)
+		{
+			if (!FileSystem.exists(path) || filesPushed.contains(path)) continue;
+			try {
+				result.push(new HScript(path));
+				filesPushed.push(path);
+			} catch (e:Dynamic) {
+				TraceManager.error('trace.hscript.collectFailed', 'Failed: {} - {}', [path, e]);
+			}
+		}
+		return result;
+	}
+
+	// ==================== Instance ====================
+
+	public function new(?scriptPath:String = null) {
+		interp = new PlayStateInterp();
 		parser = new Parser();
-        parser.allowTypes = true;
-        parser.allowJSON = true;
-        
-        if (scriptPath != null) {
-            scriptDir = Path.directory(scriptPath);
-            __importedPaths.push(scriptPath);
-        }
-        setupBasicVariables();
+		parser.allowTypes = true;
+		parser.allowJSON = true;
+		parser.allowMetadata = true;
 
-        if (scriptPath != null) {
-            loadScriptFromPath(scriptPath);
-        }
-        call('onCreate', []);
-	}	
-	private function loadScriptFromPath(scriptPath:String) {
-        try {
-            var scriptContent:String = File.getContent(scriptPath);
-            execute(scriptContent);
-            trace('hscript file loaded successfully: $scriptPath');
-            
-            
-        } catch (e:Dynamic) {
-            handleError('Failed to load script: $e');
-			#if windows
-            lime.app.Application.current.window.alert('Failed to load script: $e', 'Error on hscript!');
-            #end
+		if (scriptPath != null) {
+			scriptDir = Path.directory(scriptPath);
+			scriptName = Path.withoutDirectory(scriptPath);
+			__importedPaths.push(scriptPath);
+		} else {
+			scriptName = '<inline>';
+		}
+
+		try {
+			setupVariables();
+		} catch (e:Dynamic) {
+			handleError('Failed to setup variables: $e');
 			return;
-        }
-    }
+		}
 
-	public function setupBasicVariables()
-	{
-		if (PlayState.instance != null){
+		if (scriptPath != null) {
+			try {
+				loadScriptFromPath(scriptPath);
+			} catch (e:Dynamic) {
+				handleError('Failed to load script "$scriptPath": $e');
+				closed = true;
+				return;
+			}
+		}
+
+		if (!closed) {
+			try {
+				call('onCreate', []);
+			} catch (e:Dynamic) {
+				handleError('Failed to call onCreate: $e');
+				closed = true;
+			}
+		}
+	}
+
+	/**
+	 * Get the default variable bindings for hscript.
+	 * Uses a Map so subclasses / external code can extend it.
+	 */
+	public static function getDefaultVariables():Map<String, Dynamic> {
+		var vars:Map<String, Dynamic> = [
+			// Haxe std
+			"Math" => Math, "Std" => Std, "StringTools" => StringTools,
+			"Sys" => Sys, "Type" => Type, "Reflect" => Reflect,
+			"Date" => Date, "DateTools" => DateTools, "Lambda" => Lambda,
+			"EReg" => EReg, "Xml" => Xml, "Json" => haxe.Json,
+
+			// Flixel
+			"FlxG" => flixel.FlxG, "FlxMath" => flixel.math.FlxMath,
+			"FlxSprite" => flixel.FlxSprite, "FlxCamera" => flixel.FlxCamera,
+			"FlxTimer" => FlxTimer, "FlxTween" => FlxTween, "FlxEase" => FlxEase,
+			"FlxText" => FlxText, "FlxSound" => FlxSound,
+			"FlxGroup" => FlxGroup, "FlxTypedGroup" => FlxTypedGroup,
+			"FlxSpriteGroup" => FlxSpriteGroup, "FlxStringUtil" => FlxStringUtil,
+			"FlxSpriteUtil" => FlxSpriteUtil, "FlxAtlasFrames" => FlxAtlasFrames,
+			"FlxColor" => CustomFlxColor,
+
+			// Engine
+			"Paths" => Paths, "Conductor" => Conductor, "ClientPrefs" => ClientPrefs,
+			"Dialog" => backend.Dialog,
+			"Character" => Character, "Alphabet" => Alphabet,
+			"FunkinText" => FunkinText,
+			"FunkinSprite" => FunkinSprite,
+			"FunkinButton" => FunkinButton,
+			"FunkinBar" => FunkinBar,
+
+			// States
+			"MusicBeatState" => MusicBeatState, "MusicBeatSubstate" => MusicBeatSubstate,
+			"ModState" => ModState, "ModSubState" => ModSubState,
+			"PlayState" => PlayState, "FreeplayState" => FreeplayState,
+			"StoryMenuState" => StoryMenuState, "TitleState" => TitleState,
+			"CreditsState" => CreditsState, "MainMenuState" => MainMenuState,
+			"HScript" => HScript,
+
+			// Shaders
+			"ShaderFilter" => ShaderFilter, "ColorMatrixFilter" => ColorMatrixFilter,
+			#if (!flash && sys) "FlxRuntimeShader" => FlxRuntimeShader, #end
+			"VideoSpriteManager" => backend.VideoSpriteManager,
+
+			// Video playback classes (for LUA addHaxeLibrary / runHaxeCode compatibility)
+			"Event" => openfl.events.Event,
+
+			// Script controls
+			"Function_Stop" => FunkinLua.Function_Stop,
+			"Function_Continue" => FunkinLua.Function_Continue,
+			"Function_StopLua" => FunkinLua.Function_StopLua,
+			"Function_StopHScript" => FunkinLua.Function_StopHScript,
+			"Function_StopAll" => FunkinLua.Function_StopAll,
+
+			// Shorthand
+			"add" => function(obj:Dynamic) FlxG.state.add(obj),
+			"insert" => function(pos:Int, obj:Dynamic) FlxG.state.insert(pos, obj),
+			"remove" => function(obj:Dynamic, splice:Bool = false) FlxG.state.remove(obj, splice),
+
+			// Version info
+			"hscriptVersion" => hscriptVersion,
+			"version" => MainMenuState.psychEngineVersion.trim(),
+			"screenWidth" => FlxG.width, "screenHeight" => FlxG.height,
+		];
+
+		#if windows
+		vars.set("buildTarget", "windows");
+		#elseif linux
+		vars.set("buildTarget", "linux");
+		#elseif mac
+		vars.set("buildTarget", "mac");
+		#elseif html5
+		vars.set("buildTarget", "browser");
+		#elseif android
+		vars.set("buildTarget", "android");
+		#else
+		vars.set("buildTarget", "unknown");
+		#end
+
+		// Additional commonly‑needed types (from Codename reference)
+		vars.set("FlxObject", flixel.FlxObject);
+		vars.set("FlxBasic", flixel.FlxBasic);
+		vars.set("FlxAxes", flixel.util.FlxAxes);
+		vars.set("FlxPoint", flixel.math.FlxPoint);
+		vars.set("FlxButton", flixel.ui.FlxButton);
+		vars.set("FlxBar", flixel.ui.FlxBar);
+		vars.set("FlxRect", flixel.math.FlxRect);
+		vars.set("FlxRandom", flixel.math.FlxRandom);
+		vars.set("FlxTextBorderStyle", flixel.text.FlxText.FlxTextBorderStyle);
+		vars.set("Application", lime.app.Application);
+		vars.set("Assets", openfl.utils.Assets);
+		vars.set("CoolUtil", CoolUtil);
+		vars.set("WeekData", WeekData);
+		vars.set("Language", Language);
+		vars.set("LoadingState", LoadingState);
+		vars.set("Highscore", Highscore);
+		vars.set("ClientPrefs", ClientPrefs);
+		vars.set("ModConfig", ModConfig);
+
+		// Convenience: change the OS window icon from any script
+		#if (desktop && MODS_ALLOWED)
+		vars.set("setModWindowIcon", function(?modFolder:String) ModConfig.setWindowIcon(modFolder));
+		#end
+
+		// FlxAxes constants for screenCenter()
+		vars.set("X", flixel.util.FlxAxes.X);
+		vars.set("Y", flixel.util.FlxAxes.Y);
+		vars.set("XY", flixel.util.FlxAxes.XY);
+
+		// FlxText alignment constants (commonly used in setFormat calls)
+		vars.set("LEFT", flixel.text.FlxText.FlxTextAlign.LEFT);
+		vars.set("CENTER", flixel.text.FlxText.FlxTextAlign.CENTER);
+		vars.set("RIGHT", flixel.text.FlxText.FlxTextAlign.RIGHT);
+
+		// FlxText border style constants
+		vars.set("OUTLINE", flixel.text.FlxText.FlxTextBorderStyle.OUTLINE);
+		vars.set("OUTLINE_FAST", flixel.text.FlxText.FlxTextBorderStyle.OUTLINE_FAST);
+		vars.set("SHADOW", flixel.text.FlxText.FlxTextBorderStyle.SHADOW);
+		vars.set("NONE", flixel.text.FlxText.FlxTextBorderStyle.NONE);
+
+		// ── Haxe std library 完整基类 ──
+		// 数据结构
+		vars.set("IntMap", haxe.ds.IntMap);
+		vars.set("StringMap", haxe.ds.StringMap);
+		vars.set("ObjectMap", haxe.ds.ObjectMap);
+		vars.set("EnumValueMap", haxe.ds.EnumValueMap);
+		vars.set("HaxeList", haxe.ds.List);       // List 是保留字，用别名
+		vars.set("GenericStack", haxe.ds.GenericStack);
+		// haxe.ds.Option/Either are abstract types, can't use as values
+		vars.set("SortedList", haxe.ds.List);   // 别名
+
+		// I/O
+		vars.set("Bytes", haxe.io.Bytes);
+		vars.set("Input", haxe.io.Input);
+		vars.set("Output", haxe.io.Output);
+		vars.set("HaxePath", haxe.io.Path);
+		vars.set("Eof", haxe.io.Eof);
+
+		// 密码学
+		vars.set("Base64", haxe.crypto.Base64);
+		vars.set("Md5", haxe.crypto.Md5);
+		vars.set("Sha1", haxe.crypto.Sha1);
+		vars.set("Sha256", haxe.crypto.Sha256);
+		vars.set("Adler32", haxe.crypto.Adler32);
+		vars.set("CrC32", haxe.crypto.Crc32);
+
+		#if sys
+		// 文件系统
+		vars.set("File", sys.io.File);
+		vars.set("FileSystem", sys.FileSystem);
+		vars.set("FileInput", sys.io.FileInput);
+		vars.set("FileOutput", sys.io.FileOutput);
+		vars.set("Process", sys.io.Process);
+		#end
+
+		// ── Lime / OpenFL ──
+		vars.set("Matrix", openfl.geom.Matrix);
+		vars.set("Point", openfl.geom.Point);
+		vars.set("Rectangle", openfl.geom.Rectangle);
+		vars.set("ColorTransform", openfl.geom.ColorTransform);
+		vars.set("Transform", openfl.geom.Transform);
+		vars.set("DisplayObject", openfl.display.DisplayObject);
+		vars.set("DisplayObjectContainer", openfl.display.DisplayObjectContainer);
+		vars.set("Sprite", openfl.display.Sprite);
+		vars.set("Stage", openfl.display.Stage);
+		vars.set("Bitmap", openfl.display.Bitmap);
+		vars.set("BitmapData", openfl.display.BitmapData);
+		vars.set("Graphics", openfl.display.Graphics);
+		vars.set("MovieClip", openfl.display.MovieClip);
+		vars.set("Shader", openfl.display.Shader);
+		vars.set("ShaderParameter", openfl.display.ShaderParameter);
+		vars.set("MouseEvent", openfl.events.MouseEvent);
+		vars.set("KeyboardEvent", openfl.events.KeyboardEvent);
+		vars.set("TouchEvent", openfl.events.TouchEvent);
+		vars.set("FocusEvent", openfl.events.FocusEvent);
+		vars.set("IOErrorEvent", openfl.events.IOErrorEvent);
+		vars.set("SecurityErrorEvent", openfl.events.SecurityErrorEvent);
+		vars.set("ProgressEvent", openfl.events.ProgressEvent);
+		vars.set("HTTPStatusEvent", openfl.events.HTTPStatusEvent);
+		vars.set("DataEvent", openfl.events.DataEvent);
+		vars.set("SampleDataEvent", openfl.events.SampleDataEvent);
+		vars.set("ShaderInput", openfl.display.ShaderInput);
+		vars.set("FPS", openfl.display.FPS);
+		vars.set("OldFPS", openfl.display.OldFPS);
+		vars.set("fpsVar", Main.fpsVar);
+		vars.set("oldFpsVar", Main.oldFpsVar);
+		vars.set("useOldFPS", false);
+
+		// 切换 FPS 样式：true = 旧版简约样式（OldFPS），false = 新版样式
+		vars.set("setOldFPS", function(useOld:Bool) {
+			Main.useOldFPS = useOld;
+			if (Main.fpsVar != null) {
+				Main.fpsVar.visible = ClientPrefs.data.showFPS && !useOld;
+				Main.oldFpsVar.visible = ClientPrefs.data.showFPS && useOld;
+			}
+			HScript.setOnGlobalScript("useOldFPS", useOld);
+		});
+
+		// 强制覆盖 OldFPS 显示文字（null = 恢复正常显示）
+		vars.set("setFpsOverride", function(?text:String = null, ?color:Int = null) {
+			if (Main.oldFpsVar != null) {
+				Main.oldFpsVar.forceText = text;
+				Main.oldFpsVar.forceColor = color;
+			}
+		});
+
+		// 快捷：让 OldFPS 闪烁显示诡异文字 n 秒
+		vars.set("fpsGlitch", function(text:String, color:Int, duration:Float) {
+			if (Main.oldFpsVar == null) return;
+			Main.oldFpsVar.forceText = text;
+			Main.oldFpsVar.forceColor = color;
+			haxe.Timer.delay(function() {
+				if (Main.oldFpsVar != null) {
+					Main.oldFpsVar.forceText = null;
+					Main.oldFpsVar.forceColor = null;
+				}
+			}, Std.int(duration * 1000));
+		});
+
+		// ── 加载模组中任意路径的文本文件 ──
+		// path 是相对于 mod 根目录或 assets 根目录的路径，例如 "text/crash_report.txt"
+		// 搜索顺序：mods/<currentMod>/<path> → mods/<path> → assets/<path>
+		vars.set("loadModTextFile", function(path:String):String {
+			#if sys
+			var paths:Array<String> = [];
+			#if MODS_ALLOWED
+			if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+				paths.push(Paths.mods(Paths.currentModDirectory + '/' + path));
+			for (mod in Paths.getGlobalMods())
+				paths.push(Paths.mods(mod + '/' + path));
+			#end
+			paths.push(Paths.getPreloadPath(path));
+			for (p in paths) {
+				if (FileSystem.exists(p))
+					return File.getContent(p);
+			}
+			#end
+			return '';
+		});
+
+		// ── 解析 text 配置文件（#注释行、key=value格式） ──
+		// 可选 prefix 过滤只返回指定前缀的行
+		vars.set("parseTextConfig", function(content:String, ?prefix:String = null):Dynamic {
+			var result = {};
+			if (content == null || content.length == 0) return result;
+			var lines = content.split("\n");
+			for (line in lines) {
+				line = StringTools.trim(line);
+				if (line.length == 0 || line.startsWith("#")) continue;
+				var eqIdx = line.indexOf("=");
+				if (eqIdx < 0) continue;
+				var key = StringTools.trim(line.substr(0, eqIdx));
+				var val = StringTools.trim(line.substr(eqIdx + 1));
+				if (prefix != null) {
+					if (!key.startsWith(prefix)) continue;
+					key = key.substr(prefix.length);
+				}
+				Reflect.setField(result, key, val);
+			}
+			return result;
+		});
+
+		// 获取当前正在显示的 FPS 样式名（"new" / "old"）
+		vars.set("getFpsStyle", function():String {
+			return Main.useOldFPS ? "old" : "new";
+		});
+
+		// ── OldPauseSubState 相关变量 ──
+		vars.set("OldPauseSubState", substates.OldPauseSubState);
+		vars.set("useOldPause", ClientPrefs.data.oldPauseMenu);
+
+		// 切换暂停界面样式：true = 旧版，false = 新版
+		// hscript 优先级高于设置（hscripts override settings）
+		vars.set("setOldPause", function(useOld:Bool) {
+			Main.useOldPause = useOld;
+			HScript.setOnGlobalScript("useOldPause", useOld);
+		});
+
+		// 重置 hscript 覆盖，回到设置值
+		vars.set("resetOldPause", function() {
+			Main.useOldPause = null;
+			HScript.setOnGlobalScript("useOldPause", ClientPrefs.data.oldPauseMenu);
+		});
+
+		vars.set("language", ClientPrefs.data.language);
+		vars.set("customSubstate", CustomSubstate.instance);
+		vars.set("customSubstateName", CustomSubstate.name);
+
+		return vars;
+	}
+
+	function setupVariables():Void {
+		// ── Default bindings ──
+		try {
+			var defaults = getDefaultVariables();
+			for (k => v in defaults)
+				set(k, v);
+		} catch (e:Dynamic) {
+			handleError('setupVariables → getDefaultVariables: $e');
+			return;
+		}
+
+		// Self reference
+		set('this', this);
+
+		// Pre-register MP4Handler/VideoHandler so LUA addHaxeLibrary/runHaxeCode works.
+		// Use direct compiled references (not Type.resolveClass) to guarantee the class is available.
+		#if VIDEOS_ALLOWED
+		try {
+		#if (hxCodec >= "3.0.0")
+		set('MP4Handler', hxcodec.flixel.FlxVideo);
+		#elseif (hxCodec >= "2.6.1")
+		set('MP4Handler', hxcodec.VideoHandler);
+		#elseif (hxCodec == "2.6.0")
+		set('MP4Handler', VideoHandler);
+		#else
+		set('MP4Handler', vlc.MP4Handler);
+		#end
+		} catch (e:Dynamic) {
+			handleError('setupVariables → MP4Handler: $e');
+			return;
+		}
+		#end
+
+		// importScript
+		set('importScript', function(path:String):Dynamic {
+			if (closed) return null;
+			try {
+				var fullPath = path;
+				if (!Path.isAbsolute(path))
+					fullPath = Path.join([scriptDir, path]);
+
+				var foundPath:String = null;
+				for (ext in ['hx', 'hscript', 'hsc', 'hxs']) {
+					var testPath = '$fullPath.$ext';
+					if (FileSystem.exists(testPath)) { foundPath = testPath; break; }
+					var assetsPath = 'assets/$path.$ext';
+					if (FileSystem.exists(assetsPath)) { foundPath = assetsPath; break; }
+				}
+
+				if (foundPath == null) {
+					TraceManager.warn('trace.hscript.notFound', 'HScript: Could not find script: {}', [path]);
+					return null;
+				}
+				if (__importedPaths.contains(foundPath)) {
+					TraceManager.debug('trace.hscript.alreadyImported', 'HScript: Already imported: {}', [foundPath]);
+					return null;
+				}
+
+				var content = File.getContent(foundPath);
+				__importedPaths.push(foundPath);
+				var oldDir = scriptDir;
+				scriptDir = Path.directory(foundPath);
+				var result = execute(content);
+				scriptDir = oldDir;
+				return result;
+			} catch (e:Dynamic) {
+				handleError('Error importing "$path": $e');
+				return null;
+			}
+		});
+
+		// State reference (allows hscript to access current MusicBeatState/MusicBeatSubstate)
+		try {
+			set('state', (FlxG.state != null) ? FlxG.state : this);
+		} catch (e:Dynamic) { handleError('setupVariables → state: $e'); return; }
+		set('getState', function():Dynamic return FlxG.state);
+
+		// Lua bridge (independent per-state, uses FunkinLua)
+		#if LUA_ALLOWED
+		try {
+		set('runLuaCode', function(code:String):Dynamic {
+			try {
+				var l = LuaL.newstate();
+				LuaL.openlibs(l);
+				Lua.init_callbacks(l);
+				LuaL.dostring(l, code);
+				var result = Lua.tostring(l, -1);
+				Lua.close(l);
+				return result;
+			} catch (e:Dynamic) { return null; }
+		});
+		set('FunkinLua', FunkinLua);
+		set('LuaUtils', LuaUtils);
+		set('LuaApi', LuaApi);
+		} catch (e:Dynamic) { handleError('setupVariables → Lua: $e'); return; }
+		#end
+
+		// Input
+		set('keyJustPressed', function(name:String) {
+			if (PlayState.instance == null) return false;
+			return switch(name) {
+				case 'left': PlayState.instance.getControl('NOTE_LEFT_P');
+				case 'down': PlayState.instance.getControl('NOTE_DOWN_P');
+				case 'up': PlayState.instance.getControl('NOTE_UP_P');
+				case 'right': PlayState.instance.getControl('NOTE_RIGHT_P');
+				case 'accept': PlayState.instance.getControl('ACCEPT');
+				case 'back': PlayState.instance.getControl('BACK');
+				case 'pause': PlayState.instance.getControl('PAUSE');
+				case 'reset': PlayState.instance.getControl('RESET');
+				case 'space': FlxG.keys.justPressed.SPACE;
+				default: false;
+			}
+		});
+		set('keyPressed', function(name:String) {
+			if (PlayState.instance == null) return false;
+			return switch(name) {
+				case 'left': PlayState.instance.getControl('NOTE_LEFT');
+				case 'down': PlayState.instance.getControl('NOTE_DOWN');
+				case 'up': PlayState.instance.getControl('NOTE_UP');
+				case 'right': PlayState.instance.getControl('NOTE_RIGHT');
+				case 'space': FlxG.keys.pressed.SPACE;
+				default: false;
+			}
+		});
+		set('keyReleased', function(name:String) {
+			if (PlayState.instance == null) return false;
+			return switch(name) {
+				case 'left': PlayState.instance.getControl('NOTE_LEFT_R');
+				case 'down': PlayState.instance.getControl('NOTE_DOWN_R');
+				case 'up': PlayState.instance.getControl('NOTE_UP_R');
+				case 'right': PlayState.instance.getControl('NOTE_RIGHT_R');
+				case 'space': FlxG.keys.justReleased.SPACE;
+				default: false;
+			}
+		});
+
+		set('keyboardJustPressed', function(name:String) return Reflect.getProperty(FlxG.keys.justPressed, name));
+		set('keyboardPressed', function(name:String) return Reflect.getProperty(FlxG.keys.pressed, name));
+		set('keyboardReleased', function(name:String) return Reflect.getProperty(FlxG.keys.justReleased, name));
+		set('anyGamepadJustPressed', function(name:String) return FlxG.gamepads.anyJustPressed(name));
+		set('anyGamepadPressed', function(name:String) return FlxG.gamepads.anyPressed(name));
+		set('anyGamepadReleased', function(name:String) return FlxG.gamepads.anyJustReleased(name));
+
+		set('gamepadAnalogX', function(id:Int, ?leftStick:Bool = true) {
+			var controller = FlxG.gamepads.getByID(id);
+			if (controller == null) return 0.0;
+			return controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+		});
+		set('gamepadAnalogY', function(id:Int, ?leftStick:Bool = true) {
+			var controller = FlxG.gamepads.getByID(id);
+			if (controller == null) return 0.0;
+			return controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
+		});
+		set('gamepadJustPressed', function(id:Int, name:String) {
+			var controller = FlxG.gamepads.getByID(id);
+			if (controller == null) return false;
+			return Reflect.getProperty(controller.justPressed, name) == true;
+		});
+		set('gamepadPressed', function(id:Int, name:String) {
+			var controller = FlxG.gamepads.getByID(id);
+			if (controller == null) return false;
+			return Reflect.getProperty(controller.pressed, name) == true;
+		});
+		set('gamepadReleased', function(id:Int, name:String) {
+			var controller = FlxG.gamepads.getByID(id);
+			if (controller == null) return false;
+			return Reflect.getProperty(controller.justReleased, name) == true;
+		});
+
+		// Bind PlayState instance if available
+		try {
+			bindPlayState();
+		} catch (e:Dynamic) {
+			handleError('setupVariables → bindPlayState: $e');
+			return;
+		}
+	}
+
+	/**
+	 * Bind PlayState-specific variables. Safe to call when PlayState is not ready.
+	 */
+	public function bindPlayState():Void {
+		if (PlayState.instance == null) return;
+		if (PlayState.SONG == null) return;
+		if (FlxG.sound.music == null) return;
+		if (ClientPrefs.data == null) return;
+
 		set('game', PlayState.instance);
-        set('curBpm', Conductor.bpm);
-        set('bpm', PlayState.SONG.bpm);
-        set('scrollSpeed', PlayState.SONG.speed);
-        set('crochet', Conductor.crochet);
-        set('stepCrochet', Conductor.stepCrochet);
-        set('songLength', FlxG.sound.music.length);
-        set('songName', PlayState.SONG.song);
-        set('songPath', Paths.formatToSongPath(PlayState.SONG.song));
-        set('startedCountdown', false);
-        set('curStage', PlayState.SONG.stage);
-        set('compatibility_mode', ClientPrefs.data.compatibility_mode);
-        set('isStoryMode', PlayState.isStoryMode);
-        set('difficulty', PlayState.storyDifficulty);
+		set('curBpm', Conductor.bpm);
+		set('bpm', PlayState.SONG.bpm);
+		set('scrollSpeed', PlayState.SONG.speed);
+		set('crochet', Conductor.crochet);
+		set('stepCrochet', Conductor.stepCrochet);
+		set('songLength', FlxG.sound.music.length);
+		set('songName', PlayState.SONG.song);
+		set('songPath', Paths.formatToSongPath(PlayState.SONG.song));
+		set('startedCountdown', false);
+		set('curStage', PlayState.SONG.stage);
+		set('compatibility_mode', ClientPrefs.data.compatibility_mode);
+		set('isStoryMode', PlayState.isStoryMode);
+		set('difficulty', PlayState.storyDifficulty);
 
-        var difficultyName:String = CoolUtil.difficulties[PlayState.storyDifficulty];
-        set('difficultyName', difficultyName);
-        set('difficultyPath', Paths.formatToSongPath(difficultyName));
-        set('weekRaw', PlayState.storyWeek);
-        set('week', WeekData.weeksList[PlayState.storyWeek]);
-        set('seenCutscene', PlayState.seenCutscene);
-        
-        set('boyfriend', PlayState.instance.boyfriend);
-        set('dad', PlayState.instance.dad);
-        set('gf', PlayState.instance.gf);
-        set('camGame', PlayState.instance.camGame);
-        set('camHUD', PlayState.instance.camHUD);
-        set('camOther', PlayState.instance.camOther);
+		var diffName = CoolUtil.difficulties[PlayState.storyDifficulty];
+		set('difficultyName', diffName);
+		set('difficultyPath', Paths.formatToSongPath(diffName));
+		set('weekRaw', PlayState.storyWeek);
+		set('week', WeekData.weeksList[PlayState.storyWeek]);
+		set('seenCutscene', PlayState.seenCutscene);
 
-		// Gameplay settings
+		// 不静态绑定 boyfriend/dad/gf/camXxx，
+		// 它们在 PlayState.create() 中创建较晚，初始为 null。
+		// PlayStateInterp.resolve() 会在运行时动态从 PlayState.instance 获取。
+
 		set('healthGainMult', PlayState.instance.healthGain);
 		set('healthLossMult', PlayState.instance.healthLoss);
 		set('playbackRate', PlayState.instance.playbackRate);
@@ -213,341 +841,124 @@ class HScript
 		set('botPlay', PlayState.instance.cpuControlled);
 		set('practice', PlayState.instance.practiceMode);
 		set('luattf', ClientPrefs.data.luattf);
-        set('addBehindGF', PlayState.instance.addBehindGF);
+		set('addBehindGF', PlayState.instance.addBehindGF);
 		set('addBehindDad', PlayState.instance.addBehindDad);
 		set('addBehindBF', PlayState.instance.addBehindBF);
 
 		set('setVar', function(name:String, value:Dynamic)
-		{
-			PlayState.instance.variables.set(name, value);
-		});
-		set('getVar', function(name:String)
-		{
-			var result:Dynamic = null;
-			if(PlayState.instance.variables.exists(name)) result = PlayState.instance.variables.get(name);
-			return result;
-		});
-		set('removeVar', function(name:String)
-		{
-			if(PlayState.instance.variables.exists(name))
-			{
+			PlayState.instance.variables.set(name, value));
+		set('getVar', function(name:String):Dynamic
+			return PlayState.instance.variables.exists(name) ? PlayState.instance.variables.get(name) : null);
+		set('removeVar', function(name:String):Bool {
+			if (PlayState.instance.variables.exists(name)) {
 				PlayState.instance.variables.remove(name);
 				return true;
 			}
 			return false;
 		});
-		}
-
-
-		set('MusicBeatState', MusicBeatState);
-		set('MusicBeatSubstate', MusicBeatSubstate);
-		set('FreeplayState', FreeplayState);
-		set('StoryMenuState', StoryMenuState);
-		set('TitleState', TitleState);
-		set('CreditsState', CreditsState);
-		set('MainMenuState', MainMenuState);
-
-        set('PlayState', PlayState);
-        set('HScript', HScript);
-		set('hsciptVersion', hscriptVersion);
-		set('FlxG', flixel.FlxG);
-		set('FlxMath', flixel.math.FlxMath);
-
-		set("Math",	Math);
-		set("Std", Std);
-		set("StringTools", StringTools);
-		set("Sys", Sys);
-		set("Type", Type);
-		set("Reflect", Reflect);
-		set("Date", Date);
-		set("DateTools", DateTools);
-		set("Lambda", Lambda);
-		set("EReg", EReg);
-		set("Xml", Xml);
-		set("Json", haxe.Json);
-
-		set('FlxSprite', flixel.FlxSprite);
-		set('FlxSpriteUtil', flixel.util.FlxSpriteUtil);
-		set('FlxCamera', flixel.FlxCamera);
-		set('FlxTimer', flixel.util.FlxTimer);
-		set('FlxTween', flixel.tweens.FlxTween);
-		set('FlxEase', flixel.tweens.FlxEase);
-		set('FlxText', flixel.text.FlxText);
-		set('FlxSound', flixel.sound.FlxSound);
-		set('FlxGroup', flixel.group.FlxGroup);
-		set('FlxTypedGroup', flixel.group.FlxTypedGroup);
-		set('FlxSpriteGroup', flixel.group.FlxSpriteGroup);
-		set('FlxStringUtil', flixel.util.FlxStringUtil);
-		set('FlxAtlasFrames', flixel.graphics.frames.FlxAtlasFrames);	
-        set('FlxColor', CustomFlxColor);
-
-		set('Paths', Paths);
-		set('Conductor', Conductor);
-		set('ClientPrefs', ClientPrefs);
-		set('Character', Character);
-		set('Alphabet', Alphabet);
-		set('CustomSubstate', CustomSubstate);
-		#if (!flash && sys)
-		set('FlxRuntimeShader', FlxRuntimeShader);
-		#end
-		set('ShaderFilter', openfl.filters.ShaderFilter);
-        set('ColorMatrixFilter', openfl.filters.ColorMatrixFilter);
-		set('StringTools', StringTools);
-
-		set('this', this);
-
-        set('FunkinText', FunkinText);
-		
-		set('importScript', function(path:String):Dynamic {
-        if (closed) return null;
-        
-        try {
-
-            var fullPath:String = path;
-            if (!Path.isAbsolute(path)) {
-                fullPath = Path.join([scriptDir, path]);
-            }
-
-            var foundPath:String = null;
-            for (ext in ["hx", "hscript", "hsc", "hxs"]) {
-                var testPath = '$fullPath.$ext';
-                if (FileSystem.exists(testPath)) {
-                    foundPath = testPath;
-                    break;
-                }
-                
-                var assetsPath = 'assets/$path.$ext';
-                if (FileSystem.exists(assetsPath)) {
-                    foundPath = assetsPath;
-                    break;
-                }
-            }
-            
-            if (foundPath == null) {
-                trace('HScript error: Could not find script file: $path');
-                return null;
-            }
-            
-            if (__importedPaths.contains(foundPath)) {
-                trace('HScript: Script already imported: $foundPath');
-                return null;
-            }
-            
-            var scriptContent:String = File.getContent(foundPath);
-            __importedPaths.push(foundPath);
-            
-            var oldScriptDir = scriptDir;
-            scriptDir = Path.directory(foundPath);
-
-            var result = execute(scriptContent);
-
-            scriptDir = oldScriptDir;
-            
-            return result;
-        } catch (e:Dynamic) {
-            trace('HScript error importing script $path: ' + e);
-            return null;
-        }		
-   	 });
-
-		#if windows
-		set('buildTarget', 'windows');
-		#elseif linux
-		set('buildTarget', 'linux');
-		#elseif mac
-		set('buildTarget', 'mac');
-		#elseif html5
-		set('buildTarget', 'browser');
-		#elseif android
-		set('buildTarget', 'android');
-		#else
-		set('buildTarget', 'unknown');
-		#end
-		set('customSubstate', CustomSubstate.instance);
-		set('customSubstateName', CustomSubstate.name);
-
-		set('Function_Stop', FunkinLua.Function_Stop);
-		set('Function_Continue', FunkinLua.Function_Continue);
-		set('Function_StopLua', FunkinLua.Function_StopLua);
-		set('Function_StopHScript', FunkinLua.Function_StopHScript);
-		set('Function_StopAll', FunkinLua.Function_StopAll);
-		
-		set('add', FlxG.state.add);
-		set('insert', FlxG.state.insert);
-		set('remove', FlxG.state.remove);
 
 		set('luaDebugMode', false);
 		set('luaDeprecatedWarnings', true);
 		set('inChartEditor', false);
+	}
 
-		set('language', ClientPrefs.data.language);
-		set('screenWidth', FlxG.width);
-		set('screenHeight', FlxG.height);
-		set('version', MainMenuState.psychEngineVersion.trim());
-        set('keyboardJustPressed', function(name:String) return Reflect.getProperty(FlxG.keys.justPressed, name));
-        set('keyboardPressed', function(name:String) return Reflect.getProperty(FlxG.keys.pressed, name));
-        set('keyboardReleased', function(name:String) return Reflect.getProperty(FlxG.keys.justReleased, name));
+	// ==================== Script Execution ====================
 
-        set('anyGamepadJustPressed', function(name:String) return FlxG.gamepads.anyJustPressed(name));
-        set('anyGamepadPressed', function(name:String) return FlxG.gamepads.anyPressed(name));
-        set('anyGamepadReleased', function(name:String) return FlxG.gamepads.anyJustReleased(name));
+	function loadScriptFromPath(scriptPath:String):Void {
+		var content = File.getContent(scriptPath);
+		execute(content);
+		TraceManager.info('trace.hscript.loaded', 'HScript loaded: {}', [scriptPath]);
+	}
 
-        set('gamepadAnalogX', function(id:Int, ?leftStick:Bool = true)
-        {
-            var controller = FlxG.gamepads.getByID(id);
-            if (controller == null) return 0.0;
-            return controller.getXAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-        });
-        set('gamepadAnalogY', function(id:Int, ?leftStick:Bool = true)
-        {
-            var controller = FlxG.gamepads.getByID(id);
-            if (controller == null) return 0.0;
-            return controller.getYAxis(leftStick ? LEFT_ANALOG_STICK : RIGHT_ANALOG_STICK);
-        });
-        set('gamepadJustPressed', function(id:Int, name:String)
-        {
-            var controller = FlxG.gamepads.getByID(id);
-            if (controller == null) return false;
-            return Reflect.getProperty(controller.justPressed, name) == true;
-        });
-        set('gamepadPressed', function(id:Int, name:String)
-        {
-            var controller = FlxG.gamepads.getByID(id);
-            if (controller == null) return false;
-            return Reflect.getProperty(controller.pressed, name) == true;
-        });
-        set('gamepadReleased', function(id:Int, name:String)
-        {
-            var controller = FlxG.gamepads.getByID(id);
-            if (controller == null) return false;
-            return Reflect.getProperty(controller.justReleased, name) == true;
-        });
-
-        set('keyJustPressed', function(name:String) {
-			var key:Bool = false;
-			switch(name) {
-				case 'left': key = PlayState.instance.getControl('NOTE_LEFT_P');
-				case 'down': key = PlayState.instance.getControl('NOTE_DOWN_P');
-				case 'up': key = PlayState.instance.getControl('NOTE_UP_P');
-				case 'right': key = PlayState.instance.getControl('NOTE_RIGHT_P');
-				case 'accept': key = PlayState.instance.getControl('ACCEPT');
-				case 'back': key = PlayState.instance.getControl('BACK');
-				case 'pause': key = PlayState.instance.getControl('PAUSE');
-				case 'reset': key = PlayState.instance.getControl('RESET');
-				case 'space': key = FlxG.keys.justPressed.SPACE;//an extra key for convinience
-			}
-			return key;
-		});
-        set('keyPressed', function(name:String) {
-			var key:Bool = false;
-			switch(name) {
-				case 'left': key = PlayState.instance.getControl('NOTE_LEFT');
-				case 'down': key = PlayState.instance.getControl('NOTE_DOWN');
-				case 'up': key = PlayState.instance.getControl('NOTE_UP');
-				case 'right': key = PlayState.instance.getControl('NOTE_RIGHT');
-				case 'space': key = FlxG.keys.pressed.SPACE;//an extra key for convinience
-			}
-			return key;
-		});
-        set('keyReleased',  function(name:String) {
-			var key:Bool = false;
-			switch(name) {
-				case 'left': key = PlayState.instance.getControl('NOTE_LEFT_R');
-				case 'down': key = PlayState.instance.getControl('NOTE_DOWN_R');
-				case 'up': key = PlayState.instance.getControl('NOTE_UP_R');
-				case 'right': key = PlayState.instance.getControl('NOTE_RIGHT_R');
-				case 'space': key = FlxG.keys.justReleased.SPACE;//an extra key for convinience
-			}
-			return key;
-		});
-    }
-
-		public function execute(codeToRun:String):Dynamic
-	{
+	public function execute(codeToRun:String):Dynamic {
 		if (closed) return FunkinLua.Function_StopHScript;
-		
+		@:privateAccess parser.line = 1;
+		parser.allowTypes = true;
+		var expr = parser.parseString(codeToRun);
+		return interp.execute(expr);
+	}
+
+	public function call(func:String, args:Array<Dynamic>):Dynamic {
+		if (closed) return FunkinLua.Function_StopHScript;
 		try {
-			@:privateAccess
-			parser.line = 1;
-			parser.allowTypes = true;
-			return interp.execute(parser.parseString(codeToRun));
+			if (interp.variables.exists(func)) {
+				var f = interp.variables.get(func);
+				if (Reflect.isFunction(f))
+					return Reflect.callMethod(null, f, args);
+			}
+			return FunkinLua.Function_Continue;
 		} catch (e:Dynamic) {
-			trace('HScript error: ' + e);
+			handleError('Error calling "$func": $e');
 			return FunkinLua.Function_StopHScript;
 		}
 	}
 
-		public function call(func:String, args:Array<Dynamic>):Dynamic
-	{
-		if (closed) return FunkinLua.Function_StopHScript;
-		
-		try {
-			if (interp.variables.exists(func))
-			{
-				var f:Dynamic = interp.variables.get(func);
-				if (Reflect.isFunction(f))
-				{
-					return Reflect.callMethod(null, f, args);
-				}
-			}
-		} catch (e:Dynamic) {
-			trace('HScript error calling $func: ' + e);
-		}
-		return FunkinLua.Function_Continue;
+	public function set(variable:String, data:Dynamic):Void {
+		if (closed) return;
+		try { interp.variables.set(variable, data); }
+		catch (e:Dynamic) { handleError('Failed to set "$variable": $e'); }
 	}
 
-    
-    public function get(variable:String):Dynamic {
-        if (closed) return null;
-        return interp.variables.get(variable);
-    }
-    
-    public function exists(variable:String):Bool {
-        if (closed) return false;
-        return interp.variables.exists(variable);
-    }
-    
-    public function stop():Void {
-        if (closed) return;
-        
-        closed = true;
+	public function get(variable:String):Dynamic {
+		if (closed) return null;
+		try { return interp.variables.get(variable); }
+		catch (e:Dynamic) { handleError('Failed to get "$variable": $e'); return null; }
+	}
 
-        cleanupModchartObjects();
-        
-        interp = null;
-        parser = null;
-    }
-    
-    private function cleanupModchartObjects() {
-        for (tag in modchartTexts.keys()) {
-            var text:FlxText = modchartTexts.get(tag);
-            if (text != null) {
-                if (PlayState.instance != null) PlayState.instance.remove(text, true);
-                text.destroy();
-            }
-        }
-        modchartTexts.clear();
+	public function exists(variable:String):Bool {
+		if (closed) return false;
+		try { return interp.variables.exists(variable); }
+		catch (e:Dynamic) { return false; }
+	}
 
-        for (tag in modchartSprites.keys()) {
-            var sprite:FlxSprite = modchartSprites.get(tag);
-            if (sprite != null) {
-                if (PlayState.instance != null) PlayState.instance.remove(sprite, true);
-                sprite.destroy();
-            }
-        }
-        modchartSprites.clear();
+	/**
+	 * Reload the script from disk, preserving non‑function variables.
+	 * (Codename Engine style – useful during development.)
+	 */
+	public function reload():Void {
+		if (closed || scriptName == '<inline>') return;
+		var saved:Map<String, Dynamic> = [];
+		for (k => v in interp.variables)
+			if (!Reflect.isFunction(v))
+				saved[k] = v;
 
-        for (tag in modchartSounds.keys()) {
-            var sound:FlxSound = modchartSounds.get(tag);
-            if (sound != null) {
-                sound.stop();
-                sound.destroy();
-            }
-        }
-        modchartSounds.clear();
-    }
+		var oldPath = scriptDir + '/' + scriptName;
+		__importedPaths = [];
+		setupVariables();
+		loadScriptFromPath(oldPath);
 
-    
+		for (k => v in saved)
+			interp.variables.set(k, v);
+
+		call('onCreate', []);
+		TraceManager.info('trace.hscript.reloaded', 'Script reloaded: {}', [scriptName]);
+	}
+
+	public function stop():Void {
+		if (closed) return;
+		closed = true;
+		interp = null;
+		parser = null;
+	}
+
+	// ==================== Error Handling ====================
+
+	function handleError(message:String):Void {
+		if (closed) return;
+
+		// Always log via TraceManager so we can see the error in the console
+		// even when ClientPrefs / Language are not yet initialized.
+		var fullMessage:String = scriptDir + '/' + scriptName + '\n' + message;
+		TraceManager.error('trace.hscript.error', fullMessage);
+
+		if (ClientPrefs.data == null || !ClientPrefs.data.hscriptErrorHandling) return;
+		closed = true;
+
+		var dialogMessage:String = Language.get('script_hscript_error_in', 'HScript Error in') + ' ' + scriptDir + '/' + scriptName + '\n' + message;
+        backend.Dialog.show(Language.get('script_hscript_error', 'HScript Error'), dialogMessage, 'Error');
+		interp = null;
+		parser = null;
+	}
 }
 
 class CustomFlxColor {
@@ -555,7 +966,6 @@ class CustomFlxColor {
 	public static var BLACK(default, null):Int = FlxColor.BLACK;
 	public static var WHITE(default, null):Int = FlxColor.WHITE;
 	public static var GRAY(default, null):Int = FlxColor.GRAY;
-
 	public static var GREEN(default, null):Int = FlxColor.GREEN;
 	public static var LIME(default, null):Int = FlxColor.LIME;
 	public static var YELLOW(default, null):Int = FlxColor.YELLOW;
@@ -568,36 +978,84 @@ class CustomFlxColor {
 	public static var MAGENTA(default, null):Int = FlxColor.MAGENTA;
 	public static var CYAN(default, null):Int = FlxColor.CYAN;
 
-	public static function fromInt(Value:Int):Int 
-	{
+	public static function fromInt(Value:Int):Int
 		return cast FlxColor.fromInt(Value);
-	}
 
 	public static function fromRGB(Red:Int, Green:Int, Blue:Int, Alpha:Int = 255):Int
-	{
 		return cast FlxColor.fromRGB(Red, Green, Blue, Alpha);
-	}
+
 	public static function fromRGBFloat(Red:Float, Green:Float, Blue:Float, Alpha:Float = 1):Int
-	{	
 		return cast FlxColor.fromRGBFloat(Red, Green, Blue, Alpha);
-	}
 
 	public static inline function fromCMYK(Cyan:Float, Magenta:Float, Yellow:Float, Black:Float, Alpha:Float = 1):Int
-	{
 		return cast FlxColor.fromCMYK(Cyan, Magenta, Yellow, Black, Alpha);
-	}
 
 	public static function fromHSB(Hue:Float, Sat:Float, Brt:Float, Alpha:Float = 1):Int
-	{	
 		return cast FlxColor.fromHSB(Hue, Sat, Brt, Alpha);
-	}
+
 	public static function fromHSL(Hue:Float, Sat:Float, Light:Float, Alpha:Float = 1):Int
-	{	
 		return cast FlxColor.fromHSL(Hue, Sat, Light, Alpha);
-	}
+
 	public static function fromString(str:String):Int
-	{
 		return cast FlxColor.fromString(str);
+}
+
+/**
+ * 自定义 Interp，当变量在 locals/variables/imports 中都找不到时，
+ * 尝试从 PlayState.instance 动态解析。解决了 HScript 加载时
+ * boyfriend/dad/gf 等尚未创建导致绑定为 null 的问题。
+ */
+class PlayStateInterp extends crowplexus.hscript.Interp
+{
+	private var _instanceFields:Array<String> = [];
+
+	public function new()
+	{
+		super();
+		// 缓存 PlayState 的所有公开字段名，加速后续 resolve
+		try {
+			if (PlayState.instance != null)
+				_instanceFields = Type.getInstanceFields(Type.getClass(PlayState.instance));
+			else
+				_instanceFields = Type.getInstanceFields(PlayState);
+		} catch (e:Dynamic) {
+			_instanceFields = [];
+			mohong.TraceManager.error('trace.hscript.interpInit', 'PlayStateInterp init: $e');
+		}
+	}
+
+	override function resolve(id:String):Dynamic
+	{
+		// 1) 局部变量
+		if (locals.exists(id))
+		{
+			var l = locals.get(id);
+			return l.r;
+		}
+
+		// 2) 显式设置的变量 (包括预设绑定)
+		if (variables.exists(id))
+		{
+			var v = variables.get(id);
+			return v;
+		}
+
+		// 3) import 的类
+		if (imports.exists(id))
+		{
+			var v = imports.get(id);
+			return v;
+		}
+
+		// 4) 动态从 PlayState.instance 解析
+		if (PlayState.instance != null && _instanceFields.contains(id))
+		{
+			var v = Reflect.getProperty(PlayState.instance, id);
+			if (v != null) return v;
+		}
+
+		error(EUnknownVariable(id));
+		return null;
 	}
 }
 #end

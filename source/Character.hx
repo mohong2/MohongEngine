@@ -414,4 +414,33 @@ class Character extends FlxSprite
 	{
 		animation.addByPrefix(name, anim, 24, false);
 	}
+
+	// ===== 兼容 Psych 0.7.3+ 回调必需的辅助方法 =====
+
+	/** 获取当前播放的动画名称 (HScript 回调如 goodNoteHit/opponentNoteHit 等依赖此方法) */
+	public function getAnimationName():String
+	{
+		if (animation.curAnim == null) return '';
+		return animation.curAnim.name;
+	}
+
+	/** 检查当前动画是否播放完毕 */
+	public function isAnimationFinished():Bool
+	{
+		if (animation.curAnim == null) return false;
+		return animation.curAnim.finished;
+	}
+
+	/** 强制结束当前动画 */
+	public function finishAnimation():Void
+	{
+		if (animation.curAnim == null) return;
+		animation.curAnim.finish();
+	}
+
+	/** 检查某动画名称是否存在 (通过 animOffsets 判断，兼容 104 版 Character API) */
+	public function hasAnimation(anim:String):Bool
+	{
+		return animation.getByName(anim) != null;
+	}
 }

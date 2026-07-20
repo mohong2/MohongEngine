@@ -21,9 +21,11 @@ class Highscore
 	public static var songGoods:Map<String, Int> = new Map<String, Int>();
 	public static var songBads:Map<String, Int> = new Map<String, Int>();
 	public static var songShits:Map<String, Int> = new Map<String, Int>();
-	public static var songMisses:Map<String, Int> = new Map<String, Int>();
-	public static var songMaxCombo:Map<String, Int> = new Map<String, Int>();
+	public static var songMisses:Map<String, Int> = new Map();
+	public static var songMaxCombo:Map<String, Int> = new Map();
 	#end
+	public static var songNoteHit:Map<String, Dynamic> = new Map<String, Dynamic>(); // Array<Array<Array<Float>>>
+	public static var songDetails:Map<String, Array<Dynamic>> = new Map<String, Array<Dynamic>>();
 
 
 	public static function resetSong(song:String, diff:Int = 0):Void
@@ -61,7 +63,8 @@ class Highscore
 		return newValue / tempMult;
 	}
 
-	public static function saveScore(song:String, score:Int = 0, ?diff:Int = 0, ?rating:Float = -1, ?sicks:Int = -1, ?goods:Int = -1, ?bads:Int = -1, ?shits:Int = -1, ?misses:Int = -1, ?maxCombo:Int = -1):Void
+	public static function saveScore(song:String, score:Int = 0, ?diff:Int = 0, ?rating:Float = -1, ?sicks:Int = -1, ?goods:Int = -1,
+		?bads:Int = -1, ?shits:Int = -1, ?misses:Int = -1, ?maxCombo:Int = -1):Void
 	{
 		var daSong:String = formatSong(song, diff);
 
@@ -101,6 +104,23 @@ class Highscore
 		else
 			setWeekScore(daWeek, score);
 	}
+
+	static function setKeyHit(song:String, group:Array<Array<Array<Float>>>):Void
+	{
+		// Reminder that I don't need to format this song, it should come formatted!
+		songNoteHit.set(song, group);
+		FlxG.save.data.songNoteHit = songNoteHit;
+		FlxG.save.flush();
+	}
+
+	static function setDetails(song:String, group:Array<Dynamic>):Void
+	{
+		// Reminder that I don't need to format this song, it should come formatted!
+		songDetails.set(song, group);
+		FlxG.save.data.songDetails = songDetails;
+		FlxG.save.flush();
+	}
+
 
 	/**
 	 * YOU SHOULD FORMAT SONG WITH formatSong() BEFORE TOSSING IN SONG VARIABLE

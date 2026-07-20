@@ -5,7 +5,7 @@ import Controls;
  
 import flixel.util.FlxSignal;
 
-// import ui.DeviceManager;
+// import backend.ui.DeviceManager;
 // import props.Player;
 class PlayerSettings
 {

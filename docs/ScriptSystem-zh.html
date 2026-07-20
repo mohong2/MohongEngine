@@ -1,0 +1,3812 @@
+<!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="UTF-8">
+            <title>SeiunEngine &#x811a;&#x672c;&#x7cfb;&#x7edf;&#x6587;&#x6863;</title>
+            <style>
+/* From extension vscode.github */
+/*---------------------------------------------------------------------------------------------
+ *  Copyright (c) Microsoft Corporation. All rights reserved.
+ *  Licensed under the MIT License. See License.txt in the project root for license information.
+ *--------------------------------------------------------------------------------------------*/
+
+.vscode-dark img[src$=\#gh-light-mode-only],
+.vscode-light img[src$=\#gh-dark-mode-only],
+.vscode-high-contrast:not(.vscode-high-contrast-light) img[src$=\#gh-light-mode-only],
+.vscode-high-contrast-light img[src$=\#gh-dark-mode-only] {
+	display: none;
+}
+
+/* From extension zhuangtongfa.material-theme */
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body {
+  box-sizing: border-box;
+  min-width: 200px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote {
+  background-color: initial;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  color: initial;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body code {
+  color: inherit;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre code {
+  color: initial;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body code > div, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body code > div, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body code > div, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body code > div {
+  background: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table td {
+  border: 1px solid rgba(171, 178, 191, 0.5) !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body.showEditorSelection .code-active-line:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body.showEditorSelection .code-active-line:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body.showEditorSelection .code-active-line:before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body.showEditorSelection .code-active-line:before {
+  border-left: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body.showEditorSelection .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body.showEditorSelection .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body.showEditorSelection .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body.showEditorSelection .code-line:hover:before {
+  border-left: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body.showEditorSelection .code-line .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body.showEditorSelection .code-line .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body.showEditorSelection .code-line .code-line:hover:before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body.showEditorSelection .code-line .code-line:hover:before {
+  border-left: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  margin-top: 16px;
+  margin-bottom: 16px;
+}
+
+/* Generated from 'node_modules/github-markdown-css/github-markdown.css' */
+@font-face {
+  font-family: octicons-link;
+  src: url(data:font/woff;charset=utf-8;base64,d09GRgABAAAAAAZwABAAAAAACFQAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAABEU0lHAAAGaAAAAAgAAAAIAAAAAUdTVUIAAAZcAAAACgAAAAoAAQAAT1MvMgAAAyQAAABJAAAAYFYEU3RjbWFwAAADcAAAAEUAAACAAJThvmN2dCAAAATkAAAABAAAAAQAAAAAZnBnbQAAA7gAAACyAAABCUM+8IhnYXNwAAAGTAAAABAAAAAQABoAI2dseWYAAAFsAAABPAAAAZwcEq9taGVhZAAAAsgAAAA0AAAANgh4a91oaGVhAAADCAAAABoAAAAkCA8DRGhtdHgAAAL8AAAADAAAAAwGAACfbG9jYQAAAsAAAAAIAAAACABiATBtYXhwAAACqAAAABgAAAAgAA8ASm5hbWUAAAToAAABQgAAAlXu73sOcG9zdAAABiwAAAAeAAAAME3QpOBwcmVwAAAEbAAAAHYAAAB/aFGpk3jaTY6xa8JAGMW/O62BDi0tJLYQincXEypYIiGJjSgHniQ6umTsUEyLm5BV6NDBP8Tpts6F0v+k/0an2i+itHDw3v2+9+DBKTzsJNnWJNTgHEy4BgG3EMI9DCEDOGEXzDADU5hBKMIgNPZqoD3SilVaXZCER3/I7AtxEJLtzzuZfI+VVkprxTlXShWKb3TBecG11rwoNlmmn1P2WYcJczl32etSpKnziC7lQyWe1smVPy/Lt7Kc+0vWY/gAgIIEqAN9we0pwKXreiMasxvabDQMM4riO+qxM2ogwDGOZTXxwxDiycQIcoYFBLj5K3EIaSctAq2kTYiw+ymhce7vwM9jSqO8JyVd5RH9gyTt2+J/yUmYlIR0s04n6+7Vm1ozezUeLEaUjhaDSuXHwVRgvLJn1tQ7xiuVv/ocTRF42mNgZGBgYGbwZOBiAAFGJBIMAAizAFoAAABiAGIAznjaY2BkYGAA4in8zwXi+W2+MjCzMIDApSwvXzC97Z4Ig8N/BxYGZgcgl52BCSQKAA3jCV8CAABfAAAAAAQAAEB42mNgZGBg4f3vACQZQABIMjKgAmYAKEgBXgAAeNpjYGY6wTiBgZWBg2kmUxoDA4MPhGZMYzBi1AHygVLYQUCaawqDA4PChxhmh/8ODDEsvAwHgMKMIDnGL0x7gJQCAwMAJd4MFwAAAHjaY2BgYGaA4DAGRgYQkAHyGMF8NgYrIM3JIAGVYYDT+AEjAwuDFpBmA9KMDEwMCh9i/v8H8sH0/4dQc1iAmAkALaUKLgAAAHjaTY9LDsIgEIbtgqHUPpDi3gPoBVyRTmTddOmqTXThEXqrob2gQ1FjwpDvfwCBdmdXC5AVKFu3e5MfNFJ29KTQT48Ob9/lqYwOGZxeUelN2U2R6+cArgtCJpauW7UQBqnFkUsjAY/kOU1cP+DAgvxwn1chZDwUbd6CFimGXwzwF6tPbFIcjEl+vvmM/byA48e6tWrKArm4ZJlCbdsrxksL1AwWn/yBSJKpYbq8AXaaTb8AAHja28jAwOC00ZrBeQNDQOWO//sdBBgYGRiYWYAEELEwMTE4uzo5Zzo5b2BxdnFOcALxNjA6b2ByTswC8jYwg0VlNuoCTWAMqNzMzsoK1rEhNqByEyerg5PMJlYuVueETKcd/89uBpnpvIEVomeHLoMsAAe1Id4AAAAAAAB42oWQT07CQBTGv0JBhagk7HQzKxca2sJCE1hDt4QF+9JOS0nbaaYDCQfwCJ7Au3AHj+LO13FMmm6cl7785vven0kBjHCBhfpYuNa5Ph1c0e2Xu3jEvWG7UdPDLZ4N92nOm+EBXuAbHmIMSRMs+4aUEd4Nd3CHD8NdvOLTsA2GL8M9PODbcL+hD7C1xoaHeLJSEao0FEW14ckxC+TU8TxvsY6X0eLPmRhry2WVioLpkrbp84LLQPGI7c6sOiUzpWIWS5GzlSgUzzLBSikOPFTOXqly7rqx0Z1Q5BAIoZBSFihQYQOOBEdkCOgXTOHA07HAGjGWiIjaPZNW13/+lm6S9FT7rLHFJ6fQbkATOG1j2OFMucKJJsxIVfQORl+9Jyda6Sl1dUYhSCm1dyClfoeDve4qMYdLEbfqHf3O/AdDumsjAAB42mNgYoAAZQYjBmyAGYQZmdhL8zLdDEydARfoAqIAAAABAAMABwAKABMAB///AA8AAQAAAAAAAAAAAAAAAAABAAAAAA==) format("woff");
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body {
+  -ms-text-size-adjust: 100%;
+  -webkit-text-size-adjust: 100%;
+  line-height: 1.5;
+  color: rgb(171, 178, 191);
+  line-height: 1.5;
+  word-wrap: break-word;
+  background: #282c34;
+  padding-top: 20px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-c, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-c, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-c, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-c {
+  color: #6a737d;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-c1, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-s .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-c1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-s .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-c1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-s .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-c1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-s .pl-v {
+  color: #005cc5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-e, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-e, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-e, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-e, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-en {
+  color: #6f42c1;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-smi, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-s .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-smi, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-s .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-smi, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-s .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-smi, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-s .pl-s1 {
+  color: #24292e;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-ent, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-ent, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-ent, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-ent {
+  color: #22863a;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-k, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-k, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-k, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-k {
+  color: #d73a49;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-s, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-pds, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-s .pl-pse .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sr, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sr .pl-sre, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sr .pl-sra, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-s, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-pds, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-s .pl-pse .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sr .pl-sre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sr .pl-sra, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-s, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-pds, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-s .pl-pse .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sr .pl-sre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sr .pl-sra, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-s, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-pds, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-s .pl-pse .pl-s1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sr .pl-sre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sr .pl-sra {
+  color: #032f62;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-smw, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-smw, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-smw, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-v, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-smw {
+  color: #e36209;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-bu, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-bu, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-bu, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-bu {
+  color: #b31d28;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-ii, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-ii, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-ii, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-ii {
+  color: #fafbfc;
+  background-color: #b31d28;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-c2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-c2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-c2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-c2 {
+  color: #fafbfc;
+  background-color: #d73a49;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-c2::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-c2::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-c2::before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-c2::before {
+  content: "^M";
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sr .pl-cce, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sr .pl-cce {
+  font-weight: bold;
+  color: #22863a;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-ml, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-ml, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-ml, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-ml {
+  color: #735c0f;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mh, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mh .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-ms, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mh, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mh .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-ms, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mh, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mh .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-ms, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mh, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mh .pl-en, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-ms {
+  font-weight: bold;
+  color: #005cc5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mi, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mi, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mi, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mi {
+  font-style: italic;
+  color: #24292e;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mb, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mb, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mb, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mb {
+  font-weight: bold;
+  color: #24292e;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-md, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-md, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-md, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-md {
+  color: #b31d28;
+  background-color: #ffeef0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mi1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mi1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mi1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mi1 {
+  color: #22863a;
+  background-color: #f0fff4;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mc, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mc, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mc, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mc {
+  color: #e36209;
+  background-color: #ffebda;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mi2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mi2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mi2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mi2 {
+  color: #f6f8fa;
+  background-color: #005cc5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-mdr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-mdr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-mdr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-mdr {
+  font-weight: bold;
+  color: #6f42c1;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-ba, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-ba, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-ba, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-ba {
+  color: #586069;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-sg, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-sg, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-sg, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-sg {
+  color: #959da5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-corl, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-corl, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-corl, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-corl {
+  text-decoration: underline;
+  color: #032f62;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .octicon {
+  display: inline-block;
+  vertical-align: text-top;
+  fill: currentColor;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a {
+  background-color: transparent;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a:active, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a:active, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a:active, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a:active, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a:hover {
+  outline-width: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body strong {
+  font-weight: inherit;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body strong {
+  font-weight: bolder;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1 {
+  margin: 0.67em 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body img {
+  border-style: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr {
+  box-sizing: content-box;
+  height: 0;
+  overflow: visible;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body input {
+  font: inherit;
+  margin: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body input {
+  overflow: visible;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body [type=checkbox], .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body [type=checkbox], .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body [type=checkbox], .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body [type=checkbox] {
+  box-sizing: border-box;
+  padding: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body *, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body *, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body *, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body * {
+  box-sizing: border-box;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body input, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body input {
+  font-family: inherit;
+  line-height: inherit;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a {
+  color: #528bff;
+  text-decoration: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a:hover, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a:hover {
+  text-decoration: underline;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body strong, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body strong {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr {
+  height: 0;
+  margin: 15px 0;
+  overflow: hidden;
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid #dfe2e5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr::before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr::before {
+  display: table;
+  content: "";
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr::after, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr::after, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr::after, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr::after {
+  display: table;
+  clear: both;
+  content: "";
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table {
+  border-spacing: 0;
+  border-collapse: collapse;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body td, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body th, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body td, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body th, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body td, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body th, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body td, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body th {
+  padding: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6 {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6 {
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body p {
+  margin-top: 0;
+  margin-bottom: 10px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote {
+  margin: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol {
+  padding-left: 0;
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul ol {
+  list-style-type: lower-roman;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol ol ol {
+  list-style-type: lower-alpha;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dd, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dd, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dd, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dd {
+  margin-left: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .octicon, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .octicon {
+  vertical-align: text-bottom;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-0, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-0, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-0, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-0 {
+  padding-left: 0 !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-1 {
+  padding-left: 4px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-2 {
+  padding-left: 8px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-3, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-3, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-3, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-3 {
+  padding-left: 16px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-4, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-4, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-4, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-4 {
+  padding-left: 24px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-5, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-5, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-5, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-5 {
+  padding-left: 32px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .pl-6, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .pl-6, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .pl-6, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .pl-6 {
+  padding-left: 40px !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body::before, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body::before, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body::before {
+  display: table;
+  content: "";
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body::after, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body::after, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body::after, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body::after {
+  display: table;
+  clear: both;
+  content: "";
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body > *:first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body > *:first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body > *:first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body > *:first-child {
+  margin-top: 0 !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body > *:last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body > *:last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body > *:last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body > *:last-child {
+  margin-bottom: 0 !important;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body a:not([href]), .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body a:not([href]), .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body a:not([href]), .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body a:not([href]) {
+  color: inherit;
+  text-decoration: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .anchor {
+  float: left;
+  padding-right: 4px;
+  margin-left: -20px;
+  line-height: 1;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .anchor:focus, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .anchor:focus, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .anchor:focus, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .anchor:focus {
+  outline: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body p, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  margin-top: 0;
+  margin-bottom: 16px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr {
+  height: 0.25em;
+  padding: 0;
+  margin: 24px 0;
+  background-color: #e1e4e8;
+  border: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote {
+  /* padding: 0 1em;
+  color: #6a737d;
+  border-left: 0.25em solid #dfe2e5; */
+  padding: 8.5px 17px;
+  margin: 1.5em 0;
+  color: #7c879c;
+  border-color: #4b5362;
+  border-width: 4px;
+  border-left: 5px solid #4b5362;
+  background: transparent;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote > :first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote > :first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote > :first-child, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote > :first-child {
+  margin-top: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body blockquote > :last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body blockquote > :last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body blockquote > :last-child, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body blockquote > :last-child {
+  margin-bottom: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body kbd {
+  display: inline-block;
+  padding: 3px 5px;
+  line-height: 10px;
+  color: #444d56;
+  vertical-align: middle;
+  background-color: #fafbfc;
+  border: solid 1px #c6cbd1;
+  border-bottom-color: #959da5;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #959da5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6 {
+  margin-top: 24px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  line-height: 1.25;
+  color: rgb(240, 240, 240);
+  border-bottom: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5 .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6 .octicon-link {
+  color: #1b1f23;
+  vertical-align: middle;
+  visibility: hidden;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5:hover .anchor, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6:hover .anchor {
+  text-decoration: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h3:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h4:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h5:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h3:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h4:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h5:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h3:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h4:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h5:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h3:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h4:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h5:hover .anchor .octicon-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6:hover .anchor .octicon-link {
+  visibility: visible;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h1, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h1 {
+  padding-bottom: 0.3em;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h2, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h2 {
+  padding-bottom: 0.3em;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body h6, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body h6 {
+  color: #6a737d;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol {
+  padding-left: 2em;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body ol ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body ol ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul ul, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body ol ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul ul, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ul ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol ol, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body ol ul {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body li, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body li, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body li, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body li {
+  word-wrap: break-all;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body li > p, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body li > p, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body li > p, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body li > p {
+  margin-top: 16px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body li + li, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body li + li, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body li + li, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body li + li {
+  margin-top: 0.25em;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dl, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dl {
+  padding: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dl dt, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dl dt, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dl dt, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dl dt {
+  padding: 0;
+  margin-top: 16px;
+  font-style: italic;
+  font-weight: 600;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body dl dd, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body dl dd, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body dl dd, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body dl dd {
+  padding: 0 16px;
+  margin-bottom: 16px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table {
+  display: block;
+  width: 100%;
+  overflow: auto;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table th {
+  font-weight: 700;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body table td, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table th, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body table td {
+  padding: 6px 13px;
+  /* border: 1px solid #dfe2e5; */
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body img, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body img {
+  max-width: 100%;
+  box-sizing: content-box;
+  display: inline-block;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body img[align=right], .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body img[align=right], .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body img[align=right], .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body img[align=right] {
+  padding-left: 20px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body img[align=left], .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body img[align=left], .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body img[align=left], .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body img[align=left] {
+  padding-right: 20px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body code, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body code {
+  padding: 0.2em 0.4em;
+  margin: 0;
+  background-color: #3a3f4b;
+  border-radius: 3px;
+  color: white;
+  margin: 0 1px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  word-wrap: normal;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre > code, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre > code, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre > code, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre > code {
+  padding: 0;
+  margin: 0;
+  word-break: normal;
+  white-space: pre;
+  background: transparent;
+  border: 0;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .highlight, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .highlight, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .highlight, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .highlight {
+  margin-bottom: 16px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .highlight pre {
+  margin-bottom: 0;
+  word-break: normal;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .highlight pre, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre {
+  padding: 16px;
+  overflow: auto;
+  line-height: 1.45;
+  /* background-color: #f6f8fa; */
+  border-radius: 3px;
+  background-color: #31363f;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body pre code, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body pre code {
+  display: inline;
+  max-width: auto;
+  padding: 0;
+  margin: 0;
+  overflow: visible;
+  line-height: inherit;
+  word-wrap: normal;
+  background-color: transparent;
+  border: 0;
+  color: rgb(171, 178, 191);
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .full-commit .btn-outline:not(:disabled):hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .full-commit .btn-outline:not(:disabled):hover, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .full-commit .btn-outline:not(:disabled):hover, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .full-commit .btn-outline:not(:disabled):hover {
+  color: #005cc5;
+  border-color: #005cc5;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body kbd, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body kbd {
+  display: inline-block;
+  padding: 3px 5px;
+  line-height: 10px;
+  color: #444d56;
+  vertical-align: middle;
+  background-color: #fafbfc;
+  border: solid 1px #d1d5da;
+  border-bottom-color: #c6cbd1;
+  border-radius: 3px;
+  box-shadow: inset 0 -1px 0 #c6cbd1;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body :checked + .radio-label, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body :checked + .radio-label, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body :checked + .radio-label, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body :checked + .radio-label {
+  position: relative;
+  z-index: 1;
+  border-color: #0366d6;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .task-list-item {
+  list-style-type: none;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .task-list-item + .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .task-list-item + .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .task-list-item + .task-list-item, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .task-list-item + .task-list-item {
+  margin-top: 3px;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body .task-list-item input, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body .task-list-item input, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body .task-list-item input, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body .task-list-item input {
+  margin: 0 0.2em 0.25em -1.6em;
+  vertical-align: middle;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"].vscode-body hr, .vscode-dark[data-vscode-theme-name="One Dark Pro"].vscode-body hr {
+  border-bottom-color: #eee;
+}
+
+/*
+
+Atom One Dark by Daniel Gamage
+Original One Dark Syntax theme from https://github.com/atom/one-dark-syntax
+
+base:    #282c34
+mono-1:  #abb2bf
+mono-2:  #818896
+mono-3:  #5c6370
+hue-1:   #56b6c2
+hue-2:   #61aeee
+hue-3:   #c678dd
+hue-4:   #98c379
+hue-5:   #e06c75
+hue-5-2: #be5046
+hue-6:   #d19a66
+hue-6-2: #e6c07b
+
+*/
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs {
+  display: block;
+  overflow-x: auto;
+  padding: 0.5em;
+  color: #abb2bf;
+  background: #282c34;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-comment,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-quote, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-comment,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-quote, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-comment,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-quote, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-comment,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-quote {
+  color: #5c6370;
+  font-style: italic;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-doctag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-keyword,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-formula, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-doctag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-keyword,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-formula, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-doctag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-keyword,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-formula, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-doctag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-keyword,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-formula {
+  color: #c678dd;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-section,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-name,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-selector-tag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-deletion,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-subst, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-section,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-name,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-selector-tag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-deletion,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-subst, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-section,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-name,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-selector-tag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-deletion,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-subst, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-section,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-name,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-selector-tag,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-deletion,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-subst {
+  color: #e06c75;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-literal, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-literal, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-literal, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-literal {
+  color: #56b6c2;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-string,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-regexp,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-addition,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-attribute,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-meta-string, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-string,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-regexp,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-addition,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-attribute,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-meta-string, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-string,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-regexp,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-addition,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-attribute,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-meta-string, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-string,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-regexp,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-addition,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-attribute,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-meta-string {
+  color: #98c379;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-built_in,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-class .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-built_in,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-class .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-built_in,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-class .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-built_in,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-class .hljs-title {
+  color: #e6c07b;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-template-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-type,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-selector-class,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-selector-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-selector-pseudo,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-number, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-template-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-type,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-selector-class,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-selector-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-selector-pseudo,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-number, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-template-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-type,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-selector-class,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-selector-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-selector-pseudo,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-number, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-template-variable,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-type,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-selector-class,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-selector-attr,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-selector-pseudo,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-number {
+  color: #d19a66;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-symbol,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-bullet,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-link,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-meta,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-selector-id,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-symbol,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-bullet,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-link,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-meta,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-selector-id,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-symbol,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-bullet,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-link,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-meta,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-selector-id,
+.vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-title, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-symbol,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-bullet,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-link,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-meta,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-selector-id,
+.vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-title {
+  color: #61aeee;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-emphasis, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-emphasis, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-emphasis, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-emphasis {
+  font-style: italic;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-strong, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-strong, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-strong {
+  font-weight: bold;
+}
+.vscode-dark[data-vscode-theme-name="One Dark Pro Mix"] .hljs-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Flat"] .hljs-link, .vscode-dark[data-vscode-theme-name="One Dark Pro Darker"] .hljs-link, .vscode-dark[data-vscode-theme-name="One Dark Pro"] .hljs-link {
+  text-decoration: underline;
+}
+
+</style>
+            
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/markdown.css">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/Microsoft/vscode/extensions/markdown-language-features/media/highlight.css">
+<style>
+            body {
+                font-family: -apple-system, BlinkMacSystemFont, 'Segoe WPC', 'Segoe UI', system-ui, 'Ubuntu', 'Droid Sans', sans-serif;
+                font-size: 14px;
+                line-height: 1.6;
+            }
+        </style>
+        <style>
+.task-list-item {
+    list-style-type: none;
+}
+
+.task-list-item-checkbox {
+    margin-left: -20px;
+    vertical-align: middle;
+    pointer-events: none;
+}
+</style>
+<style>
+:root {
+  --color-note: #0969da;
+  --color-tip: #1a7f37;
+  --color-warning: #9a6700;
+  --color-severe: #bc4c00;
+  --color-caution: #d1242f;
+  --color-important: #8250df;
+}
+
+</style>
+<style>
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-note: #2f81f7;
+    --color-tip: #3fb950;
+    --color-warning: #d29922;
+    --color-severe: #db6d28;
+    --color-caution: #f85149;
+    --color-important: #a371f7;
+  }
+}
+
+</style>
+<style>
+.markdown-alert {
+  padding: 0.5rem 1rem;
+  margin-bottom: 16px;
+  color: inherit;
+  border-left: .25em solid #888;
+}
+
+.markdown-alert>:first-child {
+  margin-top: 0
+}
+
+.markdown-alert>:last-child {
+  margin-bottom: 0
+}
+
+.markdown-alert .markdown-alert-title {
+  display: flex;
+  font-weight: 500;
+  align-items: center;
+  line-height: 1
+}
+
+.markdown-alert .markdown-alert-title .octicon {
+  margin-right: 0.5rem;
+  display: inline-block;
+  overflow: visible !important;
+  vertical-align: text-bottom;
+  fill: currentColor;
+}
+
+.markdown-alert.markdown-alert-note {
+  border-left-color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-note .markdown-alert-title {
+  color: var(--color-note);
+}
+
+.markdown-alert.markdown-alert-important {
+  border-left-color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-important .markdown-alert-title {
+  color: var(--color-important);
+}
+
+.markdown-alert.markdown-alert-warning {
+  border-left-color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-warning .markdown-alert-title {
+  color: var(--color-warning);
+}
+
+.markdown-alert.markdown-alert-tip {
+  border-left-color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-tip .markdown-alert-title {
+  color: var(--color-tip);
+}
+
+.markdown-alert.markdown-alert-caution {
+  border-left-color: var(--color-caution);
+}
+
+.markdown-alert.markdown-alert-caution .markdown-alert-title {
+  color: var(--color-caution);
+}
+
+</style>
+        
+        </head>
+        <body class="vscode-body vscode-light">
+            <span id="markdown-mermaid" aria-hidden="true" data-config="{&quot;darkModeTheme&quot;:&quot;vscode&quot;,&quot;lightModeTheme&quot;:&quot;vscode&quot;,&quot;maxTextSize&quot;:50000,&quot;clickDrag&quot;:&quot;alt&quot;,&quot;showControls&quot;:&quot;onHoverOrFocus&quot;,&quot;resizable&quot;:true,&quot;maxHeight&quot;:&quot;&quot;}"></span>
+				<h1 id="seiunengine-脚本系统文档">SeiunEngine 脚本系统文档</h1>
+<h2 id="目录">目录</h2>
+<ol>
+<li><a href="#1-%E6%A6%82%E8%BF%B0">概述</a></li>
+<li><a href="#2-%E7%B3%BB%E7%BB%9F%E6%9E%B6%E6%9E%84">系统架构</a></li>
+<li><a href="#3-lua-%E8%84%9A%E6%9C%AC%E7%B3%BB%E7%BB%9F">Lua 脚本系统</a></li>
+<li><a href="#4-hscript-%E8%84%9A%E6%9C%AC%E7%B3%BB%E7%BB%9F">HScript 脚本系统</a></li>
+<li><a href="#5-modstate--modsubstate">ModState &amp; ModSubState</a></li>
+<li><a href="#6-%E8%BE%85%E5%8A%A9%E7%B1%BB">辅助类</a></li>
+<li><a href="#7-lua-api%E4%BB%8E-hscript-%E7%AE%A1%E7%90%86-lua">Lua API（从 HScript 管理 Lua）</a></li>
+<li><a href="#8-%E8%84%9A%E6%9C%AC%E4%BA%8B%E4%BB%B6%E5%9B%9E%E8%B0%83%E5%AE%8C%E6%95%B4%E5%88%97%E8%A1%A8">脚本事件回调完整列表</a></li>
+<li><a href="#9-%E8%84%9A%E6%9C%AC%E5%8A%A0%E8%BD%BD%E8%B7%AF%E5%BE%84">脚本加载路径</a></li>
+<li><a href="#10-%E5%B8%B8%E8%A7%81%E7%94%A8%E6%B3%95%E7%A4%BA%E4%BE%8B">常见用法示例</a></li>
+<li><a href="#11-%E5%B9%B3%E5%8F%B0%E7%9B%B8%E5%85%B3%E6%B3%A8%E6%84%8F%E4%BA%8B%E9%A1%B9">平台相关注意事项</a></li>
+<li><a href="#12-%E6%95%85%E9%9A%9C%E6%8E%92%E9%99%A4">故障排除</a></li>
+</ol>
+<hr>
+<h2 id="1-概述">1. 概述</h2>
+<p>SeiunEngine 使用<strong>双引擎脚本架构</strong>，同时支持 <strong>Lua</strong> 和 <strong>HScript (Haxe Script)</strong> 两种脚本语言。开发者可以选择任意一种语言编写 MOD 逻辑，两种语言之间可以互相调用。</p>
+<ul>
+<li><strong>Lua</strong>: 使用 <code>llua</code> 绑定，完整的 Lua 5.x 解释器，适合动态脚本编写</li>
+<li><strong>HScript</strong>: 使用 <code>crowplexus-hscript</code>，原生的 Haxe 脚本解释器，语法接近 Haxe</li>
+</ul>
+<h3 id="版本信息">版本信息</h3>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>版本</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lua 支持版本</td>
+<td>0.63.1fix-2</td>
+</tr>
+<tr>
+<td>HScript 支持版本</td>
+<td>0.2.0</td>
+</tr>
+<tr>
+<td>Psych Engine 版本</td>
+<td>见 MainMenuState</td>
+</tr>
+</tbody>
+</table>
+<h3 id="编译开关">编译开关</h3>
+<p>两个系统均由编译标志控制：</p>
+<pre><code class="language-hxml">#if LUA_ALLOWED    // 启用 Lua 支持
+#if HSCRIPT_ALLOWED // 启用 HScript 支持
+</code></pre>
+<hr>
+<h2 id="2-系统架构">2. 系统架构</h2>
+<h3 id="核心文件结构">核心文件结构</h3>
+<pre><code>source/script/
+├── hscript/                        # HScript 系统
+│   ├── HScript.hx                  # 主要 HScript 引擎 (568 行)
+│   ├── LuaApi.hx                   # 从 HScript 桥接 Lua 的 API (459 行)
+│   └── import.hx                   # 导入辅助
+├── lua/                            # Lua 脚本系统
+│   ├── FunkinLua.hx                # 主要 Lua 引擎 (3839 行)
+│   ├── DebugLuaText.hx             # 屏幕调试文本类
+│   ├── ModchartSprite.hx           # 可脚本化 Sprite 类
+│   ├── ModchartText.hx             # 可脚本化 Text 类
+│   └── import.hx                   # 导入辅助
+└── FunkinText.hx                   # FNF 风格文本组件
+</code></pre>
+<h3 id="状态基类中的脚本管理">状态基类中的脚本管理</h3>
+<p>所有状态（State）和子状态（SubState）继承自 <code>MusicBeatState</code> 和 <code>MusicBeatSubstate</code>，基类中管理两个并行的脚本数组：</p>
+<pre><code class="language-haxe"><span class="hljs-comment">// MusicBeatState / MusicBeatSubstate 中的字段</span>
+<span class="hljs-keyword">var</span> luaArray:<span class="hljs-type">Array</span>&lt;FunkinLua&gt;;     <span class="hljs-comment">// Lua 脚本实例数组</span>
+<span class="hljs-keyword">var</span> hscriptArray:<span class="hljs-type">Array</span>&lt;HScript&gt;;   <span class="hljs-comment">// HScript 实例数组</span>
+</code></pre>
+<h3 id="脚本初始化顺序">脚本初始化顺序</h3>
+<p>在 <code>create()</code> 方法中，脚本按以下顺序初始化：</p>
+<pre><code>MusicBeatState.create()
+├── super.create()
+├── initHScripts()          // 1. 加载 HScript 文件
+├── setOnHscript(...)       // 2. 设置 HScript 变量
+└── callOnHscript(          // 3. 触发 HScript 回调
+      'onCreatePost', [])
+</code></pre>
+<p>对于 <code>ModState</code> 和 <code>ModSubState</code>，额外处理 Lua：</p>
+<pre><code>ModState.create()
+├── super.create()          // 自动执行 initHScripts()
+├── initLuaScripts()        // 额外：加载 Lua 文件
+├── setOnLuas(...)          // 设置 Lua 变量
+├── callOnLuas(             // 触发 Lua 回调
+      'onCreatePost', [])
+└── setOnHscript('data', this.data)
+</code></pre>
+<h3 id="回调调用链">回调调用链</h3>
+<p><strong>MusicBeatState / MusicBeatSubstate 中的调用：</strong></p>
+<pre><code>MusicBeatState.callOnLuas(func, args)
+└── 遍历 luaArray，依次调用每个脚本
+    ├── Function_StopLua / Function_StopAll → 中断
+    └── Function_Stop / Function_Continue → 继续
+
+MusicBeatState.callOnHscript(func, args)
+├── HScript.callOnGlobalScript()  // 全局脚本优先
+└── 遍历 hscriptArray，依次调用
+    └── Function_StopHScript → 中断
+</code></pre>
+<p><strong>PlayState 中的调用（重写版）：</strong></p>
+<pre><code>PlayState.callOnScripts(func, args)          ← PlayState 自带方法
+├── callOnLuas(func, args)                   ← 重写自 MusicBeatState
+│   └── Function_StopLua / Function_StopAll → 中断 Lua
+├── 如果 Lua 返回 Function_Continue 或 null
+│   └── callOnHScript(func, args)            ← PlayState 自带方法
+│       └── Function_StopHScript → 中断 HScript
+└── 返回最终结果
+</code></pre>
+<p><strong>返回值优先级规则：</strong></p>
+<ul>
+<li>Lua 返回 <code>Function_Continue</code> (0) → HScript 继续执行</li>
+<li>Lua 返回 <code>Function_Stop</code> (1) → 仅当前脚本停止，其余继续</li>
+<li>Lua 返回 <code>Function_StopLua</code> (2) → 停止所有 Lua，HScript 继续</li>
+<li>Lua 返回 <code>Function_StopHScript</code> (3) → Lua 继续，HScript 停止</li>
+<li>Lua 返回 <code>Function_StopAll</code> (4) → 停止所有脚本</li>
+</ul>
+<blockquote>
+<p><strong>重要</strong>: PlayState 的 <code>callOnScripts</code> 默认会先调用 Lua，如果 Lua 返回 <code>Function_Continue</code> 则调用 HScript。但 <code>goodNoteHit</code> 等回调手动分别调用了 <code>callOnLuas</code> 和 <code>callOnHScript</code>，具有不同的参数签名——详见第 8 章。</p>
+</blockquote>
+<hr>
+<h2 id="3-lua-脚本系统">3. Lua 脚本系统</h2>
+<h3 id="31-funkinlua-类">3.1 FunkinLua 类</h3>
+<p><code>FunkinLua</code> 是 Lua 脚本的核心引擎（位于 <code>source/script/lua/FunkinLua.hx</code>）。</p>
+<p><strong>主要功能</strong>:</p>
+<ul>
+<li>创建和管理 Lua 解释器状态</li>
+<li>注册 Lua 全局函数（223+ 个回调）</li>
+<li>管理脚本的调用和变量设置</li>
+<li>提供 Lua 与 Haxe 之间的双向桥接</li>
+</ul>
+<h3 id="32-lua-脚本文件格式">3.2 Lua 脚本文件格式</h3>
+<p>Lua 脚本使用标准的 <code>.lua</code> 扩展名，遵循标准 Lua 5.x 语法。</p>
+<p><strong>支持的函数返回值</strong>:</p>
+<pre><code class="language-lua">Function_Continue    = <span class="hljs-number">0</span>  <span class="hljs-comment">-- 继续执行（默认）</span>
+Function_Stop        = <span class="hljs-number">1</span>  <span class="hljs-comment">-- 停止当前的执行流程</span>
+Function_StopLua     = <span class="hljs-number">2</span>  <span class="hljs-comment">-- 停止所有 Lua 脚本</span>
+Function_StopHScript = <span class="hljs-number">3</span>  <span class="hljs-comment">-- 停止 HScript（从 Lua 中使用无效）</span>
+Function_StopAll     = <span class="hljs-number">4</span>  <span class="hljs-comment">-- 停止所有脚本</span>
+</code></pre>
+<h3 id="33-lua-可用的预定义变量">3.3 Lua 可用的预定义变量</h3>
+<h4 id="歌曲周信息playstate-激活时可用">歌曲/周信息（PlayState 激活时可用）</h4>
+<table>
+<thead>
+<tr>
+<th>变量名</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>curBpm</code></td>
+<td>Float</td>
+<td>当前 BPM</td>
+</tr>
+<tr>
+<td><code>bpm</code></td>
+<td>Float</td>
+<td>歌曲 BPM</td>
+</tr>
+<tr>
+<td><code>scrollSpeed</code></td>
+<td>Float</td>
+<td>滚动速度</td>
+</tr>
+<tr>
+<td><code>crochet</code></td>
+<td>Float</td>
+<td>节拍长度（毫秒）</td>
+</tr>
+<tr>
+<td><code>stepCrochet</code></td>
+<td>Float</td>
+<td>步进长度（毫秒）</td>
+</tr>
+<tr>
+<td><code>songLength</code></td>
+<td>Float</td>
+<td>歌曲长度（毫秒）</td>
+</tr>
+<tr>
+<td><code>songName</code></td>
+<td>String</td>
+<td>歌曲名称</td>
+</tr>
+<tr>
+<td><code>songPath</code></td>
+<td>String</td>
+<td>格式化后的歌曲路径</td>
+</tr>
+<tr>
+<td><code>curStage</code></td>
+<td>String</td>
+<td>当前舞台名称</td>
+</tr>
+<tr>
+<td><code>isStoryMode</code></td>
+<td>Bool</td>
+<td>是否为故事模式</td>
+</tr>
+<tr>
+<td><code>difficulty</code></td>
+<td>Int</td>
+<td>难度索引</td>
+</tr>
+<tr>
+<td><code>difficultyName</code></td>
+<td>String</td>
+<td>难度名称</td>
+</tr>
+<tr>
+<td><code>difficultyPath</code></td>
+<td>String</td>
+<td>格式化后的难度路径</td>
+</tr>
+<tr>
+<td><code>week</code></td>
+<td>String</td>
+<td>周名称</td>
+</tr>
+<tr>
+<td><code>weekRaw</code></td>
+<td>Int</td>
+<td>周索引</td>
+</tr>
+<tr>
+<td><code>seenCutscene</code></td>
+<td>Bool</td>
+<td>是否已播放过场</td>
+</tr>
+</tbody>
+</table>
+<h4 id="游戏玩法变量">游戏玩法变量</h4>
+<table>
+<thead>
+<tr>
+<th>变量名</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>score</code></td>
+<td>Int</td>
+<td>当前分数</td>
+</tr>
+<tr>
+<td><code>misses</code></td>
+<td>Int</td>
+<td>失误次数</td>
+</tr>
+<tr>
+<td><code>hits</code></td>
+<td>Int</td>
+<td>命中次数</td>
+</tr>
+<tr>
+<td><code>rating</code></td>
+<td>Float</td>
+<td>评分数值</td>
+</tr>
+<tr>
+<td><code>ratingName</code></td>
+<td>String</td>
+<td>评分名称</td>
+</tr>
+<tr>
+<td><code>ratingFC</code></td>
+<td>String</td>
+<td>Full Combo 状态</td>
+</tr>
+<tr>
+<td><code>inGameOver</code></td>
+<td>Bool</td>
+<td>是否处于游戏结束状态</td>
+</tr>
+<tr>
+<td><code>mustHitSection</code></td>
+<td>Bool</td>
+<td>当前小节是否为玩家部分</td>
+</tr>
+<tr>
+<td><code>altAnim</code></td>
+<td>Bool</td>
+<td>是否使用替代动画</td>
+</tr>
+<tr>
+<td><code>gfSection</code></td>
+<td>Bool</td>
+<td>当前小节是否为 GF 部分</td>
+</tr>
+<tr>
+<td><code>healthGainMult</code></td>
+<td>Float</td>
+<td>生命值增益倍数</td>
+</tr>
+<tr>
+<td><code>healthLossMult</code></td>
+<td>Float</td>
+<td>生命值损失倍数</td>
+</tr>
+<tr>
+<td><code>playbackRate</code></td>
+<td>Float</td>
+<td>播放速率</td>
+</tr>
+<tr>
+<td><code>instakillOnMiss</code></td>
+<td>Bool</td>
+<td>失误即死模式</td>
+</tr>
+<tr>
+<td><code>botPlay</code></td>
+<td>Bool</td>
+<td>自动游玩模式</td>
+</tr>
+<tr>
+<td><code>practice</code></td>
+<td>Bool</td>
+<td>练习模式</td>
+</tr>
+<tr>
+<td><code>combo</code></td>
+<td>Int</td>
+<td>当前连击数</td>
+</tr>
+<tr>
+<td><code>curSection</code></td>
+<td>Int</td>
+<td>当前小节</td>
+</tr>
+<tr>
+<td><code>curBeat</code></td>
+<td>Int</td>
+<td>当前节拍</td>
+</tr>
+<tr>
+<td><code>curStep</code></td>
+<td>Int</td>
+<td>当前步进</td>
+</tr>
+<tr>
+<td><code>curDecBeat</code></td>
+<td>Float</td>
+<td>当前小数节拍</td>
+</tr>
+<tr>
+<td><code>curDecStep</code></td>
+<td>Float</td>
+<td>当前小数步进</td>
+</tr>
+<tr>
+<td><code>hasVocals</code></td>
+<td>Bool</td>
+<td>是否有人声音轨</td>
+</tr>
+<tr>
+<td><code>defaultBoyfriendX/Y</code></td>
+<td>Float</td>
+<td>角色默认 X/Y 位置</td>
+</tr>
+<tr>
+<td><code>defaultOpponentX/Y</code></td>
+<td>Float</td>
+<td>对手默认 X/Y 位置</td>
+</tr>
+<tr>
+<td><code>defaultGirlfriendX/Y</code></td>
+<td>Float</td>
+<td>GF 默认 X/Y 位置</td>
+</tr>
+<tr>
+<td><code>boyfriendName</code></td>
+<td>String</td>
+<td>玩家角色名称</td>
+</tr>
+<tr>
+<td><code>dadName</code></td>
+<td>String</td>
+<td>对手角色名称</td>
+</tr>
+<tr>
+<td><code>gfName</code></td>
+<td>String</td>
+<td>GF 角色名称</td>
+</tr>
+</tbody>
+</table>
+<h4 id="设置变量">设置变量</h4>
+<table>
+<thead>
+<tr>
+<th>变量名</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>downscroll</code></td>
+<td>Bool</td>
+<td>下落滚动模式</td>
+</tr>
+<tr>
+<td><code>middlescroll</code></td>
+<td>Bool</td>
+<td>中间滚动模式</td>
+</tr>
+<tr>
+<td><code>framerate</code></td>
+<td>Int</td>
+<td>帧率限制</td>
+</tr>
+<tr>
+<td><code>ghostTapping</code></td>
+<td>Bool</td>
+<td>幽灵按键模式</td>
+</tr>
+<tr>
+<td><code>hideHud</code></td>
+<td>Bool</td>
+<td>隐藏 HUD</td>
+</tr>
+<tr>
+<td><code>timeBarType</code></td>
+<td>String</td>
+<td>时间条类型</td>
+</tr>
+<tr>
+<td><code>scoreZoom</code></td>
+<td>Bool</td>
+<td>评分缩放</td>
+</tr>
+<tr>
+<td><code>cameraZoomOnBeat</code></td>
+<td>Bool</td>
+<td>拍子相机缩放</td>
+</tr>
+<tr>
+<td><code>flashingLights</code></td>
+<td>Bool</td>
+<td>闪烁灯光效果</td>
+</tr>
+<tr>
+<td><code>noteOffset</code></td>
+<td>Int</td>
+<td>音符偏移</td>
+</tr>
+<tr>
+<td><code>healthBarAlpha</code></td>
+<td>Float</td>
+<td>血条透明度</td>
+</tr>
+<tr>
+<td><code>noResetButton</code></td>
+<td>Bool</td>
+<td>禁用重置按钮</td>
+</tr>
+<tr>
+<td><code>lowQuality</code></td>
+<td>Bool</td>
+<td>低质量模式</td>
+</tr>
+<tr>
+<td><code>shadersEnabled</code></td>
+<td>Bool</td>
+<td>着色器启用</td>
+</tr>
+<tr>
+<td><code>scriptName</code></td>
+<td>String</td>
+<td>当前脚本名称</td>
+</tr>
+<tr>
+<td><code>currentModDirectory</code></td>
+<td>String</td>
+<td>当前 Mod 目录</td>
+</tr>
+<tr>
+<td><code>guitarHeroSustains</code></td>
+<td>Bool</td>
+<td>吉他英雄长按模式</td>
+</tr>
+<tr>
+<td><code>noteSkin</code></td>
+<td>String</td>
+<td>音符皮肤</td>
+</tr>
+<tr>
+<td><code>splashSkin</code></td>
+<td>String</td>
+<td>溅射皮肤</td>
+</tr>
+<tr>
+<td><code>splashAlpha</code></td>
+<td>Float</td>
+<td>溅射透明度</td>
+</tr>
+<tr>
+<td><code>luattf</code></td>
+<td>String</td>
+<td>Lua 文本字体设置</td>
+</tr>
+</tbody>
+</table>
+<h4 id="其他变量">其他变量</h4>
+<table>
+<thead>
+<tr>
+<th>变量名</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>version</code></td>
+<td>String</td>
+<td>Psych Engine 版本号</td>
+</tr>
+<tr>
+<td><code>buildTarget</code></td>
+<td>String</td>
+<td>构建目标平台</td>
+</tr>
+<tr>
+<td><code>language</code></td>
+<td>String</td>
+<td>当前语言</td>
+</tr>
+<tr>
+<td><code>luaVersion</code></td>
+<td>String</td>
+<td>Lua 版本号</td>
+</tr>
+<tr>
+<td><code>hscriptVersion</code></td>
+<td>String</td>
+<td>HScript 版本号</td>
+</tr>
+<tr>
+<td><code>screenWidth</code></td>
+<td>Int</td>
+<td>屏幕宽度</td>
+</tr>
+<tr>
+<td><code>screenHeight</code></td>
+<td>Int</td>
+<td>屏幕高度</td>
+</tr>
+<tr>
+<td><code>cameraX/Y</code></td>
+<td>Float</td>
+<td>相机位置</td>
+</tr>
+<tr>
+<td><code>luaDebugMode</code></td>
+<td>Bool</td>
+<td>Lua 调试模式</td>
+</tr>
+<tr>
+<td><code>luaDeprecatedWarnings</code></td>
+<td>Bool</td>
+<td>弃用警告</td>
+</tr>
+<tr>
+<td><code>inChartEditor</code></td>
+<td>Bool</td>
+<td>是否在谱面编辑器中</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-lua-api-函数完整列表">3.4 Lua API 函数完整列表</h3>
+<h4 id="属性操作">属性操作</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getProperty(variable, allowMaps)</code></td>
+<td><code>variable: String</code>, <code>allowMaps?: Bool</code></td>
+<td>获取对象属性，支持点号链式访问</td>
+</tr>
+<tr>
+<td><code>setProperty(variable, value, allowMaps)</code></td>
+<td><code>variable: String</code>, <code>value: Dynamic</code>, <code>allowMaps?: Bool</code></td>
+<td>设置对象属性</td>
+</tr>
+<tr>
+<td><code>getPropertyFromGroup(obj, index, variable)</code></td>
+<td><code>obj: String</code>, <code>index: Int</code>, <code>variable: Dynamic</code></td>
+<td>从组中获取元素属性</td>
+</tr>
+<tr>
+<td><code>setPropertyFromGroup(obj, index, variable, value)</code></td>
+<td><code>obj: String</code>, <code>index: Int</code>, <code>variable: Dynamic</code>, <code>value: Dynamic</code></td>
+<td>设置组中元素属性</td>
+</tr>
+<tr>
+<td><code>getPropertyFromClass(className, variable)</code></td>
+<td><code>className: String</code>, <code>variable: String</code></td>
+<td>获取类静态属性</td>
+</tr>
+<tr>
+<td><code>setPropertyFromClass(className, variable, value)</code></td>
+<td><code>className: String</code>, <code>variable: String</code>, <code>value: Dynamic</code></td>
+<td>设置类静态属性</td>
+</tr>
+<tr>
+<td><code>removeFromGroup(obj, index, dontDestroy)</code></td>
+<td><code>obj: String</code>, <code>index: Int</code>, <code>dontDestroy?: Bool</code></td>
+<td>从组中移除元素</td>
+</tr>
+</tbody>
+</table>
+<h4 id="对象创建与操作">对象创建与操作</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>makeLuaSprite(tag, image, x, y)</code></td>
+<td><code>tag: String</code>, <code>image: String</code>, <code>x: Float</code>, <code>y: Float</code></td>
+<td>创建 Sprite</td>
+</tr>
+<tr>
+<td><code>makeAnimatedLuaSprite(tag, image, x, y, gridX?, gridY?)</code></td>
+<td>...</td>
+<td>创建带动画的 Sprite</td>
+</tr>
+<tr>
+<td><code>addLuaSprite(tag, front)</code></td>
+<td><code>tag: String</code>, <code>front: Bool</code></td>
+<td>添加 Sprite 到场景</td>
+</tr>
+<tr>
+<td><code>addInstance(objectName, inFront)</code></td>
+<td><code>objectName: String</code>, <code>inFront: Bool</code></td>
+<td>添加实例引用到脚本上下文</td>
+</tr>
+<tr>
+<td><code>instanceArg(instanceName, className)</code></td>
+<td><code>instanceName: String</code>, <code>className: String</code></td>
+<td>创建类型化实例参数</td>
+</tr>
+<tr>
+<td><code>addAnimationByPrefix(obj, name, prefix, framerate, loop)</code></td>
+<td>...</td>
+<td>按前缀添加动画</td>
+</tr>
+<tr>
+<td><code>addAnimationByIndices(obj, name, prefix, indices, framerate, loop)</code></td>
+<td>...</td>
+<td>按索引添加动画</td>
+</tr>
+<tr>
+<td><code>addAnimationByAnimIndices(obj, name, prefix, indices, framerate, loop)</code></td>
+<td>...</td>
+<td>另一种方式添加动画</td>
+</tr>
+<tr>
+<td><code>addAnimation(obj, name, frames, framerate, loop)</code></td>
+<td>...</td>
+<td>通过帧索引数组添加动画</td>
+</tr>
+<tr>
+<td><code>addAnimationByIndicesLoop(obj, name, prefix, indices, framerate)</code></td>
+<td>...</td>
+<td>添加循环动画（按索引）</td>
+</tr>
+<tr>
+<td><code>addOffset(obj, anim, x, y)</code></td>
+<td><code>obj: String</code>, <code>anim: String</code>, <code>x: Float</code>, <code>y: Float</code></td>
+<td>添加动画偏移</td>
+</tr>
+<tr>
+<td><code>objectPlayAnimation(obj, name, forced, ?reverse, ?startFrame)</code></td>
+<td>...</td>
+<td>播放对象动画</td>
+</tr>
+<tr>
+<td><code>setObjectCamera(obj, camera)</code></td>
+<td><code>obj: String</code>, <code>camera: String</code></td>
+<td>设置对象相机（'game', 'hud', 'other'）</td>
+</tr>
+<tr>
+<td><code>setObjectOrder(obj, order)</code></td>
+<td><code>obj: String</code>, <code>order: Int</code></td>
+<td>设置对象渲染顺序</td>
+</tr>
+<tr>
+<td><code>getObjectOrder(obj)</code></td>
+<td><code>obj: String</code></td>
+<td>获取对象渲染顺序</td>
+</tr>
+<tr>
+<td><code>setScrollFactor(obj, x, y)</code></td>
+<td><code>obj: String</code>, <code>x: Float</code>, <code>y: Float</code></td>
+<td>设置滚动因子</td>
+</tr>
+<tr>
+<td><code>loadGraphic(variable, image, gridX?, gridY?)</code></td>
+<td>...</td>
+<td>加载图形</td>
+</tr>
+<tr>
+<td><code>loadFrames(variable, image, spriteType)</code></td>
+<td>...</td>
+<td>加载帧动画</td>
+</tr>
+<tr>
+<td><code>makeGraphic(obj, width, height, color)</code></td>
+<td><code>obj: String</code>, <code>width: Int</code>, <code>height: Int</code>, <code>color: String</code></td>
+<td>创建彩色矩形图形</td>
+</tr>
+<tr>
+<td><code>updateHitbox(obj)</code></td>
+<td><code>obj: String</code></td>
+<td>更新对象碰撞箱</td>
+</tr>
+<tr>
+<td><code>updateHitboxFromGroup(group, index)</code></td>
+<td><code>group: String</code>, <code>index: Int</code></td>
+<td>从组成员更新碰撞箱</td>
+</tr>
+<tr>
+<td><code>createInstance(variableToSave, className, args)</code></td>
+<td>...</td>
+<td>动态创建类实例</td>
+</tr>
+<tr>
+<td><code>callMethod(func, args)</code></td>
+<td>...</td>
+<td>调用 PlayState 方法</td>
+</tr>
+<tr>
+<td><code>callMethodFromClass(className, func, args)</code></td>
+<td>...</td>
+<td>调用类的静态方法</td>
+</tr>
+<tr>
+<td><code>luaSpriteExists(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>检查 Sprite 是否存在</td>
+</tr>
+<tr>
+<td><code>luaTextExists(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>检查文本是否存在</td>
+</tr>
+<tr>
+<td><code>luaSoundExists(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>检查音效是否存在</td>
+</tr>
+<tr>
+<td><code>objectsOverlap(obj1, obj2)</code></td>
+<td><code>obj1: String</code>, <code>obj2: String</code></td>
+<td>检查两个对象是否重叠</td>
+</tr>
+<tr>
+<td><code>getPixelColor(obj, x, y)</code></td>
+<td><code>obj: String</code>, <code>x: Int</code>, <code>y: Int</code></td>
+<td>获取指定坐标像素颜色</td>
+</tr>
+<tr>
+<td><code>removeLuaSprite(tag, destroy)</code></td>
+<td><code>tag: String</code>, <code>destroy: Bool</code></td>
+<td>移除 Sprite</td>
+</tr>
+<tr>
+<td><code>removeLuaText(tag, destroy)</code></td>
+<td><code>tag: String</code>, <code>destroy: Bool</code></td>
+<td>移除文本</td>
+</tr>
+<tr>
+<td><code>scaleObject(obj, x, y, updateHitbox)</code></td>
+<td>...</td>
+<td>缩放对象</td>
+</tr>
+<tr>
+<td><code>setGraphicSize(obj, x, y, updateHitbox)</code></td>
+<td>...</td>
+<td>设置图形大小</td>
+</tr>
+<tr>
+<td><code>screenCenter(obj, pos)</code></td>
+<td><code>obj: String</code>, <code>pos: String</code></td>
+<td>屏幕居中</td>
+</tr>
+<tr>
+<td><code>setBlendMode(obj, blend)</code></td>
+<td><code>obj: String</code>, <code>blend: String</code></td>
+<td>设置混合模式</td>
+</tr>
+</tbody>
+</table>
+<h4 id="文本对象">文本对象</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>makeLuaText(tag, text, width, x, y)</code></td>
+<td>...</td>
+<td>创建文本对象</td>
+</tr>
+<tr>
+<td><code>addLuaText(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>添加文本到场景</td>
+</tr>
+<tr>
+<td><code>setTextString(tag, text)</code></td>
+<td>...</td>
+<td>设置文本内容</td>
+</tr>
+<tr>
+<td><code>setTextSize(tag, size)</code></td>
+<td>...</td>
+<td>设置文本大小</td>
+</tr>
+<tr>
+<td><code>setTextWidth(tag, width)</code></td>
+<td>...</td>
+<td>设置文本宽度</td>
+</tr>
+<tr>
+<td><code>setTextAlignment(tag, alignment)</code></td>
+<td>...</td>
+<td>设置文本对齐</td>
+</tr>
+<tr>
+<td><code>setTextColor(tag, color)</code></td>
+<td>...</td>
+<td>设置文本颜色</td>
+</tr>
+<tr>
+<td><code>setTextFont(tag, font)</code></td>
+<td>...</td>
+<td>设置文本字体</td>
+</tr>
+<tr>
+<td><code>setTextBorder(tag, size, color, style)</code></td>
+<td>...</td>
+<td>设置文本边框</td>
+</tr>
+<tr>
+<td><code>setTextItalic(tag, italic)</code></td>
+<td><code>tag: String</code>, <code>italic: Bool</code></td>
+<td>设置文本斜体</td>
+</tr>
+<tr>
+<td><code>setTextAutoSize(tag, value)</code></td>
+<td><code>tag: String</code>, <code>value: Bool</code></td>
+<td>设置文本自动大小</td>
+</tr>
+<tr>
+<td><code>getTextString(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>获取文本内容</td>
+</tr>
+<tr>
+<td><code>getTextSize(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>获取文本大小</td>
+</tr>
+<tr>
+<td><code>getTextFont(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>获取文本字体</td>
+</tr>
+<tr>
+<td><code>getTextWidth(tag)</code></td>
+<td><code>tag: String</code></td>
+<td>获取文本宽度</td>
+</tr>
+</tbody>
+</table>
+<h4 id="音视频">音视频</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>playSound(sound, volume, tag)</code></td>
+<td>...</td>
+<td>播放音效</td>
+</tr>
+<tr>
+<td><code>playMusic(sound, volume, loop)</code></td>
+<td>...</td>
+<td>播放音乐</td>
+</tr>
+<tr>
+<td><code>stopSound(tag)</code></td>
+<td>...</td>
+<td>停止音效</td>
+</tr>
+<tr>
+<td><code>pauseSound(tag)</code></td>
+<td>...</td>
+<td>暂停音效</td>
+</tr>
+<tr>
+<td><code>resumeSound(tag)</code></td>
+<td>...</td>
+<td>恢复音效</td>
+</tr>
+<tr>
+<td><code>soundFadeIn(tag, duration, from, to)</code></td>
+<td>...</td>
+<td>音效淡入</td>
+</tr>
+<tr>
+<td><code>soundFadeOut(tag, duration, to)</code></td>
+<td>...</td>
+<td>音效淡出</td>
+</tr>
+<tr>
+<td><code>soundFadeCancel(tag)</code></td>
+<td>...</td>
+<td>取消音效淡变</td>
+</tr>
+<tr>
+<td><code>getSoundVolume(tag)</code></td>
+<td>...</td>
+<td>获取音效音量</td>
+</tr>
+<tr>
+<td><code>setSoundVolume(tag, volume)</code></td>
+<td>...</td>
+<td>设置音效音量</td>
+</tr>
+<tr>
+<td><code>getSoundTime(tag)</code></td>
+<td>...</td>
+<td>获取音效播放位置</td>
+</tr>
+<tr>
+<td><code>setSoundTime(tag, value)</code></td>
+<td>...</td>
+<td>设置音效播放位置</td>
+</tr>
+<tr>
+<td><code>getSoundPitch(tag)</code></td>
+<td>...</td>
+<td>获取音高（需 <code>#if FLX_PITCH</code>）</td>
+</tr>
+<tr>
+<td><code>setSoundPitch(tag, value)</code></td>
+<td>...</td>
+<td>设置音高（需 <code>#if FLX_PITCH</code>）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="补间动画">补间动画</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>doTweenX(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>X 轴补间</td>
+</tr>
+<tr>
+<td><code>doTweenY(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>Y 轴补间</td>
+</tr>
+<tr>
+<td><code>doTweenAngle(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>角度补间</td>
+</tr>
+<tr>
+<td><code>doTweenAlpha(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>透明度补间</td>
+</tr>
+<tr>
+<td><code>doTweenZoom(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>缩放补间</td>
+</tr>
+<tr>
+<td><code>doTweenColor(tag, vars, value, duration, ease)</code></td>
+<td>...</td>
+<td>颜色补间</td>
+</tr>
+<tr>
+<td><code>cancelTween(tag)</code></td>
+<td>...</td>
+<td>取消补间</td>
+</tr>
+<tr>
+<td><code>tweenCameraX/Y/Zoom/Angle/Alpha(value, duration, ease)</code></td>
+<td>...</td>
+<td>相机补间</td>
+</tr>
+</tbody>
+</table>
+<h4 id="计时器">计时器</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>runTimer(tag, time, loops)</code></td>
+<td>...</td>
+<td>运行计时器</td>
+</tr>
+<tr>
+<td><code>cancelTimer(tag)</code></td>
+<td>...</td>
+<td>取消计时器</td>
+</tr>
+<tr>
+<td><code>getTimer(tag)</code></td>
+<td>...</td>
+<td>获取计时器剩余时间</td>
+</tr>
+</tbody>
+</table>
+<h4 id="颜色工具">颜色工具</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getColorFromHex(color)</code></td>
+<td><code>color: String</code></td>
+<td>从十六进制获取颜色值</td>
+</tr>
+<tr>
+<td><code>getColorFromRGB(r, g, b, a)</code></td>
+<td>...</td>
+<td>从 RGB 获取颜色值</td>
+</tr>
+<tr>
+<td><code>getColorFromName(color)</code></td>
+<td><code>color: String</code></td>
+<td>从颜色名称获取（如 'RED'）</td>
+</tr>
+<tr>
+<td><code>getColorFromString(color)</code></td>
+<td><code>color: String</code></td>
+<td>从字符串获取颜色</td>
+</tr>
+<tr>
+<td><code>FlxColor(color)</code></td>
+<td><code>color: String</code></td>
+<td>FlxColor 别名函数</td>
+</tr>
+</tbody>
+</table>
+<h4 id="音符补间strum-note-tweens">音符补间（Strum Note Tweens）</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>noteTweenX(tag, note, value, duration, ease)</code></td>
+<td><code>tag: String</code>, <code>note: Int</code>, <code>value: Float</code>, <code>duration: Float</code>, <code>ease: String</code></td>
+<td>音符轨道 X 补间</td>
+</tr>
+<tr>
+<td><code>noteTweenY(tag, note, value, duration, ease)</code></td>
+<td>...</td>
+<td>音符轨道 Y 补间</td>
+</tr>
+<tr>
+<td><code>noteTweenAngle(tag, note, value, duration, ease)</code></td>
+<td>...</td>
+<td>音符轨道角度补间</td>
+</tr>
+<tr>
+<td><code>noteTweenDirection(tag, note, value, duration, ease)</code></td>
+<td>...</td>
+<td>音符轨道方向补间</td>
+</tr>
+<tr>
+<td><code>noteTweenAlpha(tag, note, value, duration, ease)</code></td>
+<td>...</td>
+<td>音符轨道透明度补间</td>
+</tr>
+<tr>
+<td><code>cancelTween(tag)</code></td>
+<td>...</td>
+<td>取消补间</td>
+</tr>
+</tbody>
+</table>
+<h4 id="相机">相机</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>cameraSetTarget(target)</code></td>
+<td><code>target: String</code></td>
+<td>设置相机聚焦目标</td>
+</tr>
+<tr>
+<td><code>cameraShake(camera, intensity, duration)</code></td>
+<td>...</td>
+<td>相机震动</td>
+</tr>
+<tr>
+<td><code>cameraFlash(camera, color, duration, forced)</code></td>
+<td>...</td>
+<td>相机闪白</td>
+</tr>
+<tr>
+<td><code>cameraFade(camera, color, duration, forced)</code></td>
+<td>...</td>
+<td>相机淡入/淡出</td>
+</tr>
+<tr>
+<td><code>tweenCameraX/Y/Zoom/Angle/Alpha(value, duration, ease)</code></td>
+<td>...</td>
+<td>相机补间</td>
+</tr>
+</tbody>
+</table>
+<h4 id="鼠标输入">鼠标输入</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mouseClicked(button)</code></td>
+<td><code>button: String</code></td>
+<td>检查鼠标按键是否点击</td>
+</tr>
+<tr>
+<td><code>mousePressed(button)</code></td>
+<td><code>button: String</code></td>
+<td>检查鼠标按键是否按住</td>
+</tr>
+<tr>
+<td><code>mouseReleased(button)</code></td>
+<td><code>button: String</code></td>
+<td>检查鼠标按键是否释放</td>
+</tr>
+<tr>
+<td><code>getMouseX(camera)</code></td>
+<td><code>camera: String</code></td>
+<td>获取鼠标 X 位置</td>
+</tr>
+<tr>
+<td><code>getMouseY(camera)</code></td>
+<td><code>camera: String</code></td>
+<td>获取鼠标 Y 位置</td>
+</tr>
+</tbody>
+</table>
+<h4 id="角色操作">角色操作</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>characterDance(character)</code></td>
+<td><code>character: String</code></td>
+<td>强制角色播放空闲舞蹈</td>
+</tr>
+<tr>
+<td><code>addCharacterToList(name, type)</code></td>
+<td><code>name: String</code>, <code>type: String</code></td>
+<td>预加载角色到列表</td>
+</tr>
+<tr>
+<td><code>getCharacterX(type)</code></td>
+<td><code>type: String</code></td>
+<td>获取角色 X 位置</td>
+</tr>
+<tr>
+<td><code>getCharacterY(type)</code></td>
+<td><code>type: String</code></td>
+<td>获取角色 Y 位置</td>
+</tr>
+<tr>
+<td><code>setCharacterX(type, value)</code></td>
+<td><code>type: String</code>, <code>value: Float</code></td>
+<td>设置角色 X 位置</td>
+</tr>
+<tr>
+<td><code>setCharacterY(type, value)</code></td>
+<td><code>type: String</code>, <code>value: Float</code></td>
+<td>设置角色 Y 位置</td>
+</tr>
+</tbody>
+</table>
+<h4 id="对话视频">对话/视频</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>startDialogue(dialogueFile, music)</code></td>
+<td><code>dialogueFile: String</code>, <code>music?: String</code></td>
+<td>从 JSON 文件启动对话</td>
+</tr>
+<tr>
+<td><code>startVideo(videoFile)</code></td>
+<td><code>videoFile: String</code></td>
+<td>播放视频</td>
+</tr>
+<tr>
+<td><code>triggerEvent(name, arg1, arg2)</code></td>
+<td>...</td>
+<td>触发自定义事件</td>
+</tr>
+</tbody>
+</table>
+<h4 id="位置获取">位置获取</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getMidpointX(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取对象中点 X</td>
+</tr>
+<tr>
+<td><code>getMidpointY(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取对象中点 Y</td>
+</tr>
+<tr>
+<td><code>getGraphicMidpointX(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取图形中点 X</td>
+</tr>
+<tr>
+<td><code>getGraphicMidpointY(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取图形中点 Y</td>
+</tr>
+<tr>
+<td><code>getScreenPositionX(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取屏幕位置 X</td>
+</tr>
+<tr>
+<td><code>getScreenPositionY(variable)</code></td>
+<td><code>variable: String</code></td>
+<td>获取屏幕位置 Y</td>
+</tr>
+</tbody>
+</table>
+<h4 id="discord-集成">Discord 集成</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>changePresence(details, state, smallImageKey, hasStartTimestamp, endTimestamp)</code></td>
+<td>...</td>
+<td>更改 Discord 状态（需 <code>#if desktop</code>）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="工具函数">工具函数</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stringStartsWith(str, start)</code></td>
+<td><code>String, String</code></td>
+<td>检查字符串是否以指定文本开头</td>
+</tr>
+<tr>
+<td><code>stringEndsWith(str, end)</code></td>
+<td><code>String, String</code></td>
+<td>检查字符串是否以指定文本结尾</td>
+</tr>
+<tr>
+<td><code>stringSplit(str, split)</code></td>
+<td><code>String, String</code></td>
+<td>分割字符串</td>
+</tr>
+<tr>
+<td><code>stringTrim(str)</code></td>
+<td><code>String</code></td>
+<td>去除字符串首尾空白</td>
+</tr>
+<tr>
+<td><code>directoryFileList(folder)</code></td>
+<td><code>folder: String</code></td>
+<td>列出目录文件列表</td>
+</tr>
+<tr>
+<td><code>getRandomInt(min, max, exclude)</code></td>
+<td><code>Int, Int, String</code></td>
+<td>获取随机整数</td>
+</tr>
+<tr>
+<td><code>getRandomFloat(min, max, exclude)</code></td>
+<td><code>Float, Float, String</code></td>
+<td>获取随机浮点数</td>
+</tr>
+<tr>
+<td><code>getRandomBool(chance)</code></td>
+<td><code>Float</code></td>
+<td>获取随机布尔值</td>
+</tr>
+<tr>
+<td><code>getModSetting(saveTag, modName)</code></td>
+<td>...</td>
+<td>获取 Mod 设置值</td>
+</tr>
+<tr>
+<td><code>setTimeBarColors(leftHex, rightHex)</code></td>
+<td>...</td>
+<td>设置时间条颜色</td>
+</tr>
+<tr>
+<td><code>debugPrint(text, color)</code></td>
+<td><code>text: String</code>, <code>color: String</code></td>
+<td>在屏幕上打印调试文本</td>
+</tr>
+<tr>
+<td><code>close()</code></td>
+<td>-</td>
+<td>关闭当前 Lua 脚本</td>
+</tr>
+</tbody>
+</table>
+<h4 id="已弃用-api">已弃用 API</h4>
+<p>以下函数已弃用，请使用其替代函数：</p>
+<table>
+<thead>
+<tr>
+<th>已弃用</th>
+<th>替代</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>objectPlayAnimation()</code></td>
+<td><code>playAnim()</code></td>
+</tr>
+<tr>
+<td><code>characterPlayAnim()</code></td>
+<td><code>playAnim()</code></td>
+</tr>
+<tr>
+<td><code>luaSpriteMakeGraphic()</code></td>
+<td><code>makeGraphic()</code></td>
+</tr>
+<tr>
+<td><code>luaSpriteAddAnimationByPrefix()</code></td>
+<td><code>addAnimationByPrefix()</code></td>
+</tr>
+<tr>
+<td><code>luaSpriteAddAnimationByIndices()</code></td>
+<td><code>addAnimationByIndices()</code></td>
+</tr>
+<tr>
+<td><code>luaSpritePlayAnimation()</code></td>
+<td><code>playAnim()</code></td>
+</tr>
+<tr>
+<td><code>setLuaSpriteCamera()</code></td>
+<td><code>setObjectCamera()</code></td>
+</tr>
+<tr>
+<td><code>setLuaSpriteScrollFactor()</code></td>
+<td><code>setScrollFactor()</code></td>
+</tr>
+<tr>
+<td><code>scaleLuaSprite()</code></td>
+<td><code>scaleObject()</code></td>
+</tr>
+<tr>
+<td><code>getPropertyLuaSprite()</code></td>
+<td><code>getProperty()</code></td>
+</tr>
+<tr>
+<td><code>setPropertyLuaSprite()</code></td>
+<td><code>setProperty()</code></td>
+</tr>
+<tr>
+<td><code>musicFadeIn()</code></td>
+<td><code>soundFadeIn()</code></td>
+</tr>
+<tr>
+<td><code>musicFadeOut()</code></td>
+<td><code>soundFadeOut()</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="评分系统">评分系统</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>addScore(value)</code></td>
+<td><code>value: Int</code></td>
+<td>增加分数</td>
+</tr>
+<tr>
+<td><code>setScore(value)</code></td>
+<td><code>value: Int</code></td>
+<td>设置分数</td>
+</tr>
+<tr>
+<td><code>getScore()</code></td>
+<td>-</td>
+<td>获取分数</td>
+</tr>
+<tr>
+<td><code>addMisses(value)</code></td>
+<td><code>value: Int</code></td>
+<td>增加失误</td>
+</tr>
+<tr>
+<td><code>setMisses(value)</code></td>
+<td><code>value: Int</code></td>
+<td>设置失误数</td>
+</tr>
+<tr>
+<td><code>getMisses()</code></td>
+<td>-</td>
+<td>获取失误数</td>
+</tr>
+<tr>
+<td><code>addHits(value)</code></td>
+<td><code>value: Int</code></td>
+<td>增加命中数</td>
+</tr>
+<tr>
+<td><code>setHits(value)</code></td>
+<td><code>value: Int</code></td>
+<td>设置命中数</td>
+</tr>
+<tr>
+<td><code>getHits()</code></td>
+<td>-</td>
+<td>获取命中数</td>
+</tr>
+<tr>
+<td><code>setHealth(value)</code></td>
+<td><code>value: Float</code></td>
+<td>设置生命值</td>
+</tr>
+<tr>
+<td><code>addHealth(value)</code></td>
+<td><code>value: Float</code></td>
+<td>增加生命值</td>
+</tr>
+<tr>
+<td><code>getHealth()</code></td>
+<td>-</td>
+<td>获取生命值</td>
+</tr>
+<tr>
+<td><code>setRatingPercent(value)</code></td>
+<td><code>value: Float</code></td>
+<td>设置评分百分比</td>
+</tr>
+<tr>
+<td><code>setRatingString(value)</code></td>
+<td><code>value: String</code></td>
+<td>设置评分名称</td>
+</tr>
+<tr>
+<td><code>setRatingName(value)</code></td>
+<td><code>value: String</code></td>
+<td>setRatingString 的别名</td>
+</tr>
+<tr>
+<td><code>setRatingFC(value)</code></td>
+<td><code>value: String</code></td>
+<td>设置 FC 状态</td>
+</tr>
+</tbody>
+</table>
+<h4 id="歌曲控制">歌曲控制</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getSongPosition()</code></td>
+<td>-</td>
+<td>获取歌曲播放位置</td>
+</tr>
+<tr>
+<td><code>setSongPosition(value)</code></td>
+<td><code>value: Float</code></td>
+<td>设置歌曲播放位置</td>
+</tr>
+<tr>
+<td><code>loadSong(name, difficultyNum)</code></td>
+<td>...</td>
+<td>加载新歌曲</td>
+</tr>
+<tr>
+<td><code>startCountdown()</code></td>
+<td>-</td>
+<td>开始/重新开始倒计时</td>
+</tr>
+<tr>
+<td><code>endSong()</code></td>
+<td>-</td>
+<td>结束当前歌曲</td>
+</tr>
+<tr>
+<td><code>restartSong(skipTransition)</code></td>
+<td><code>skipTransition: Bool</code></td>
+<td>重新开始歌曲</td>
+</tr>
+<tr>
+<td><code>exitSong(skipTransition)</code></td>
+<td><code>skipTransition: Bool</code></td>
+<td>退出到主菜单</td>
+</tr>
+<tr>
+<td><code>triggerEvent(name, v1, v2)</code></td>
+<td>...</td>
+<td>触发事件</td>
+</tr>
+</tbody>
+</table>
+<h4 id="脚本间通信">脚本间通信</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getRunningScripts()</code></td>
+<td>-</td>
+<td>获取所有运行中的脚本列表</td>
+</tr>
+<tr>
+<td><code>callOnScripts(funcName, args, ignoreStops, ignoreSelf, exclusions)</code></td>
+<td>...</td>
+<td>调用所有脚本的回调</td>
+</tr>
+<tr>
+<td><code>callScript(luaFile, funcName, args)</code></td>
+<td>...</td>
+<td>调用指定脚本的函数</td>
+</tr>
+<tr>
+<td><code>getGlobalFromScript(luaFile, global)</code></td>
+<td>...</td>
+<td>获取指定脚本的全局变量</td>
+</tr>
+<tr>
+<td><code>setGlobalFromScript(luaFile, global, val)</code></td>
+<td>...</td>
+<td>设置指定脚本的全局变量</td>
+</tr>
+<tr>
+<td><code>isRunning(luaFile)</code></td>
+<td>...</td>
+<td>检查脚本是否在运行</td>
+</tr>
+<tr>
+<td><code>addLuaScript(luaFile, ignoreAlreadyRunning)</code></td>
+<td>...</td>
+<td>动态添加 Lua 脚本</td>
+</tr>
+<tr>
+<td><code>removeLuaScript(luaFile)</code></td>
+<td>...</td>
+<td>动态移除 Lua 脚本</td>
+</tr>
+<tr>
+<td><code>runHaxeCode(codeToRun)</code></td>
+<td><code>codeToRun: String</code></td>
+<td>在 Lua 中执行 HScript 代码</td>
+</tr>
+<tr>
+<td><code>addHaxeLibrary(libName, libPackage)</code></td>
+<td>...</td>
+<td>导入 Haxe 类到 HScript 上下文</td>
+</tr>
+<tr>
+<td><code>callOnLuas(func, args, ignoreStops, exclusions)</code></td>
+<td>...</td>
+<td>调用所有 Lua 脚本</td>
+</tr>
+<tr>
+<td><code>callOnHScript(func, args, ignoreStops, exclusions)</code></td>
+<td>...</td>
+<td>调用所有 HScript</td>
+</tr>
+<tr>
+<td><code>setOnLuas(varName, arg)</code></td>
+<td>...</td>
+<td>设置所有 Lua 脚本变量</td>
+</tr>
+<tr>
+<td><code>setOnHScript(varName, arg)</code></td>
+<td>...</td>
+<td>设置所有 HScript 变量</td>
+</tr>
+<tr>
+<td><code>setOnScripts(varName, arg)</code></td>
+<td>...</td>
+<td>设置所有脚本变量</td>
+</tr>
+</tbody>
+</table>
+<h4 id="自定义子状态">自定义子状态</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>openCustomSubstate(name, pauseGame)</code></td>
+<td>...</td>
+<td>打开自定义子状态</td>
+</tr>
+<tr>
+<td><code>closeCustomSubstate()</code></td>
+<td>-</td>
+<td>关闭自定义子状态</td>
+</tr>
+</tbody>
+</table>
+<h4 id="着色器">着色器</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>initLuaShader(name, glslVersion)</code></td>
+<td>...</td>
+<td>初始化着色器</td>
+</tr>
+<tr>
+<td><code>setSpriteShader(obj, shader)</code></td>
+<td>...</td>
+<td>设置 Sprite 着色器</td>
+</tr>
+<tr>
+<td><code>removeSpriteShader(obj)</code></td>
+<td>...</td>
+<td>移除 Sprite 着色器</td>
+</tr>
+<tr>
+<td><code>getShaderBool/Int/Float(obj, prop)</code></td>
+<td>...</td>
+<td>获取着色器属性</td>
+</tr>
+<tr>
+<td><code>setShaderBool/Int/Float(obj, prop, value)</code></td>
+<td>...</td>
+<td>设置着色器属性</td>
+</tr>
+<tr>
+<td><code>setShaderSampler2D(obj, prop, bitmapdataPath)</code></td>
+<td>...</td>
+<td>设置着色器纹理</td>
+</tr>
+</tbody>
+</table>
+<h4 id="调试">调试</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>debugPrint(text)</code></td>
+<td><code>text: String</code></td>
+<td>调试打印</td>
+</tr>
+<tr>
+<td><code>luaTrace(text, ignoreCheck, deprecated, color)</code></td>
+<td>...</td>
+<td>Lua 跟踪输出</td>
+</tr>
+<tr>
+<td><code>luaDeprecations(value)</code></td>
+<td><code>value: Bool</code></td>
+<td>启用/禁用弃用警告</td>
+</tr>
+</tbody>
+</table>
+<h4 id="键盘手柄输入">键盘/手柄输入</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>keyJustPressed(name)</code></td>
+<td><code>name: String</code></td>
+<td>检测按键刚按下</td>
+</tr>
+<tr>
+<td><code>keyPressed(name)</code></td>
+<td><code>name: String</code></td>
+<td>检测按键按住</td>
+</tr>
+<tr>
+<td><code>keyReleased(name)</code></td>
+<td><code>name: String</code></td>
+<td>检测按键刚释放</td>
+</tr>
+<tr>
+<td><code>isKeyPressed(name)</code></td>
+<td><code>name: String</code></td>
+<td>通用按键检测</td>
+</tr>
+<tr>
+<td><code>isGamepadPressed(name)</code></td>
+<td>...</td>
+<td>手柄按键检测</td>
+</tr>
+</tbody>
+</table>
+<h4 id="文件与保存">文件与保存</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>getTextFromFile(path, ignoreModFolders)</code></td>
+<td>...</td>
+<td>读取文本文件</td>
+</tr>
+<tr>
+<td><code>checkFileExists(path, ignoreModFolders)</code></td>
+<td>...</td>
+<td>检查文件是否存在</td>
+</tr>
+<tr>
+<td><code>saveFile(path, content, ignoreModFolders)</code></td>
+<td>...</td>
+<td>保存文件</td>
+</tr>
+<tr>
+<td><code>deleteFile(path, ignoreModFolders)</code></td>
+<td>...</td>
+<td>删除文件</td>
+</tr>
+<tr>
+<td><code>initSaveData(name, ?folder)</code></td>
+<td>...</td>
+<td>初始化存档</td>
+</tr>
+<tr>
+<td><code>flushSaveData()</code></td>
+<td>-</td>
+<td>刷新存档到磁盘</td>
+</tr>
+<tr>
+<td><code>getDataFromSave(name, ?default)</code></td>
+<td>...</td>
+<td>读取存档数据</td>
+</tr>
+<tr>
+<td><code>setDataFromSave(name, value)</code></td>
+<td>...</td>
+<td>写入存档数据</td>
+</tr>
+</tbody>
+</table>
+<h4 id="杂项">杂项</h4>
+<table>
+<thead>
+<tr>
+<th>函数</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>precacheImage(key)</code></td>
+<td><code>key: String</code></td>
+<td>预缓存图像</td>
+</tr>
+<tr>
+<td><code>precacheSound(key)</code></td>
+<td><code>key: String</code></td>
+<td>预缓存音效</td>
+</tr>
+<tr>
+<td><code>precacheMusic(key)</code></td>
+<td><code>key: String</code></td>
+<td>预缓存音乐</td>
+</tr>
+<tr>
+<td><code>loadLanguage(lang)</code></td>
+<td>...</td>
+<td>加载语言包</td>
+</tr>
+<tr>
+<td><code>getLanguage(key, defaultText)</code></td>
+<td>...</td>
+<td>获取语言文本</td>
+</tr>
+<tr>
+<td><code>setVar(name, value)</code></td>
+<td>...</td>
+<td>设置 PlayState 变量</td>
+</tr>
+<tr>
+<td><code>getVar(name)</code></td>
+<td>...</td>
+<td>获取 PlayState 变量</td>
+</tr>
+<tr>
+<td><code>songMusicTracks(...)</code></td>
+<td>...</td>
+<td>获取音乐音轨</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<h2 id="4-hscript-脚本系统">4. HScript 脚本系统</h2>
+<h3 id="41-hscript-类">4.1 HScript 类</h3>
+<p><code>HScript</code> 类（位于 <code>source/script/hscript/HScript.hx</code>）是 Haxe 脚本的核心引擎。</p>
+<p><strong>支持的扩展名</strong>: <code>.hx</code>, <code>.hscript</code>, <code>.hsc</code>, <code>.hxs</code></p>
+<h3 id="42-默认变量绑定">4.2 默认变量绑定</h3>
+<p>HScript 脚本创建时会自动注入以下变量（来自 <code>HScript.getDefaultVariables()</code>）：</p>
+<h4 id="haxe-标准库">Haxe 标准库</h4>
+<pre><code>Math, Std, StringTools, Sys, Type, Reflect,
+Date, DateTools, Lambda, EReg, Xml, Json (haxe.Json)
+</code></pre>
+<h4 id="flixel-框架">Flixel 框架</h4>
+<pre><code>FlxG, FlxMath, FlxSprite, FlxCamera,
+FlxTimer, FlxTween, FlxEase,
+FlxText, FlxSound, FlxGroup, FlxTypedGroup,
+FlxSpriteGroup, FlxStringUtil, FlxSpriteUtil,
+FlxAtlasFrames, FlxColor (CustomFlxColor)
+</code></pre>
+<h4 id="引擎类">引擎类</h4>
+<pre><code>Paths, Conductor, ClientPrefs,
+Character, Alphabet, FunkinText
+</code></pre>
+<h4 id="状态类">状态类</h4>
+<pre><code>MusicBeatState, MusicBeatSubstate,
+ModState, ModSubState,
+PlayState, FreeplayState, StoryMenuState,
+TitleState, CreditsState, MainMenuState,
+HScript
+</code></pre>
+<h4 id="着色器-1">着色器</h4>
+<pre><code>ShaderFilter, ColorMatrixFilter
+FlxRuntimeShader (非 Flash + sys 平台)
+VideoSpriteManager
+MP4Handler (hxCodec &gt;= 3.0.0 或 2.5.1)
+</code></pre>
+<h4 id="脚本控制常量">脚本控制常量</h4>
+<pre><code>Function_Stop       = 1  -- 停止当前执行
+Function_Continue   = 0  -- 继续执行
+Function_StopLua    = 2  -- 停止 Lua
+Function_StopHScript = 3 -- 停止 HScript
+Function_StopAll    = 4  -- 停止所有
+</code></pre>
+<h4 id="便捷函数">便捷函数</h4>
+<pre><code class="language-haxe">add(obj:<span class="hljs-type">Dynamic</span>)         <span class="hljs-comment">// 添加到当前状态</span>
+insert(pos:<span class="hljs-type">Int</span>, obj:<span class="hljs-type">Dynamic</span>)  <span class="hljs-comment">// 插入到指定位置</span>
+remove(obj:<span class="hljs-type">Dynamic</span>, splice:<span class="hljs-type">Bool </span>= <span class="hljs-literal">false</span>)  <span class="hljs-comment">// 从状态移除</span>
+</code></pre>
+<h4 id="版本与屏幕信息">版本与屏幕信息</h4>
+<pre><code class="language-haxe">hscriptVersion   <span class="hljs-comment">// &quot;0.2.0&quot;</span>
+version          <span class="hljs-comment">// Psych Engine 版本</span>
+screenWidth      <span class="hljs-comment">// FlxG.width</span>
+screenHeight     <span class="hljs-comment">// FlxG.height</span>
+buildTarget      <span class="hljs-comment">// &quot;windows&quot; / &quot;linux&quot; / &quot;mac&quot; / &quot;browser&quot; / &quot;android&quot;</span>
+language         <span class="hljs-comment">// 当前语言</span>
+</code></pre>
+<h4 id="输入函数">输入函数</h4>
+<pre><code class="language-haxe">keyJustPressed(name:<span class="hljs-type">String</span>)           <span class="hljs-comment">// 按键刚按下检测</span>
+keyPressed(name:<span class="hljs-type">String</span>)               <span class="hljs-comment">// 按键按住检测</span>
+keyReleased(name:<span class="hljs-type">String</span>)              <span class="hljs-comment">// 按键释放检测</span>
+<span class="hljs-comment">// name 支持: &#x27;left&#x27;, &#x27;down&#x27;, &#x27;up&#x27;, &#x27;right&#x27;, &#x27;accept&#x27;, &#x27;back&#x27;, &#x27;pause&#x27;, &#x27;reset&#x27;, &#x27;space&#x27;</span>
+
+keyboardJustPressed(name:<span class="hljs-type">String</span>)      <span class="hljs-comment">// 任意键盘按键刚按下</span>
+keyboardPressed(name:<span class="hljs-type">String</span>)          <span class="hljs-comment">// 任意键盘按键按住</span>
+keyboardReleased(name:<span class="hljs-type">String</span>)         <span class="hljs-comment">// 任意键盘按键释放</span>
+
+anyGamepadJustPressed(name:<span class="hljs-type">String</span>)    <span class="hljs-comment">// 任意手柄按键刚按下</span>
+anyGamepadPressed(name:<span class="hljs-type">String</span>)        <span class="hljs-comment">// 任意手柄按键按住</span>
+anyGamepadReleased(name:<span class="hljs-type">String</span>)       <span class="hljs-comment">// 任意手柄按键释放</span>
+
+gamepadAnalogX(id:<span class="hljs-type">Int</span>, leftStick:<span class="hljs-type">Bool</span>) <span class="hljs-comment">// 手柄摇杆 X 轴</span>
+gamepadAnalogY(id:<span class="hljs-type">Int</span>, leftStick:<span class="hljs-type">Bool</span>) <span class="hljs-comment">// 手柄摇杆 Y 轴</span>
+gamepadJustPressed(id:<span class="hljs-type">Int</span>, name:<span class="hljs-type">String</span>) <span class="hljs-comment">// 指定手柄按键刚按下</span>
+gamepadPressed(id:<span class="hljs-type">Int</span>, name:<span class="hljs-type">String</span>)     <span class="hljs-comment">// 指定手柄按键按住</span>
+gamepadReleased(id:<span class="hljs-type">Int</span>, name:<span class="hljs-type">String</span>)    <span class="hljs-comment">// 指定手柄按键释放</span>
+</code></pre>
+<h4 id="导入与桥接函数">导入与桥接函数</h4>
+<pre><code class="language-haxe">importScript(path:<span class="hljs-type">String</span>)      <span class="hljs-comment">// 导入其他 HScript 文件</span>
+runLuaCode(code:<span class="hljs-type">String</span>)        <span class="hljs-comment">// 执行 Lua 代码</span>
+FunkinLua                      <span class="hljs-comment">// Lua 引擎类引用</span>
+LuaApi                         <span class="hljs-comment">// Lua API 管理类</span>
+customSubstate                 <span class="hljs-comment">// 当前自定义子状态</span>
+customSubstateName             <span class="hljs-comment">// 自定义子状态名称</span>
+</code></pre>
+<h3 id="43-playstate-特定绑定">4.3 PlayState 特定绑定</h3>
+<p>当 <code>PlayState.instance</code> 可用时，HScript 自动绑定以下变量：</p>
+<table>
+<thead>
+<tr>
+<th>变量名</th>
+<th>类型</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>game</code></td>
+<td>PlayState</td>
+<td>PlayState 实例引用</td>
+</tr>
+<tr>
+<td><code>curBpm</code></td>
+<td>Float</td>
+<td>当前 BPM</td>
+</tr>
+<tr>
+<td><code>bpm</code></td>
+<td>Float</td>
+<td>歌曲 BPM</td>
+</tr>
+<tr>
+<td><code>scrollSpeed</code></td>
+<td>Float</td>
+<td>滚动速度</td>
+</tr>
+<tr>
+<td><code>crochet</code></td>
+<td>Float</td>
+<td>节拍长度</td>
+</tr>
+<tr>
+<td><code>stepCrochet</code></td>
+<td>Float</td>
+<td>步进长度</td>
+</tr>
+<tr>
+<td><code>songLength</code></td>
+<td>Float</td>
+<td>歌曲长度</td>
+</tr>
+<tr>
+<td><code>songName</code></td>
+<td>String</td>
+<td>歌曲名称</td>
+</tr>
+<tr>
+<td><code>songPath</code></td>
+<td>String</td>
+<td>歌曲路径</td>
+</tr>
+<tr>
+<td><code>startedCountdown</code></td>
+<td>Bool</td>
+<td>是否已开始倒计时</td>
+</tr>
+<tr>
+<td><code>curStage</code></td>
+<td>String</td>
+<td>当前舞台</td>
+</tr>
+<tr>
+<td><code>isStoryMode</code></td>
+<td>Bool</td>
+<td>故事模式</td>
+</tr>
+<tr>
+<td><code>difficulty</code></td>
+<td>Int</td>
+<td>难度索引</td>
+</tr>
+<tr>
+<td><code>difficultyName</code></td>
+<td>String</td>
+<td>难度名称</td>
+</tr>
+<tr>
+<td><code>difficultyPath</code></td>
+<td>String</td>
+<td>难度路径</td>
+</tr>
+<tr>
+<td><code>weekRaw</code></td>
+<td>Int</td>
+<td>周索引</td>
+</tr>
+<tr>
+<td><code>week</code></td>
+<td>String</td>
+<td>周名称</td>
+</tr>
+<tr>
+<td><code>seenCutscene</code></td>
+<td>Bool</td>
+<td>是否已看过过场</td>
+</tr>
+<tr>
+<td><code>boyfriend</code></td>
+<td>Character</td>
+<td>玩家角色</td>
+</tr>
+<tr>
+<td><code>dad</code></td>
+<td>Character</td>
+<td>对手角色</td>
+</tr>
+<tr>
+<td><code>gf</code></td>
+<td>Character</td>
+<td>GF 角色</td>
+</tr>
+<tr>
+<td><code>camGame</code></td>
+<td>FlxCamera</td>
+<td>游戏相机</td>
+</tr>
+<tr>
+<td><code>camHUD</code></td>
+<td>FlxCamera</td>
+<td>HUD 相机</td>
+</tr>
+<tr>
+<td><code>camOther</code></td>
+<td>FlxCamera</td>
+<td>其他相机</td>
+</tr>
+<tr>
+<td><code>healthGainMult</code></td>
+<td>Float</td>
+<td>生命增益倍数</td>
+</tr>
+<tr>
+<td><code>healthLossMult</code></td>
+<td>Float</td>
+<td>生命损失倍数</td>
+</tr>
+<tr>
+<td><code>playbackRate</code></td>
+<td>Float</td>
+<td>播放速率</td>
+</tr>
+<tr>
+<td><code>instakillOnMiss</code></td>
+<td>Bool</td>
+<td>失误即死</td>
+</tr>
+<tr>
+<td><code>botPlay</code></td>
+<td>Bool</td>
+<td>自动游玩</td>
+</tr>
+<tr>
+<td><code>practice</code></td>
+<td>Bool</td>
+<td>练习模式</td>
+</tr>
+<tr>
+<td><code>luattf</code></td>
+<td>String</td>
+<td>字体设置</td>
+</tr>
+</tbody>
+</table>
+<h4 id="playstate-变量管理">PlayState 变量管理</h4>
+<pre><code class="language-haxe">setVar(name:<span class="hljs-type">String</span>, value:<span class="hljs-type">Dynamic</span>)      <span class="hljs-comment">// 设置 PlayState 变量</span>
+getVar(name:<span class="hljs-type">String</span>):<span class="hljs-type">Dynamic              </span>// 获取 PlayState 变量
+removeVar(name:<span class="hljs-type">String</span>):<span class="hljs-type">Bool              </span>// 移除 PlayState 变量
+</code></pre>
+<hr>
+<h2 id="5-modstate--modsubstate">5. ModState &amp; ModSubState</h2>
+<h3 id="51-modstate">5.1 ModState</h3>
+<p><code>ModState</code>（位于 <code>source/states/ModState.hx</code>）是一个同时支持 <strong>Lua</strong> 和 <strong>HScript</strong> 脚本的状态。它继承自 <code>MusicBeatState</code>，允许通过脚本文件定义完整的游戏状态。</p>
+<p><strong>脚本文件位置</strong>:</p>
+<ul>
+<li>HScript: <code>data/states/&lt;Name&gt;.hx</code> 或 <code>data/states/&lt;Name&gt;/</code></li>
+<li>Lua: <code>data/states/&lt;Name&gt;.lua</code> 或 <code>data/states/&lt;Name&gt;/</code></li>
+</ul>
+<p><strong>使用方式</strong>:</p>
+<pre><code class="language-haxe">FlxG.switchState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModState</span>(<span class="hljs-string">&quot;MyState&quot;</span>));
+<span class="hljs-comment">// 可携带数据</span>
+FlxG.switchState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModState</span>(<span class="hljs-string">&quot;MyState&quot;</span>, {someData: <span class="hljs-type">123</span>}));
+</code></pre>
+<p><strong>工作原理</strong>:</p>
+<ol>
+<li>构造函数接收状态名称和可选数据</li>
+<li>数据通过静态变量 <code>lastName</code> 和 <code>lastData</code> 跨状态切换保持</li>
+<li><code>super(scriptName)</code> 传递给 <code>MusicBeatState</code>，触发 <code>initHScripts()</code></li>
+<li><code>create()</code> 中额外初始化 Lua 脚本（<code>initLuaScripts()</code>），设置 Lua 变量并触发回调</li>
+</ol>
+<p><strong>Lua 变量绑定</strong>（ModState.create 中自动设置）:</p>
+<pre><code class="language-lua"><span class="hljs-comment">-- 在 Lua 脚本中可直接访问</span>
+data      <span class="hljs-comment">-- 传递的数据</span>
+controls  <span class="hljs-comment">-- 控制器对象</span>
+state     <span class="hljs-comment">-- ModState 实例自身</span>
+</code></pre>
+<p><strong>数据传递</strong>:</p>
+<pre><code class="language-haxe"><span class="hljs-comment">// 保存数据到静态变量（自动）</span>
+ModState.lastName = <span class="hljs-string">&quot;MyState&quot;</span>;
+ModState.lastData = {playerName: <span class="hljs-type"></span>&quot;John<span class="hljs-string">&quot;};
+
+// 在 HScript 中访问
+trace(data.playerName);  // &quot;</span>John<span class="hljs-string">&quot;
+</span></code></pre>
+<h3 id="52-modsubstate">5.2 ModSubState</h3>
+<p><code>ModSubState</code>（位于 <code>source/substates/ModSubState.hx</code>）与 <code>ModState</code> 类似，同时支持 <strong>Lua</strong> 和 <strong>HScript</strong>，但是子状态版本，继承自 <code>MusicBeatSubstate</code>。</p>
+<p><strong>脚本文件位置</strong>:</p>
+<ul>
+<li>HScript: <code>data/states/&lt;Name&gt;.hx</code> 或 <code>data/states/&lt;Name&gt;/</code></li>
+<li>Lua: <code>data/states/&lt;Name&gt;.lua</code> 或 <code>data/states/&lt;Name&gt;/</code></li>
+</ul>
+<p><strong>使用方式</strong>:</p>
+<pre><code class="language-haxe"><span class="hljs-comment">// 从任意状态或子状态打开</span>
+openSubState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModSubState</span>(<span class="hljs-string">&quot;MySubState&quot;</span>));
+openSubState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModSubState</span>(<span class="hljs-string">&quot;MySubState&quot;</span>, {someData: <span class="hljs-type">456</span>}));
+</code></pre>
+<p><strong>Lua 变量绑定</strong>（ModSubState.create 中自动设置）:</p>
+<pre><code class="language-lua">data      <span class="hljs-comment">-- 传递的数据</span>
+controls  <span class="hljs-comment">-- 控制器对象</span>
+state     <span class="hljs-comment">-- ModSubState 实例自身</span>
+</code></pre>
+<p><strong>与 ModState 的区别</strong>:</p>
+<ul>
+<li>继承自 <code>MusicBeatSubstate</code> 而非 <code>MusicBeatState</code></li>
+<li>脚本搜索路径包含遗留的 <code>hscripts/substates/</code> 和 <code>lua/substates/</code> 目录</li>
+<li>生命周期方法不同（<code>create()</code> 等）</li>
+</ul>
+<h3 id="53-生命周期">5.3 生命周期</h3>
+<p><code>ModState</code> / <code>ModSubState</code> 的 <code>create()</code> 流程：</p>
+<pre><code>ModState.create()
+├── super.create()
+│   ├── FlxG 配置
+│   └── initHScripts()  ← 加载 data/states/&lt;Name&gt;.hx
+│       └── HScript 构造函数自动调用 onCreate()
+├── initLuaScripts()    ← 额外加载 Lua
+├── setOnLuas('data', data)
+├── setOnLuas('controls', controls)
+├── setOnLuas('state', this)
+├── callOnLuas('onCreatePost', [])
+└── setOnHscript('data', data)
+</code></pre>
+<hr>
+<h2 id="6-辅助类">6. 辅助类</h2>
+<h3 id="61-debugluatext">6.1 DebugLuaText</h3>
+<p><strong>文件</strong>: <code>source/script/lua/DebugLuaText.hx</code></p>
+<p>用于在屏幕上显示调试文本的类，会自动淡出消失。</p>
+<pre><code class="language-haxe"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">DebugLuaText</span> <span class="hljs-keyword"><span class="hljs-keyword">extends</span> <span class="hljs-type">FlxText</span></span>
+</span></code></pre>
+<p><strong>特性</strong>:</p>
+<ul>
+<li>默认持续 6 秒后自动淡出</li>
+<li>根据 <code>ClientPrefs.data.luattf</code> 选择字体</li>
+<li>自动设置滚动因子为 0（固定在屏幕上）</li>
+<li>使用 <code>parentGroup:FlxTypedGroup&lt;DebugLuaText&gt;</code> 管理多个文本</li>
+</ul>
+<h3 id="62-modchartsprite">6.2 ModchartSprite</h3>
+<p><strong>文件</strong>: <code>source/script/lua/ModchartSprite.hx</code></p>
+<p>用于 Lua 脚本创建的可扩展 Sprite 类。</p>
+<pre><code class="language-haxe"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ModchartSprite</span> <span class="hljs-keyword"><span class="hljs-keyword">extends</span> <span class="hljs-type">FlxSprite</span></span>
+</span></code></pre>
+<p><strong>特性</strong>:</p>
+<ul>
+<li><code>wasAdded:Bool</code> — 标记是否已添加到场景</li>
+<li><code>animOffsets:Map&lt;String, Array&lt;Float&gt;&gt;</code> — 动画偏移映射</li>
+<li><code>playAnim(name, forced, reverse, startFrame)</code> — 播放动画并自动应用偏移</li>
+<li><code>addOffset(name, x, y)</code> — 添加动画偏移</li>
+<li>默认启用抗锯齿（根据 <code>ClientPrefs.data.globalAntialiasing</code>）</li>
+</ul>
+<h3 id="63-modcharttext">6.3 ModchartText</h3>
+<p><strong>文件</strong>: <code>source/script/lua/ModchartText.hx</code></p>
+<p>用于 Lua 脚本创建的可缩放文本类。</p>
+<pre><code class="language-haxe"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">ModchartText</span> <span class="hljs-keyword"><span class="hljs-keyword">extends</span> <span class="hljs-type">FlxText</span></span>
+</span></code></pre>
+<p><strong>特性</strong>:</p>
+<ul>
+<li>默认相机为 <code>camHUD</code></li>
+<li>边框大小为 2（比普通文本更粗）</li>
+<li>根据 <code>luattf</code> 设置选择字体（VCR 或系统字体）</li>
+<li><code>wasAdded:Bool</code> — 标记是否已添加到场景</li>
+<li>滚动因子固定为 0</li>
+</ul>
+<h3 id="64-funkintext">6.4 FunkinText</h3>
+<p><strong>文件</strong>: <code>source/script/FunkinText.hx</code></p>
+<p>通用的 FNF 风格文本组件，可在 HScript 中直接使用。</p>
+<pre><code class="language-haxe"><span class="hljs-class"><span class="hljs-keyword">class</span> <span class="hljs-title">FunkinText</span> <span class="hljs-keyword"><span class="hljs-keyword">extends</span> <span class="hljs-type">FlxText</span></span>
+</span></code></pre>
+<p><strong>构造函数</strong>:</p>
+<pre><code class="language-haxe"><span class="hljs-keyword">new</span> <span class="hljs-type">FunkinText</span>(X:<span class="hljs-type">Float </span>= <span class="hljs-number">0</span>, Y:<span class="hljs-type">Float </span>= <span class="hljs-number">0</span>, FieldWidth:<span class="hljs-type">Float </span>= <span class="hljs-number">0</span>,
+               ?Text:<span class="hljs-type">String</span>, Size:<span class="hljs-type">Int </span>= <span class="hljs-number">16</span>, Border:<span class="hljs-type">Bool </span>= <span class="hljs-literal">true</span>)
+</code></pre>
+<p><strong>特性</strong>:</p>
+<ul>
+<li>默认使用 <code>vcr.ttf</code> 字体</li>
+<li>默认颜色为白色</li>
+<li>可选黑色描边（<code>Border:Bool</code> 参数控制）</li>
+</ul>
+<p><strong>HScript 中使用示例</strong>:</p>
+<pre><code class="language-haxe"><span class="hljs-keyword">var</span> myText = <span class="hljs-keyword">new</span> <span class="hljs-type">FunkinText</span>(<span class="hljs-number">100</span>, <span class="hljs-number">100</span>, <span class="hljs-number">400</span>, <span class="hljs-string">&quot;Hello World&quot;</span>, <span class="hljs-number">24</span>, <span class="hljs-literal">true</span>);
+add(myText);
+</code></pre>
+<hr>
+<h2 id="7-lua-api从-hscript-管理-lua">7. Lua API（从 HScript 管理 Lua）</h2>
+<p><code>LuaApi</code> 类（位于 <code>source/script/hscript/LuaApi.hx</code>）提供从 HScript 管理 Lua 函数的全局 API。</p>
+<h3 id="71-方法列表">7.1 方法列表</h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>参数</th>
+<th>描述</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>addLuaFunction(name, func, overrideExisting)</code></td>
+<td><code>String, Function, Bool</code></td>
+<td>添加新的全局 Lua 函数</td>
+</tr>
+<tr>
+<td><code>overrideLuaFunction(name, wrapper)</code></td>
+<td><code>String, Function</code></td>
+<td>覆盖已有 Lua 函数（wrapper 接收原始函数为第一参数）</td>
+</tr>
+<tr>
+<td><code>restoreLuaFunction(name)</code></td>
+<td><code>String</code></td>
+<td>恢复原始函数</td>
+</tr>
+<tr>
+<td><code>removeLuaFunction(name)</code></td>
+<td><code>String</code></td>
+<td>移除自定义函数</td>
+</tr>
+<tr>
+<td><code>luaFunctionExists(name)</code></td>
+<td><code>String</code></td>
+<td>检查函数是否存在</td>
+</tr>
+<tr>
+<td><code>getLuaFunction(name)</code></td>
+<td><code>String</code></td>
+<td>获取 Lua 函数引用</td>
+</tr>
+<tr>
+<td><code>getCustomFunctions()</code></td>
+<td>-</td>
+<td>获取所有自定义函数名</td>
+</tr>
+<tr>
+<td><code>getOverriddenFunctions()</code></td>
+<td>-</td>
+<td>获取所有被覆盖的函数名</td>
+</tr>
+<tr>
+<td><code>getOriginalFunction(name)</code></td>
+<td><code>String</code></td>
+<td>获取被覆盖函数的原始版本</td>
+</tr>
+<tr>
+<td><code>batchOverrideLuaFunctions(overrides)</code></td>
+<td><code>Map&lt;String, Function&gt;</code></td>
+<td>批量覆盖</td>
+</tr>
+<tr>
+<td><code>batchAddLuaFunctions(functions, overrideExisting)</code></td>
+<td><code>Map&lt;String, Function&gt;, Bool</code></td>
+<td>批量添加</td>
+</tr>
+<tr>
+<td><code>restoreAllLuaFunctions()</code></td>
+<td>-</td>
+<td>恢复所有函数</td>
+</tr>
+<tr>
+<td><code>clearAll()</code></td>
+<td>-</td>
+<td>清除所有自定义函数并恢复原始</td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-hscript-中使用示例">7.2 HScript 中使用示例</h3>
+<pre><code class="language-haxe"><span class="hljs-comment">// 添加全局 Lua 函数</span>
+LuaApi.addLuaFunction(<span class="hljs-string">&quot;myFunc&quot;</span>, <span class="hljs-function"><span class="hljs-keyword">function</span></span>(x, y) {
+    <span class="hljs-keyword">return</span> x + y;
+});
+
+<span class="hljs-comment">// 覆盖已有函数</span>
+LuaApi.overrideLuaFunction(<span class="hljs-string">&quot;getProperty&quot;</span>, <span class="hljs-function"><span class="hljs-keyword">function</span></span>(original, variable) {
+    <span class="hljs-built_in">trace</span>(<span class="hljs-string">&#x27;Intercepted getProperty call: &#x27;</span> + variable);
+    <span class="hljs-keyword">return</span> original(variable);
+});
+
+<span class="hljs-comment">// 恢复原始函数</span>
+LuaApi.restoreLuaFunction(<span class="hljs-string">&quot;getProperty&quot;</span>);
+</code></pre>
+<hr>
+<h2 id="8-脚本事件回调完整列表">8. 脚本事件回调完整列表</h2>
+<p>以下事件回调同时适用于 Lua 和 HScript（HScript 中函数名相同）：</p>
+<h3 id="创建销毁">创建/销毁</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCreate</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- Lua 文件启动时触发（部分变量尚未创建）</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCreatePost</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- &quot;create&quot; 阶段结束时触发</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onDestroy</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- Lua 文件结束时触发（歌曲淡出完成）</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="更新循环">更新循环</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onUpdate</span><span class="hljs-params">(elapsed)</span></span>
+    <span class="hljs-comment">-- &quot;update&quot; 阶段开始时触发</span>
+    <span class="hljs-comment">-- elapsed: Float - 帧时间差</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onUpdatePost</span><span class="hljs-params">(elapsed)</span></span>
+    <span class="hljs-comment">-- &quot;update&quot; 阶段结束时触发</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="节拍步进">节拍/步进</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onBeatHit</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 每小节触发 4 次（每拍）</span>
+    <span class="hljs-comment">-- 注意：在 ModState 中此函数可能不会触发</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onStepHit</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 每小节触发 16 次（每步进）</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="倒计时">倒计时</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onStartCountdown</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 倒计时开始时触发</span>
+    <span class="hljs-comment">-- 返回 Function_Stop 可阻止倒计时</span>
+    <span class="hljs-keyword">return</span> Function_Continue;
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCountdownTick</span><span class="hljs-params">(counter)</span></span>
+    <span class="hljs-comment">-- counter = 0 -&gt; &quot;三&quot; (&quot;Three&quot;)</span>
+    <span class="hljs-comment">-- counter = 1 -&gt; &quot;二&quot; (&quot;Two&quot;)</span>
+    <span class="hljs-comment">-- counter = 2 -&gt; &quot;一&quot; (&quot;One&quot;)</span>
+    <span class="hljs-comment">-- counter = 3 -&gt; &quot;开始!&quot; (&quot;Go!&quot;)</span>
+    <span class="hljs-comment">-- counter = 4 -&gt; 与 onSongStart 同时触发</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onSongStart</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 乐器音轨和人声开始播放，songPosition = 0</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="歌曲结束">歌曲结束</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onEndSong</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 歌曲结束/开始过渡时触发</span>
+    <span class="hljs-comment">-- 返回 Function_Stop 可阻止结束</span>
+    <span class="hljs-keyword">return</span> Function_Continue;
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="暂停">暂停</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onPause</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 按下暂停键时触发</span>
+    <span class="hljs-comment">-- 返回 Function_Stop 可阻止暂停</span>
+    <span class="hljs-keyword">return</span> Function_Continue;
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onResume</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 从暂停恢复后触发</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="游戏结束">游戏结束</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onGameOver</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 角色死亡时触发（生命值 &lt;= 0 时每帧调用）</span>
+    <span class="hljs-comment">-- 返回 Function_Stop 可阻止进入游戏结束画面</span>
+    <span class="hljs-keyword">return</span> Function_Continue;
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onGameOverConfirm</span><span class="hljs-params">(retry)</span></span>
+    <span class="hljs-comment">-- 游戏结束界面按 Enter/Esc 时触发</span>
+    <span class="hljs-comment">-- retry: Bool - 按 Esc 时为 false</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="对话系统">对话系统</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onNextDialogue</span><span class="hljs-params">(line)</span></span>
+    <span class="hljs-comment">-- 下一条对话开始时触发</span>
+    <span class="hljs-comment">-- line: Int - 对话行号（从 1 开始）</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onSkipDialogue</span><span class="hljs-params">(line)</span></span>
+    <span class="hljs-comment">-- 跳过未播放完的对话时触发</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="音符命中失误">音符命中/失误</h3>
+<p><strong>⚠️ 重要：Lua 与 HScript 的参数差异</strong></p>
+<p><code>goodNoteHit</code> 在 PlayState 中手动调用 Lua 和 HScript 时传递了<strong>不同的参数</strong>。<code>opponentNoteHit</code> 使用 <code>callOnScripts</code> 调用，参数一致。</p>
+<pre><code class="language-lua"><span class="hljs-comment">-- Lua 版本</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">goodNoteHit</span><span class="hljs-params">(id, direction, noteType, isSustainNote)</span></span>
+    <span class="hljs-comment">-- 玩家命中音符后触发</span>
+    <span class="hljs-comment">-- id: Int       - 音符在 &#x27;notes&#x27; 组中的索引（可通过 getPropertyFromGroup 获取更多属性）</span>
+    <span class="hljs-comment">-- direction: Int - 0=左, 1=下, 2=上, 3=右</span>
+    <span class="hljs-comment">-- noteType: String - 音符类型标签（如 &#x27;Hurt Note&#x27;, &#x27;Hey!&#x27; 等）</span>
+    <span class="hljs-comment">-- isSustainNote: Bool - 是否为长按音符</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<pre><code class="language-haxe"><span class="hljs-comment">// HScript 版本 — 参数不同！</span>
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">goodNoteHit</span></span>(note:<span class="hljs-type">Note</span>) {
+    <span class="hljs-comment">// 直接接收 Note 对象引用</span>
+    <span class="hljs-comment">// note.strumTime  - 音符节拍时间</span>
+    <span class="hljs-comment">// note.noteData   - 轨道方向</span>
+    <span class="hljs-comment">// note.noteType   - 音符类型</span>
+    <span class="hljs-comment">// note.isSustainNote - 长按判断</span>
+    <span class="hljs-comment">// note.mustPress  - 是否为玩家轨道</span>
+    <span class="hljs-comment">// note.gfNote     - 是否为 GF 音符</span>
+    <span class="hljs-comment">// 等等所有 Note 属性可直接访问</span>
+}
+</code></pre>
+<p>当使用 <code>callOnScripts('goodNoteHit', [id, direction, noteType, isSustainNote])</code> 时，Lua 和 HScript 均接收 <strong>4 个参数</strong>。</p>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">opponentNoteHit</span><span class="hljs-params">(id, direction, noteType, isSustainNote)</span></span>
+    <span class="hljs-comment">-- 对手命中音符时触发（参数同 goodNoteHit Lua 版本）</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">noteMissPress</span><span class="hljs-params">(direction)</span></span>
+    <span class="hljs-comment">-- 按键失误（空按）时触发</span>
+    <span class="hljs-comment">-- direction: Int - 0=左, 1=下, 2=上, 3=右</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">noteMiss</span><span class="hljs-params">(id, direction, noteType, isSustainNote)</span></span>
+    <span class="hljs-comment">-- 音符离开屏幕未命中时触发</span>
+    <span class="hljs-comment">-- 参数同 goodNoteHit</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="音符生成">音符生成</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onSpawnNote</span><span class="hljs-params">(id, direction, noteType, isSustainNote)</span></span>
+    <span class="hljs-comment">-- 音符被添加到活躍音符列表时触发</span>
+    <span class="hljs-comment">-- id: Int - 音符在 &#x27;notes&#x27; 组中的索引</span>
+    <span class="hljs-comment">-- direction: Int - 轨道方向</span>
+    <span class="hljs-comment">-- noteType: String - 音符类型</span>
+    <span class="hljs-comment">-- isSustainNote: Bool - 长按判断</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="键盘输入">键盘输入</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">preKeyPress</span><span class="hljs-params">(key)</span></span>
+    <span class="hljs-comment">-- 按键按下前触发（在命中检测之前）</span>
+    <span class="hljs-comment">-- key: Int - 轨道索引 (0-7)</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onKeyPress</span><span class="hljs-params">(key)</span></span>
+    <span class="hljs-comment">-- 按键按下后触发（在动画播放之后）</span>
+    <span class="hljs-comment">-- key: Int - 轨道索引 (0-7)</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onKeyRelease</span><span class="hljs-params">(key)</span></span>
+    <span class="hljs-comment">-- 按键释放时触发</span>
+    <span class="hljs-comment">-- key: Int - 轨道索引</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onGhostTap</span><span class="hljs-params">(key)</span></span>
+    <span class="hljs-comment">-- 幽灵按键（按下但无音符命中）时触发</span>
+    <span class="hljs-comment">-- key: Int - 轨道索引</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="评分">评分</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onUpdateScore</span><span class="hljs-params">(miss)</span></span>
+    <span class="hljs-comment">-- 分数更新时触发（每次评分计算后）</span>
+    <span class="hljs-comment">-- miss: Bool - 是否为失误（true = 失误，false = 命中）</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onRecalculateRating</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 评分计算前触发</span>
+    <span class="hljs-comment">-- 返回 Function_Stop 可使用自定义评分</span>
+    <span class="hljs-comment">-- 使用 setRatingPercent() 和 setRatingString() 设置评分</span>
+    <span class="hljs-keyword">return</span> Function_Continue;
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="相机-1">相机</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onMoveCamera</span><span class="hljs-params">(focus)</span></span>
+    <span class="hljs-comment">-- 相机聚焦变化时触发</span>
+    <span class="hljs-comment">-- focus: String - &#x27;boyfriend&#x27;, &#x27;dad&#x27; 或 &#x27;gf&#x27;</span>
+    <span class="hljs-keyword">if</span> focus == <span class="hljs-string">&#x27;boyfriend&#x27;</span> <span class="hljs-keyword">then</span>
+        <span class="hljs-comment">-- 聚焦到玩家</span>
+    <span class="hljs-keyword">elseif</span> focus == <span class="hljs-string">&#x27;dad&#x27;</span> <span class="hljs-keyword">then</span>
+        <span class="hljs-comment">-- 聚焦到对手</span>
+    <span class="hljs-keyword">elseif</span> focus == <span class="hljs-string">&#x27;gf&#x27;</span> <span class="hljs-keyword">then</span>
+        <span class="hljs-comment">-- 聚焦到 GF</span>
+    <span class="hljs-keyword">end</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="倒计时相关">倒计时相关</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCountdownStarted</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 倒计时开始播放时触发（在 onStartCountdown 之后）</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="歌曲小节">歌曲小节</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onSectionHit</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 每小节切换时触发（在 onBeatHit 之后）</span>
+    <span class="hljs-comment">-- 触发前自动设置以下变量：</span>
+    <span class="hljs-comment">--   mustHitSection, altAnim, gfSection, curSection</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="事件">事件</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onEvent</span><span class="hljs-params">(name, value1, value2)</span></span>
+    <span class="hljs-comment">-- 事件音符触发时调用</span>
+    <span class="hljs-comment">-- name: String   - 事件名称</span>
+    <span class="hljs-comment">-- value1: String - 事件参数1</span>
+    <span class="hljs-comment">-- value2: String - 事件参数2</span>
+    <span class="hljs-comment">-- 注意：triggerEvent() 不会触发此函数！</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">eventEarlyTrigger</span><span class="hljs-params">(name)</span></span>
+    <span class="hljs-comment">-- 覆盖事件的提前触发时间（毫秒）</span>
+    <span class="hljs-comment">-- 返回值将覆盖引擎的默认值</span>
+    <span class="hljs-comment">-- 示例：if name == &#x27;Kill Henchmen&#x27; then return 280; end</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="补间计时器音效">补间/计时器/音效</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onTweenCompleted</span><span class="hljs-params">(tag)</span></span>
+    <span class="hljs-comment">-- 补间动画完成时触发</span>
+    <span class="hljs-comment">-- tag: String - 补间标识（doTweenX 的第一个参数）</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onTimerCompleted</span><span class="hljs-params">(tag, loops, loopsLeft)</span></span>
+    <span class="hljs-comment">-- 计时器循环完成时触发</span>
+    <span class="hljs-comment">-- tag: String       - 计时器标识（runTimer 的第一个参数）</span>
+    <span class="hljs-comment">-- loops: Int        - 设定的总循环次数</span>
+    <span class="hljs-comment">-- loopsLeft: Int    - 剩余循环次数</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onSoundFinished</span><span class="hljs-params">(tag)</span></span>
+    <span class="hljs-comment">-- 音效播放完成时触发（仅带 tag 参数播放的音效）</span>
+    <span class="hljs-comment">-- tag: String - 音效标识（playSound 的 tag 参数）</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="成就">成就</h3>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCheckForAchievement</span><span class="hljs-params">(name)</span></span>
+    <span class="hljs-comment">-- 成就检测处理</span>
+    <span class="hljs-comment">-- name: String - 成就名称</span>
+    <span class="hljs-comment">-- 返回 Function_Continue 表示成就达成条件满足</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<hr>
+<h2 id="9-脚本加载路径">9. 脚本加载路径</h2>
+<h3 id="优先级顺序">优先级顺序</h3>
+<p>脚本文件按以下优先级搜索：</p>
+<pre><code>1. MOD 当前目录: mods/&lt;currentMod&gt;/data/states/&lt;Name&gt;.lua/.hx
+2. MOD 全局目录: mods/&lt;globalMod&gt;/data/states/&lt;Name&gt;.lua/.hx
+3. MOD 根目录:    mods/data/states/&lt;Name&gt;.lua/.hx
+4. 基础路径:      assets/data/states/&lt;Name&gt;.lua/.hx
+</code></pre>
+<h3 id="加载流程">加载流程</h3>
+<pre><code>initLuaScripts() / initHScripts()
+├── 1. 独立文件: data/states/&lt;Name&gt;.lua (或 .hx/.hscript)
+├── 2. 目录:     data/states/&lt;Name&gt;/*.lua (或 *.hx)
+└── 3. 遗留:     lua/&lt;stateName&gt;/*.lua (或 hscripts/&lt;stateName&gt;/*.hx)
+</code></pre>
+<p>对于 <strong>SubState</strong>：</p>
+<pre><code>initLuaScripts() / initHScripts()
+├── 1. 独立文件: data/states/&lt;Name&gt;.lua (或 .hx/.hscript)
+├── 2. 目录:     data/states/&lt;Name&gt;/*.lua (或 *.hx)
+└── 3. 遗留:     lua/substates/&lt;substateName&gt;/*.lua
+                 (或 hscripts/substates/&lt;substateName&gt;/*.hx)
+</code></pre>
+<h3 id="playstate-额外加载路径独立于基类">PlayState 额外加载路径（独立于基类）</h3>
+<p>在 <code>PlayState.create()</code> 中，除了基类的 <code>initHScripts()</code> 和 <code>initLuaScripts()</code>，还额外加载以下脚本：</p>
+<p><strong>全局脚本（scripts/ 目录）：</strong></p>
+<pre><code>scripts/*.lua / scripts/*.hx
+├── mods/&lt;currentMod&gt;/scripts/    (最高优先级)
+├── mods/&lt;globalMod&gt;/scripts/
+├── mods/scripts/
+└── assets/scripts/               (最低优先级)
+</code></pre>
+<p><strong>舞台脚本（stages/ 目录）：</strong></p>
+<pre><code>stages/&lt;curStage&gt;.lua / stages/&lt;curStage&gt;.hx
+├── mods/stages/&lt;curStage&gt;.lua/.hx   (优先)
+└── assets/stages/&lt;curStage&gt;.lua/.hx (回退)
+</code></pre>
+<p>PlayState 的加载顺序：</p>
+<pre><code>PlayState.create()
+├── super.create()
+│   ├── MusicBeatState.initHScripts()   ← 加载 data/states/&lt;Name&gt;.hx
+│   └── MusicBeatState.initLuaScripts() ← 加载 data/states/&lt;Name&gt;.lua (如果调用)
+├── 额外加载：scripts/*.lua              ← PlayState 特有
+├── 额外加载：stages/&lt;curStage&gt;.lua      ← PlayState 特有
+├── 额外加载：scripts/*.hx               ← PlayState 特有
+└── 额外加载：stages/&lt;curStage&gt;.hx       ← PlayState 特有
+</code></pre>
+<h3 id="全局-hscript">全局 HScript</h3>
+<p>从 <code>hscripts/</code> 目录加载的全局 HScript 文件会在所有状态之前执行：</p>
+<pre><code>hscripts/
+├── mods/&lt;currentMod&gt;/hscripts/*.hx    (最高优先级)
+├── mods/&lt;globalMod&gt;/hscripts/*.hx
+├── mods/hscripts/*.hx
+└── assets/hscripts/*.hx               (最低优先级)
+</code></pre>
+<hr>
+<h2 id="10-常见用法示例">10. 常见用法示例</h2>
+<h3 id="101-创建一个自定义菜单状态">10.1 创建一个自定义菜单状态</h3>
+<p><strong>HScript</strong> (<code>data/states/MyMenu.hx</code>):</p>
+<pre><code class="language-haxe"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCreate</span></span>() {
+    <span class="hljs-keyword">var</span> bg = <span class="hljs-keyword">new</span> <span class="hljs-type">FlxSprite</span>().loadGraphic(Paths.image(<span class="hljs-string">&#x27;menuBG&#x27;</span>));
+    bg.screenCenter();
+    add(bg);
+
+    <span class="hljs-keyword">var</span> title = <span class="hljs-keyword">new</span> <span class="hljs-type">FunkinText</span>(<span class="hljs-number">0</span>, <span class="hljs-number">50</span>, FlxG.width, <span class="hljs-string">&quot;My Mod Menu&quot;</span>, <span class="hljs-number">32</span>);
+    title.screenCenter(X);
+    add(title);
+
+    FlxTween.tween(title, {y: <span class="hljs-type">title</span>.y + <span class="hljs-number">10</span>}, <span class="hljs-number">0.5</span>, {
+        type: <span class="hljs-type">PINGPONG</span>,
+        ease: <span class="hljs-type">FlxEase</span>.quadInOut
+    });
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onUpdate</span></span>(elapsed) {
+    <span class="hljs-keyword">if</span> (keyJustPressed(<span class="hljs-string">&#x27;accept&#x27;</span>)) {
+        FlxG.switchState(<span class="hljs-keyword">new</span> <span class="hljs-type">PlayState</span>());
+    }
+    <span class="hljs-keyword">if</span> (keyJustPressed(<span class="hljs-string">&#x27;back&#x27;</span>)) {
+        FlxG.switchState(<span class="hljs-keyword">new</span> <span class="hljs-type">MainMenuState</span>());
+    }
+}
+</code></pre>
+<p><strong>启动方式</strong>:</p>
+<pre><code class="language-haxe">FlxG.switchState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModState</span>(<span class="hljs-string">&quot;MyMenu&quot;</span>));
+</code></pre>
+<h3 id="102-lua-自定义谱面事件">10.2 Lua 自定义谱面事件</h3>
+<p><strong>Lua</strong> (<code>data/states/MySong.lua</code>):</p>
+<pre><code class="language-lua"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCreate</span><span class="hljs-params">()</span></span>
+    <span class="hljs-comment">-- 创建自定义元素</span>
+    makeLuaSprite(<span class="hljs-string">&#x27;myBgEffect&#x27;</span>, <span class="hljs-string">&#x27;myEffectImage&#x27;</span>, <span class="hljs-number">0</span>, <span class="hljs-number">0</span>);
+    setScrollFactor(<span class="hljs-string">&#x27;myBgEffect&#x27;</span>, <span class="hljs-number">0.5</span>, <span class="hljs-number">0.5</span>);
+    addLuaSprite(<span class="hljs-string">&#x27;myBgEffect&#x27;</span>, <span class="hljs-literal">false</span>);
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">goodNoteHit</span><span class="hljs-params">(id, direction, noteType, isSustainNote)</span></span>
+    <span class="hljs-keyword">if</span> noteType == <span class="hljs-string">&#x27;Health Bonus&#x27;</span> <span class="hljs-keyword">then</span>
+        setHealth(getHealth() + <span class="hljs-number">0.1</span>);
+    <span class="hljs-keyword">end</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onEvent</span><span class="hljs-params">(name, value1, value2)</span></span>
+    <span class="hljs-keyword">if</span> name == <span class="hljs-string">&#x27;MyCustomEvent&#x27;</span> <span class="hljs-keyword">then</span>
+        <span class="hljs-comment">-- 执行自定义逻辑</span>
+        setProperty(<span class="hljs-string">&#x27;boyfriend.color&#x27;</span>, getColorFromHex(value1));
+        doTweenAlpha(<span class="hljs-string">&#x27;fadeTween&#x27;</span>, <span class="hljs-string">&#x27;boyfriend&#x27;</span>, <span class="hljs-number">0.5</span>, <span class="hljs-built_in">tonumber</span>(value2), <span class="hljs-string">&#x27;linear&#x27;</span>);
+    <span class="hljs-keyword">end</span>
+<span class="hljs-keyword">end</span>
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onBeatHit</span><span class="hljs-params">()</span></span>
+    <span class="hljs-keyword">if</span> curBeat % <span class="hljs-number">8</span> == <span class="hljs-number">0</span> <span class="hljs-keyword">then</span>
+        <span class="hljs-comment">-- 每 8 拍触发一次闪光效果</span>
+        cameraFlash(<span class="hljs-string">&#x27;camGame&#x27;</span>, <span class="hljs-string">&#x27;0xFFFFFFFF&#x27;</span>, <span class="hljs-number">0.5</span>);
+    <span class="hljs-keyword">end</span>
+<span class="hljs-keyword">end</span>
+</code></pre>
+<h3 id="103-hscript-中的跨脚本通信">10.3 HScript 中的跨脚本通信</h3>
+<pre><code class="language-haxe"><span class="hljs-comment">// 通过 LuaApi 向 Lua 添加函数</span>
+LuaApi.addLuaFunction(<span class="hljs-string">&quot;myHelper&quot;</span>, <span class="hljs-function"><span class="hljs-keyword">function</span></span>(value) {
+    <span class="hljs-keyword">return</span> <span class="hljs-string">&quot;Processed: &quot;</span> + value;
+});
+
+<span class="hljs-comment">// 直接执行 Lua 代码</span>
+runLuaCode(<span class="hljs-string">&quot;
+    result = myHelper(&#x27;test&#x27;)
+    debugPrint(result)
+&quot;</span>);
+
+<span class="hljs-comment">// 导入其他 HScript 文件</span>
+importScript(<span class="hljs-string">&#x27;data/states/Utils&#x27;</span>);
+</code></pre>
+<h3 id="104-使用-modsubstate-创建暂停菜单">10.4 使用 ModSubState 创建暂停菜单</h3>
+<p><strong>HScript</strong> (<code>data/states/MyPause.hx</code>):</p>
+<pre><code class="language-haxe"><span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onCreate</span></span>() {
+    <span class="hljs-keyword">var</span> bg = <span class="hljs-keyword">new</span> <span class="hljs-type">FlxSprite</span>().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+    bg.alpha = <span class="hljs-number">0.5</span>;
+    add(bg);
+
+    <span class="hljs-keyword">var</span> pauseText = <span class="hljs-keyword">new</span> <span class="hljs-type">FunkinText</span>(<span class="hljs-number">0</span>, <span class="hljs-number">200</span>, FlxG.width, <span class="hljs-string">&quot;Custom Pause&quot;</span>, <span class="hljs-number">48</span>);
+    pauseText.screenCenter(X);
+    add(pauseText);
+}
+
+<span class="hljs-function"><span class="hljs-keyword">function</span> <span class="hljs-title">onUpdate</span></span>(elapsed) {
+    <span class="hljs-keyword">if</span> (keyJustPressed(<span class="hljs-string">&#x27;pause&#x27;</span>) || keyJustPressed(<span class="hljs-string">&#x27;back&#x27;</span>)) {
+        close();
+    }
+}
+</code></pre>
+<p><strong>启动方式</strong>:</p>
+<pre><code class="language-haxe">openSubState(<span class="hljs-keyword">new</span> <span class="hljs-type">ModSubState</span>(<span class="hljs-string">&quot;MyPause&quot;</span>));
+</code></pre>
+<hr>
+<h2 id="11-平台相关注意事项">11. 平台相关注意事项</h2>
+<h3 id="111-编译平台检测">11.1 编译平台检测</h3>
+<p>脚本系统中多处使用平台编译条件，编写跨平台 MOD 时需注意：</p>
+<table>
+<thead>
+<tr>
+<th>宏</th>
+<th>适用平台</th>
+<th>脚本系统影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>#if cpp</code></td>
+<td>Windows/Linux/Mac (C++ 目标)</td>
+<td>Discord Rich Presence、部分视频播放</td>
+</tr>
+<tr>
+<td><code>#if !flash</code></td>
+<td>非 Flash 平台</td>
+<td><code>FlxRuntimeShader</code> 着色器支持</td>
+</tr>
+<tr>
+<td><code>#if sys</code></td>
+<td>桌面平台 (Windows/Linux/Mac)</td>
+<td>文件 I/O（<code>sys.FileSystem</code>, <code>sys.io.File</code>）</td>
+</tr>
+<tr>
+<td><code>#if windows</code></td>
+<td>Windows</td>
+<td><code>buildTarget = &quot;windows&quot;</code></td>
+</tr>
+<tr>
+<td><code>#if linux</code></td>
+<td>Linux</td>
+<td><code>buildTarget = &quot;linux&quot;</code></td>
+</tr>
+<tr>
+<td><code>#if mac</code></td>
+<td>macOS</td>
+<td><code>buildTarget = &quot;mac&quot;</code></td>
+</tr>
+<tr>
+<td><code>#if html5</code> / <code>#if web</code></td>
+<td>浏览器</td>
+<td><code>buildTarget = &quot;browser&quot;</code></td>
+</tr>
+<tr>
+<td><code>#if android</code></td>
+<td>Android</td>
+<td>Android 控件、虚拟手柄、返回键处理</td>
+</tr>
+</tbody>
+</table>
+<h3 id="112-平台相关的-lua-api-限制">11.2 平台相关的 Lua API 限制</h3>
+<pre><code>仅桌面平台 (sys):
+├── getTextFromFile(), saveFile(), deleteFile(), checkFileExists()
+├── initLuaShader(), setSpriteShader() (需要 !flash &amp;&amp; sys)
+├── runHaxeCode() (需要 HSCRIPT_ALLOWED)
+└── addHaxeLibrary() (需要 HSCRIPT_ALLOWED)
+
+仅非 Flash 平台 (!flash):
+├── FlxRuntimeShader 相关函数
+└── ShaderFilter, ColorMatrixFilter
+
+Android 特有:
+├── AndroidControls / FlxVirtualPad 自动处理
+├── BACK 键映射到 PAUSE
+└── 触摸输入处理
+</code></pre>
+<h3 id="113-编译标志依赖">11.3 编译标志依赖</h3>
+<pre><code>LUA_ALLOWED     → FunkinLua, ModchartSprite/Text, DebugLuaText
+HSCRIPT_ALLOWED → HScript, LuaApi
+MODS_ALLOWED    → Mod 文件系统加载（影响脚本搜索路径）
+VIDEOS_ALLOWED  → MP4/FLV 视频播放（hxCodec）
+</code></pre>
+<h3 id="114-playstate-中的脚本系统细节">11.4 PlayState 中的脚本系统细节</h3>
+<p>PlayState 重写了基类的脚本方法以实现更复杂的回调逻辑：</p>
+<p><strong><code>callOnScripts()</code></strong> — PlayState 独有的中枢方法：</p>
+<pre><code class="language-haxe">PlayState.callOnScripts(funcToCall, args, ignoreStops, exclusions, excludeValues)
+├── 默认 excludeValues = [Function_Continue]
+├── callOnLuas(funcToCall, args, ...)
+│   ├── Function_StopLua → 中断 Lua（HScript 继续）
+│   ├── Function_StopAll → 中断所有
+│   └── Function_Continue → 继续
+└── 如果 Lua 返回 <span class="hljs-literal">null</span> 或 excludeValues 中的值
+    └── callOnHScript(funcToCall, args, ...)
+        └── Function_StopHScript → 中断 HScript
+</code></pre>
+<p><strong><code>callOnLuas()</code></strong> — 重写自 MusicBeatState：</p>
+<ul>
+<li>PlayState 版本在遍历过程中会<strong>自动清理已关闭的脚本</strong></li>
+<li>处理 <code>Function_StopLua</code> 和 <code>Function_StopAll</code></li>
+</ul>
+<p><strong><code>callOnHScript()</code></strong> — PlayState 自有的方法（不是重写）：</p>
+<ul>
+<li>仅在 <code>hscriptArray</code> 非空时执行</li>
+<li>检查脚本是否含有目标函数（<code>script.exists()</code>）</li>
+<li>处理 <code>Function_StopHScript</code> 和 <code>Function_StopAll</code></li>
+</ul>
+<p><strong><code>setOnScripts()</code></strong> — 同时设置 Lua 和 HScript：</p>
+<pre><code class="language-haxe">PlayState.setOnScripts(variable, arg, exclusions)
+├── setOnLuas(variable, arg, exclusions)
+└── setOnHScript(variable, arg, exclusions)
+</code></pre>
+<h3 id="115-hscript-错误处理">11.5 HScript 错误处理</h3>
+<ul>
+<li>由 <code>ClientPrefs.data.hscriptErrorHandling</code> 控制</li>
+<li>启用时：弹出错误对话框并显示在 <code>TraceManager</code> 日志中</li>
+<li>禁用时：错误静默忽略，脚本自动关闭（<code>closed = true</code>）</li>
+</ul>
+<hr>
+<h2 id="12-故障排除">12. 故障排除</h2>
+<h3 id="lua-脚本不执行">Lua 脚本不执行</h3>
+<ol>
+<li>确认编译时启用了 <code>LUA_ALLOWED</code></li>
+<li>检查脚本路径是否正确：
+<ul>
+<li><code>data/states/&lt;StateName&gt;.lua</code> — 使用状态类名</li>
+<li>或 <code>data/states/&lt;ModState名&gt;.lua</code> — 使用 ModState 名称</li>
+</ul>
+</li>
+<li>检查文件是否存在于正确的 MOD 目录中</li>
+<li>运行时可查看 <code>TraceManager</code> 日志中的错误信息</li>
+</ol>
+<h3 id="hscript-不执行">HScript 不执行</h3>
+<ol>
+<li>确认编译时启用了 <code>HSCRIPT_ALLOWED</code></li>
+<li>检查文件扩展名（支持 <code>.hx</code>, <code>.hscript</code>, <code>.hsc</code>, <code>.hxs</code>）</li>
+<li>确认 <code>ClientPrefs.data.hscriptErrorHandling</code> 已启用以查看错误弹窗</li>
+<li>检查 <code>data/states/&lt;Name&gt;.hx</code> 路径是否正确</li>
+</ol>
+<h3 id="常见错误">常见错误</h3>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>可能原因</th>
+<th>解决方案</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Lua 报 &quot;attempt to call a nil value&quot;</td>
+<td>函数未定义</td>
+<td>检查函数名拼写</td>
+</tr>
+<tr>
+<td>HScript 报 &quot;Variable doesn't exist&quot;</td>
+<td>变量未绑定</td>
+<td>检查 <code>setOnHscript</code> 是否已设置</td>
+</tr>
+<tr>
+<td>脚本未自动加载</td>
+<td>文件名或路径不匹配</td>
+<td>使用 <code>TraceManager</code> 检查实际加载路径</td>
+</tr>
+<tr>
+<td>跨脚本通信失败</td>
+<td>脚本名不匹配</td>
+<td>使用 <code>getRunningScripts()</code> 检查实际名称</td>
+</tr>
+<tr>
+<td>补间/计时器未触发完成回调</td>
+<td>tag 冲突</td>
+<td>确保每个补间/计时器使用唯一的 tag</td>
+</tr>
+</tbody>
+</table>
+<hr>
+<blockquote>
+<p>本文档对应 MohongEngine 脚本系统版本 Lua 0.63.1fix-2 / HScript 0.2.0</p>
+</blockquote>
+
+            
+            
+        </body>
+        </html>

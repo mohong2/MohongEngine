@@ -2,6 +2,7 @@ import faxe.Faxe;
 
 import SndTV;
 using StringTools;
+import mohong.TraceManager;
 
 //praise delahee, i'll figure out what this shit means later!
 
@@ -948,7 +949,7 @@ class Snd {
 	
 	public static function init(){
 		#if debug
-		trace("[Snd] fmod init");
+		TraceManager.info('trace.snd.fmodInit', '[Snd] fmod init');
 		#end
 		Faxe.fmod_init( 256 );
 		fmodSystem = FaxeRef.getSystem();
@@ -966,7 +967,7 @@ class Snd {
 		//trace("releasing fmod");
 		Faxe.fmod_release();
 		#if !prod
-		trace("fmod released");
+		TraceManager.debug('trace.snd.fmodReleased', 'fmod released');
 		#end
 	}
 	
@@ -1113,7 +1114,7 @@ class Snd {
 		mode |= FmodMode.FMOD_2D;
 		
 		
-		if( DEBUG_TRACK) trace("Snd:loading " + path);
+		if( DEBUG_TRACK) TraceManager.info('trace.snd.loading', 'Snd:loading {}', [path]);
 		
 		var snd : cpp.RawPointer<faxe.Faxe.FmodSound> = cast  null;
 		var sndR :  cpp.RawPointer<cpp.RawPointer<faxe.Faxe.FmodSound>> = cpp.RawPointer.addressOf(snd);
@@ -1132,7 +1133,7 @@ class Snd {
 			
 		if ( res != FMOD_OK){
 			#if(!prod)
-			trace("unable to load " + path + " code:" + res+" msg:"+FaxeRef.fmodResultToString(res));
+			TraceManager.error('trace.snd.unableToLoad', 'unable to load {} code:{} msg:{}', [path, res, FaxeRef.fmodResultToString(res)]);
 			#end
 			return null;
 		}
@@ -1155,7 +1156,7 @@ class Snd {
 		}
 		
 		
-		if( DEBUG_TRACK) trace("Snd:loadingEvent " + path);
+		if( DEBUG_TRACK) TraceManager.info('trace.snd.loadingEvent', 'Snd:loadingEvent {}', [path]);
 		
 		if ( !path.startsWith("event:/"))
 			path = "event:/" + path;
@@ -1188,7 +1189,7 @@ class Snd {
 		var s : cpp.Pointer<FmodSound> = faxe.Faxe.fmod_get_sound(path );
 		if ( s == null){
 			#if (!prod)
-			trace("unable to find " + path);
+			TraceManager.error('trace.snd.unableToFind', 'unable to find {}', [path]);
 			#end
 			return null;
 		}
@@ -1218,7 +1219,7 @@ class Snd {
 		var s : Sound = loadSound(path, streaming, blocking);
 		if ( s == null) {
 			#if !prod
-			trace("no such file " + path);
+			TraceManager.error('trace.snd.noSuchFile', 'no such file {}', [path]);
 			#end
 			return null;
 		}
@@ -1245,14 +1246,14 @@ class Snd {
 	public static function loadSingleBank( filename : String ) : Null<faxe.Faxe.FmodStudioBankRef>{
 		if ( released ) {
 			#if debug 
-			trace("FMOD not active "+filename);
+			TraceManager.error('trace.snd.fmodNotActive', 'FMOD not active {}', [filename]);
 			#end
 			return null;
 		}
 		
 		if ( filename.endsWith(".fsb")) {
 			#if debug 
-			trace("fsb files not supported");
+			TraceManager.error('trace.snd.fsbNotSupported', 'fsb files not supported');
 			#end
 			return null;//old fmod format is not supported
 		}
@@ -1272,7 +1273,7 @@ class Snd {
 		
 		if (result != FMOD_OK)	{
 			#if debug
-			trace("FMOD failed to LOAD sound bank with errcode:" + result + " errmsg:" + FaxeRef.fmodResultToString(result) + "\n");
+			TraceManager.error('trace.snd.fmodFailed', 'FMOD failed to LOAD sound bank with errcode:{} errmsg:{}\n', [result, FaxeRef.fmodResultToString(result)]);
 			#end
 			return null;
 		}

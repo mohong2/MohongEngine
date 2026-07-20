@@ -7,7 +7,7 @@ This engine will stop receiving updates after the official release of the Mandel
 ## Installation Guide:
 You must install [Haxe 4.2.5](https://haxe.org/download/). Seriously, stop using 4.1.5 as it lacks some features.
 The following libraries need to be installed via Haxelib:
-* hxCodec - Any version
+* hxCodec - Any version (Android must use 2.5.1)
 * linc_luajit - Git version (https://github.com/nebulazorua/linc_luajit)
 * flixel - 4.11.0
 * flixel-addons - 2.11.0

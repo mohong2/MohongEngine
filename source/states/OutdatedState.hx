@@ -14,12 +14,19 @@ class OutdatedState extends MusicBeatState
 	{
 		super.create();
 
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
+
 		var bg:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
 		add(bg);
 
 		warnText = new FlxText(0, 0, FlxG.width,
 			"Sup bro, looks like you're running an   \n
-			outdated version of Mohong Engine (" + MainMenuState.mohongEngineVersion + "),\n
+			outdated version of Seiun Engine (" + MainMenuState.seiunengineVersion + "),\n
 			please update to " + TitleState.updateVersion + "!\n
 			Press ESCAPE to proceed anyway.\n
 			\n
@@ -51,6 +58,15 @@ class OutdatedState extends MusicBeatState
 				});
 			}
 		}
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 		super.update(elapsed);
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 	}
 }

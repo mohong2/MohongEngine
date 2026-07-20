@@ -32,11 +32,23 @@ class LatencyState extends FlxState
 
 		Conductor.changeBPM(120);
 
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 		super.create();
 	}
 
 	override function update(elapsed:Float)
 	{
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 		offsetText.text = "Offset: " + Conductor.offset + "ms";
 
 		Conductor.songPosition = FlxG.sound.music.time - Conductor.offset;
@@ -67,6 +79,12 @@ class LatencyState extends FlxState
 				daNote.kill();
 		});
 
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 		super.update(elapsed);
 	}
 	override function destroy() {

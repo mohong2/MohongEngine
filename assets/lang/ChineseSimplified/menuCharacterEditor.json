@@ -1,0 +1,15 @@
+{
+	"menuCharacterEditor_character_type": "角色类型",
+	"menuCharacterEditor_character": "角色",
+	"menuCharacterEditor_opponent": "对手",
+	"menuCharacterEditor_boyfriend": "男友",
+	"menuCharacterEditor_girlfriend": "女友",
+	"menuCharacterEditor_image_file": "图片文件名：",
+	"menuCharacterEditor_idle_anim": ".XML 中的空闲动画：",
+	"menuCharacterEditor_confirm_anim": ".XML 中的开始按压动画：",
+	"menuCharacterEditor_scale": "缩放：",
+	"menuCharacterEditor_flip_x": "水平翻转",
+	"menuCharacterEditor_load_character": "加载角色",
+	"menuCharacterEditor_save_character": "保存角色",
+	"menuCharacterEditor_reload_char": "重新加载角色"
+}

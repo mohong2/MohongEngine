@@ -1,0 +1,21 @@
+{
+	"dialogueCharacterEditor_character_type": "Character Type",
+	"dialogueCharacterEditor_animations": "Animations",
+	"dialogueCharacterEditor_character": "Character",
+	"dialogueCharacterEditor_left": "Left",
+	"dialogueCharacterEditor_center": "Center",
+	"dialogueCharacterEditor_right": "Right",
+	"dialogueCharacterEditor_animations_label": "Animations:",
+	"dialogueCharacterEditor_animation_name": "Animation name:",
+	"dialogueCharacterEditor_loop_name": "Loop name on .XML file:",
+	"dialogueCharacterEditor_idle_name": "Idle/Finished name on .XML file:",
+	"dialogueCharacterEditor_image_file": "Image file name:",
+	"dialogueCharacterEditor_position_offset": "Position Offset:",
+	"dialogueCharacterEditor_scale": "Scale:",
+	"dialogueCharacterEditor_no_antialiasing": "No Antialiasing",
+	"dialogueCharacterEditor_add_update": "Add/Update",
+	"dialogueCharacterEditor_remove": "Remove",
+	"dialogueCharacterEditor_reload_image": "Reload Image",
+	"dialogueCharacterEditor_load_character": "Load Character",
+	"dialogueCharacterEditor_save_character": "Save Character"
+}

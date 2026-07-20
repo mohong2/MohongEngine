@@ -6,35 +6,63 @@ import Discord.DiscordClient;
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
 import flixel.system.FlxSound;
-import flixel.addons.ui.FlxInputText;
-import flixel.addons.ui.FlxUI9SliceSprite;
-import flixel.addons.ui.FlxUI;
-import flixel.addons.ui.FlxUICheckBox;
-import flixel.addons.ui.FlxUIInputText;
-import flixel.addons.ui.FlxUINumericStepper;
-import flixel.addons.ui.FlxUITabMenu;
 import flixel.ui.FlxButton;
 import openfl.net.FileReference;
 import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import flash.net.FileFilter;
 import haxe.Json;
+import backend.ui.*;
 #if sys
 import sys.io.File;
 import sys.FileSystem;
 #end
 
 using StringTools;
+import mohong.TraceManager;
 
-class CreditsEditorState extends MusicBeatState
+class CreditsEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent
 {
+	/** Unsaved changes flag — prompts confirm dialog on exit. */
+	public static var staticUnsavedChanges:Bool = false;
+	public var unsavedChanges(get, set):Bool;
+	function get_unsavedChanges():Bool return staticUnsavedChanges;
+	function set_unsavedChanges(v:Bool):Bool
+	{
+		staticUnsavedChanges = v;
+		backend.UnsavedChangesTracker.hasUnsavedChanges = v;
+		if(v) backend.UnsavedChangesTracker.currentEditorState = this;
+		return staticUnsavedChanges;
+	}
+
+	function markUnsaved():Void { unsavedChanges = true; }
+	function clearUnsaved():Void { unsavedChanges = false; }
+	function confirmExitCredits():Void
+	{
+		if(unsavedChanges)
+		{
+			openSubState(new editors.content.Prompt(
+				'There\'s unsaved progress,\nare you sure you want to exit?',
+				function()
+				{
+					clearUnsaved();
+					MusicBeatState.switchState(new editors.MasterEditorMenu());
+				}
+			));
+		}
+		else
+		{
+			MusicBeatState.switchState(new editors.MasterEditorMenu());
+		}
+	}
+
 	var grpCredits:FlxTypedGroup<Alphabet>;
 	var iconArray:Array<AttachedSprite> = [];
 	var creditsStuff:Array<Array<String>> = [];
 
 	var bg:FlxSprite;
-	var descText:FlxText;
-	var descBox:FlxUI9SliceSprite;
+	var descText:EditorsText;
+	var descBox:FlxSprite;
 
 	var curSelected:Int = 0;
 
@@ -50,7 +78,6 @@ class CreditsEditorState extends MusicBeatState
 		grpCredits = new FlxTypedGroup<Alphabet>();
 		add(grpCredits);
 
-		// Load default credits data
 		creditsStuff = [
 			['Mohong Engine Team'],
 			['Mo_Hong', 'mohong', 'Main Programmer of mohong Engine', 'https://space.bilibili.com/672029688', '87ceeb'],
@@ -62,20 +89,20 @@ class CreditsEditorState extends MusicBeatState
 			['']
 		];
 
-		descBox = new FlxUI9SliceSprite(0, 0, Paths.getSparrowAtlas('customBox'), new flash.geom.Rectangle(16, 16, 80, 80));
+		descBox = new FlxSprite().loadGraphic(Paths.image('customBox'));
 		descBox.antialiasing = ClientPrefs.data.globalAntialiasing;
 		descBox.alpha = 0.8;
 		add(descBox);
 
-		descText = new FlxText(50, FlxG.height - 150, 1180, "", 24);
-		descText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, CENTER);
+		descText = new EditorsText(50, FlxG.height - 150, 1180, "", 24);
+		descText.setFormat(Paths.font("editors.ttf"), 24, FlxColor.WHITE, CENTER);
 		descText.scrollFactor.set();
 		add(descText);
 
 		reloadCreditsList();
 		addEditorBox();
 		changeSelection();
-		
+
 		FlxG.mouse.visible = true;
 		#if android
 		addVirtualPad(LEFT_FULL, A_B_C);
@@ -83,90 +110,136 @@ class CreditsEditorState extends MusicBeatState
 		super.create();
 	}
 
-	var UI_box:FlxUITabMenu;
-	var blockPressWhileTypingOn:Array<FlxUIInputText> = [];
-	
+	var UI_box:PsychUIBox;
+	var blockPressWhileTypingOn:Array<PsychUIInputText> = [];
+
 	function addEditorBox() {
 		var tabs = [
-			{name: 'Credits', label: 'Credits'},
-			{name: 'Section', label: 'Section'}
+			Language.get('creditsEditor_credits', 'Credits'),
+			Language.get('creditsEditor_section', 'Section')
 		];
-		UI_box = new FlxUITabMenu(null, tabs, true);
-		UI_box.resize(300, 400);
-		UI_box.x = FlxG.width - UI_box.width - 20;
-		UI_box.y = 20;
+		UI_box = new PsychUIBox(FlxG.width - 320, 20, 300, 400, tabs);
 		UI_box.scrollFactor.set();
-		
+
 		addCreditsUI();
 		addSectionUI();
 		add(UI_box);
+		for (tab in UI_box.tabs) tab.text.font = 'assets/fonts/editors.ttf';
 
-		var loadButton:FlxButton = new FlxButton(UI_box.x, UI_box.y + UI_box.height + 10, "Load Credits", function() {
+		var loadButton = new PsychUIButton(UI_box.x, UI_box.y + UI_box.height + 10, Language.get('creditsEditor_load_credits', 'Load Credits'), function() {
 			loadCredits();
-		});
+		}, 80, 20);
 		loadButton.x -= loadButton.width + 10;
 		add(loadButton);
-		
-		var addButton:FlxButton = new FlxButton(UI_box.x, loadButton.y, "Add Entry", function() {
+
+		var addButton = new PsychUIButton(UI_box.x, loadButton.y, Language.get('creditsEditor_add_entry', 'Add Entry'), function() {
 			addCreditEntry();
-		});
+		}, 80, 20);
 		addButton.x -= addButton.width + 10;
 		add(addButton);
-		
-		var removeButton:FlxButton = new FlxButton(UI_box.x, addButton.y + addButton.height + 10, "Remove Entry", function() {
+
+		var removeButton = new PsychUIButton(UI_box.x, addButton.y + addButton.height + 10, Language.get('creditsEditor_remove_entry', 'Remove Entry'), function() {
 			removeCreditEntry();
-		});
+		}, 80, 20);
 		removeButton.x -= removeButton.width + 10;
 		add(removeButton);
 
-		var saveButton:FlxButton = new FlxButton(UI_box.x, removeButton.y + removeButton.height + 10, "Save Credits", function() {
+		var saveButton = new PsychUIButton(UI_box.x, removeButton.y + removeButton.height + 10, Language.get('creditsEditor_save_credits', 'Save Credits'), function() {
 			saveCredits();
-		});
+		}, 80, 20);
 		saveButton.x -= saveButton.width + 10;
 		add(saveButton);
 	}
 
-	var nameInputText:FlxUIInputText;
-	var iconInputText:FlxUIInputText;
-	var descInputText:FlxUIInputText;
-	var linkInputText:FlxUIInputText;
-	var colorInputText:FlxUIInputText;
-	var isSectionCheckbox:FlxUICheckBox;
-	
+	var nameInputText:PsychUIInputText;
+	var iconInputText:PsychUIInputText;
+	var descInputText:PsychUIInputText;
+	var linkInputText:PsychUIInputText;
+	var colorInputText:PsychUIInputText;
+	var isSectionCheckbox:PsychUICheckBox;
+
 	function addCreditsUI() {
-		var tab_group = new FlxUI(null, UI_box);
-		tab_group.name = "Credits";
+		var tab = UI_box.getTab(Language.get('creditsEditor_credits', 'Credits'));
+		if(tab == null) return;
+		var tab_group = tab.menu;
 
-		nameInputText = new FlxUIInputText(10, 30, 200, '', 8);
+		nameInputText = new PsychUIInputText(10, 30, 200, '', 8);
 		blockPressWhileTypingOn.push(nameInputText);
-		
-		iconInputText = new FlxUIInputText(10, nameInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(iconInputText);
-		
-		descInputText = new FlxUIInputText(10, iconInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(descInputText);
-		
-		linkInputText = new FlxUIInputText(10, descInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(linkInputText);
-		
-		colorInputText = new FlxUIInputText(10, linkInputText.y + 50, 120, '', 8);
-		blockPressWhileTypingOn.push(colorInputText);
+		nameInputText.onChange = function(oldText:String, newText:String) {
+			if(creditsStuff[curSelected] != null) {
+				creditsStuff[curSelected][0] = newText;
+				reloadCreditsList();
+				updateDescBox();
+			}
+		};
 
-		isSectionCheckbox = new FlxUICheckBox(colorInputText.x + 130, colorInputText.y, null, null, "Is Section Header", 100);
-		isSectionCheckbox.callback = function() {
+		iconInputText = new PsychUIInputText(10, nameInputText.y + 50, 200, '', 8);
+		blockPressWhileTypingOn.push(iconInputText);
+		iconInputText.onChange = function(oldText:String, newText:String) {
+			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
+				if(creditsStuff[curSelected].length < 2) creditsStuff[curSelected].push('');
+				creditsStuff[curSelected][1] = newText;
+				reloadCreditsList();
+				updateDescBox();
+			}
+		};
+
+		descInputText = new PsychUIInputText(10, iconInputText.y + 50, 200, '', 8);
+		blockPressWhileTypingOn.push(descInputText);
+		descInputText.onChange = function(oldText:String, newText:String) {
+			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
+				if(creditsStuff[curSelected].length < 3) creditsStuff[curSelected].push('');
+				creditsStuff[curSelected][2] = newText;
+				reloadCreditsList();
+				updateDescBox();
+			}
+		};
+
+		linkInputText = new PsychUIInputText(10, descInputText.y + 50, 200, '', 8);
+		blockPressWhileTypingOn.push(linkInputText);
+		linkInputText.onChange = function(oldText:String, newText:String) {
+			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
+				if(creditsStuff[curSelected].length < 4) creditsStuff[curSelected].push('');
+				creditsStuff[curSelected][3] = newText;
+				reloadCreditsList();
+				updateDescBox();
+			}
+		};
+
+		colorInputText = new PsychUIInputText(10, linkInputText.y + 50, 120, '', 8);
+		blockPressWhileTypingOn.push(colorInputText);
+		colorInputText.onChange = function(oldText:String, newText:String) {
+			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
+				if(creditsStuff[curSelected].length < 5) creditsStuff[curSelected].push('');
+				creditsStuff[curSelected][4] = newText;
+				reloadCreditsList();
+				updateDescBox();
+			}
+		};
+
+		isSectionCheckbox = new PsychUICheckBox(colorInputText.x + 130, colorInputText.y, Language.get('creditsEditor_is_section_header', 'Is Section Header'), 100, null);
+		isSectionCheckbox.onClick = function() {
+			if(creditsStuff[curSelected] != null) {
+				if(isSectionCheckbox.checked) {
+					creditsStuff[curSelected] = [nameInputText.text];
+				} else {
+					var name:String = nameInputText.text;
+					creditsStuff[curSelected] = [name, iconInputText.text, descInputText.text, linkInputText.text, colorInputText.text];
+				}
+			}
 			updateInputFields();
 		};
 
-		var reloadIconButton:FlxButton = new FlxButton(10, colorInputText.y + 40, "Reload Icon", function() {
+		var reloadIconButton = new PsychUIButton(10, colorInputText.y + 40, Language.get('creditsEditor_reload_icon', 'Reload Icon'), function() {
 			reloadSelectedIcon();
-		});
+		}, 80, 20);
 
-		tab_group.add(new FlxText(nameInputText.x, nameInputText.y - 18, 0, 'Name:'));
-		tab_group.add(new FlxText(iconInputText.x, iconInputText.y - 18, 0, 'Icon:'));
-		tab_group.add(new FlxText(descInputText.x, descInputText.y - 18, 0, 'Description:'));
-		tab_group.add(new FlxText(linkInputText.x, linkInputText.y - 18, 0, 'Link:'));
-		tab_group.add(new FlxText(colorInputText.x, colorInputText.y - 18, 0, 'Color:'));
-		
+		tab_group.add(new EditorsText(nameInputText.x, nameInputText.y - 18, 0, Language.get('creditsEditor_name', 'Name:')));
+		tab_group.add(new EditorsText(iconInputText.x, iconInputText.y - 18, 0, Language.get('creditsEditor_icon', 'Icon:')));
+		tab_group.add(new EditorsText(descInputText.x, descInputText.y - 18, 0, Language.get('creditsEditor_description', 'Description:')));
+		tab_group.add(new EditorsText(linkInputText.x, linkInputText.y - 18, 0, Language.get('creditsEditor_link', 'Link:')));
+		tab_group.add(new EditorsText(colorInputText.x, colorInputText.y - 18, 0, Language.get('creditsEditor_color', 'Color:')));
+
 		tab_group.add(nameInputText);
 		tab_group.add(iconInputText);
 		tab_group.add(descInputText);
@@ -174,41 +247,38 @@ class CreditsEditorState extends MusicBeatState
 		tab_group.add(colorInputText);
 		tab_group.add(isSectionCheckbox);
 		tab_group.add(reloadIconButton);
-		
-		UI_box.addGroup(tab_group);
 	}
 
-	var moveUpButton:FlxButton;
-	var moveDownButton:FlxButton;
-	var addSectionButton:FlxButton;
-	
+	var moveUpButton:PsychUIButton;
+	var moveDownButton:PsychUIButton;
+	var addSectionButton:PsychUIButton;
+
 	function addSectionUI() {
-		var tab_group = new FlxUI(null, UI_box);
-		tab_group.name = "Section";
+		var tab = UI_box.getTab(Language.get('creditsEditor_section', 'Section'));
+		if(tab == null) return;
+		var tab_group = tab.menu;
 
-		moveUpButton = new FlxButton(20, 30, "Move Up", function() {
+		moveUpButton = new PsychUIButton(20, 30, Language.get('creditsEditor_move_up', 'Move Up'), function() {
 			moveEntry(-1);
-		});
-		
-		moveDownButton = new FlxButton(moveUpButton.x + moveUpButton.width + 10, 30, "Move Down", function() {
+		}, 80, 20);
+
+		moveDownButton = new PsychUIButton(moveUpButton.x + moveUpButton.width + 10, 30, Language.get('creditsEditor_move_down', 'Move Down'), function() {
 			moveEntry(1);
-		});
-		
-		addSectionButton = new FlxButton(20, moveUpButton.y + 50, "Add Section", function() {
+		}, 80, 20);
+
+		addSectionButton = new PsychUIButton(20, moveUpButton.y + 50, Language.get('creditsEditor_add_section', 'Add Section'), function() {
 			addSectionHeader();
-		});
+		}, 80, 20);
 
-		var addSpaceButton:FlxButton = new FlxButton(20, addSectionButton.y + 50, "Add Space", function() {
+		var addSpaceButton = new PsychUIButton(20, addSectionButton.y + 50, Language.get('creditsEditor_add_space', 'Add Space'), function() {
 			addSpace();
-		});
+		}, 80, 20);
 
-		tab_group.add(new FlxText(20, 10, 0, 'Entry Management:'));
+		tab_group.add(new EditorsText(20, 10, 0, Language.get('creditsEditor_entry_management', 'Entry Management:')));
 		tab_group.add(moveUpButton);
 		tab_group.add(moveDownButton);
 		tab_group.add(addSectionButton);
 		tab_group.add(addSpaceButton);
-		
-		UI_box.addGroup(tab_group);
 	}
 
 	function reloadCreditsList() {
@@ -239,7 +309,7 @@ class CreditsEditorState extends MusicBeatState
 
 	function changeSelection(change:Int = 0) {
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
-		
+
 		curSelected += change;
 		if (curSelected < 0) curSelected = creditsStuff.length - 1;
 		if (curSelected >= creditsStuff.length) curSelected = 0;
@@ -264,7 +334,7 @@ class CreditsEditorState extends MusicBeatState
 		var isSection:Bool = creditData.length <= 1;
 
 		isSectionCheckbox.checked = isSection;
-		
+
 		nameInputText.text = creditData[0];
 		iconInputText.text = isSection ? '' : (creditData.length > 1 ? creditData[1] : '');
 		descInputText.text = isSection ? '' : (creditData.length > 2 ? creditData[2] : '');
@@ -276,7 +346,7 @@ class CreditsEditorState extends MusicBeatState
 
 	function updateInputVisibility() {
 		var isSection:Bool = isSectionCheckbox.checked;
-		
+
 		iconInputText.visible = !isSection;
 		descInputText.visible = !isSection;
 		linkInputText.visible = !isSection;
@@ -290,7 +360,7 @@ class CreditsEditorState extends MusicBeatState
 		} else {
 			descText.text = creditData[0];
 		}
-		
+
 		descBox.setPosition(descText.x - 10, descText.y - 10);
 		descBox.setGraphicSize(Std.int(descText.width + 20), Std.int(descText.height + 20));
 		descBox.updateHitbox();
@@ -357,40 +427,19 @@ class CreditsEditorState extends MusicBeatState
 		changeSelection();
 	}
 
-	override function getEvent(id:String, sender:Dynamic, data:Dynamic, ?params:Array<Dynamic>) {
-		if(id == FlxUIInputText.CHANGE_EVENT && (sender is FlxUIInputText)) {
-			if(creditsStuff[curSelected] != null) {
-				var isSection:Bool = isSectionCheckbox.checked;
-				
-				if (isSection) {
-					creditsStuff[curSelected] = [nameInputText.text];
-				} else {
-					creditsStuff[curSelected][0] = nameInputText.text;
-					if (creditsStuff[curSelected].length < 2) creditsStuff[curSelected].push('');
-					creditsStuff[curSelected][1] = iconInputText.text;
-					if (creditsStuff[curSelected].length < 3) creditsStuff[curSelected].push('');
-					creditsStuff[curSelected][2] = descInputText.text;
-					if (creditsStuff[curSelected].length < 4) creditsStuff[curSelected].push('');
-					creditsStuff[curSelected][3] = linkInputText.text;
-					if (creditsStuff[curSelected].length < 5) creditsStuff[curSelected].push('');
-					creditsStuff[curSelected][4] = colorInputText.text;
-				}
-				
-				reloadCreditsList();
-				updateDescBox();
-			}
-		}
+	public function UIEvent(id:String, sender:Dynamic) {
+		// events handled via callbacks
 	}
 
 	override function update(elapsed:Float) {
 		var blockInput:Bool = false;
 		for (inputText in blockPressWhileTypingOn) {
-			if(inputText.hasFocus) {
+			if(PsychUIInputText.focusOn == inputText) {
 				FlxG.sound.muteKeys = [];
 				FlxG.sound.volumeDownKeys = [];
 				FlxG.sound.volumeUpKeys = [];
 				blockInput = true;
-				if(FlxG.keys.justPressed.ENTER) inputText.hasFocus = false;
+				if(FlxG.keys.justPressed.ENTER) PsychUIInputText.focusOn = null;
 				break;
 			}
 		}
@@ -399,17 +448,16 @@ class CreditsEditorState extends MusicBeatState
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			
+
 			if(controls.UI_UP_P) {
 				changeSelection(-1);
 			}
 			if(controls.UI_DOWN_P) {
 				changeSelection(1);
 			}
-			
+
 			if(#if android virtualPad.buttonB.justPressed || #end controls.BACK) {
-				MusicBeatState.switchState(new editors.MasterEditorMenu());
-				FlxG.sound.playMusic(Paths.music('freakyMenu'));
+				confirmExitCredits();
 			}
 		}
 
@@ -449,7 +497,7 @@ class CreditsEditorState extends MusicBeatState
 		}
 		_file = null;
 		#else
-		trace("File couldn't be loaded! You aren't on Desktop, are you?");
+		TraceManager.warn('trace.editor.fileLoadFailed', "File couldn't be loaded! You aren't on Desktop, are you?");
 		#end
 	}
 
@@ -458,7 +506,7 @@ class CreditsEditorState extends MusicBeatState
 		_file.removeEventListener(Event.CANCEL, onLoadCancel);
 		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
 		_file = null;
-		trace("Cancelled file loading.");
+		TraceManager.info('trace.editor.fileLoadCancelled', "Cancelled file loading.");
 	}
 
 	function onLoadError(_):Void {
@@ -466,7 +514,7 @@ class CreditsEditorState extends MusicBeatState
 		_file.removeEventListener(Event.CANCEL, onLoadCancel);
 		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
 		_file = null;
-		trace("Problem loading file");
+		TraceManager.error('trace.editor.fileLoadProblem', "Problem loading file");
 	}
 
 	function saveCredits() {

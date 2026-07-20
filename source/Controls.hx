@@ -384,10 +384,10 @@ class Controls extends FlxActionSet
 	}
 	#end
 
-	#if android
 	public var trackedinputsUI:Array<FlxActionInput> = [];
 	public var trackedinputsNOTES:Array<FlxActionInput> = [];
 
+	#if android
 	public function addButtonNOTES(action:FlxActionDigital, button:FlxButton, state:FlxInputState):Void
 	{
 		if (button == null)
@@ -525,6 +525,13 @@ class Controls extends FlxActionSet
 			}
 		}
 	}
+	#else
+	public function addButtonNOTES(action:FlxActionDigital, button:Dynamic, state:FlxInputState):Void {}
+	public function addButtonUI(action:FlxActionDigital, button:Dynamic, state:FlxInputState):Void {}
+	public function setHitBox(Hitbox:Dynamic):Void {}
+	public function setVirtualPadUI(VirtualPad:Dynamic, DPad:Dynamic, Action:Dynamic):Void {}
+	public function setVirtualPadNOTES(VirtualPad:Dynamic, DPad:Dynamic, Action:Dynamic):Void {}
+	public function removeVirtualControlsInput(Tinputs:Array<FlxActionInput>):Void {}
 	#end
 
 	override function update()
@@ -1075,5 +1082,32 @@ class Controls extends FlxActionSet
 	inline static function isGamepad(input:FlxActionInput, deviceID:Int)
 	{
 		return input.device == GAMEPAD && (deviceID == FlxInputDeviceID.ALL || input.deviceID == deviceID);
+	}
+
+	public function justPressed(actionName:String):Bool
+	{
+		var pressAction = byName.get(actionName + "-press");
+		if (pressAction != null)
+			return pressAction.check();
+		var baseAction = byName.get(actionName);
+		if (baseAction != null)
+			return baseAction.check();
+		return false;
+	}
+
+	public function pressed(actionName:String):Bool
+	{
+		var holdAction = byName.get(actionName);
+		if (holdAction != null)
+			return holdAction.check();
+		return false;
+	}
+
+	public function justReleased(actionName:String):Bool
+	{
+		var releaseAction = byName.get(actionName + "-release");
+		if (releaseAction != null)
+			return releaseAction.check();
+		return false;
 	}
 }

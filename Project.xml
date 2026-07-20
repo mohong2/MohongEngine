@@ -2,7 +2,7 @@
 <project>
 	<!-- _________________________ Application Settings _________________________ -->
 
-	<app title="Mohong Engine for Friday Night Funkin'" file="MohongEngine" packageName="com.mohong.mohongengine" package="com.mohong.mohongegngine" main="Main" version="0.2.8" company="Mohong" />
+	<app title="SeiunEngine" file="SeiunEngine" packageName="com.mohong.Seiunengine" package="com.mohong.Seiunengine" main="Main" version="0.2.8" company="Mohong"/>
 
 	<!--Switch Export with Unique ApplicationID and Icon-->
 	<set name="APP_ID" value="0x0100f6c013bbc000" />
@@ -50,7 +50,8 @@
 	<define name="ACHIEVEMENTS_ALLOWED" />
 	<define name="VIDEOS_ALLOWED" if="web || windows || android" unless="32bits"/>
 	<define name="PSYCH_WATERMARKS"/>
-	<define name="CRASH_HANDLER" if="release" />
+	<define name="DARKMODE" if="desktop" />
+	<define name="CRASH_HANDLER"/>
 
 	<assets path="assets/preload" rename="assets" exclude="*.ogg" if="web"/>
 	<assets path="assets/preload" rename="assets" exclude="*.mp3"  unless="web"/>
@@ -91,6 +92,8 @@
 	<assets path="assets/songs"         library="songs"         exclude="*.mp3" unless="web"/>
 	<assets path="assets/shared"        library="shared"        exclude="*.ogg" if="web"/>
 	<assets path="assets/shared"        library="shared"        exclude="*.mp3" unless="web"/>
+	<assets path="assets/embed"         library="embed"         exclude="*.ogg" if="web" embed="true"/>
+	<assets path="assets/embed"         library="embed"         exclude="*.mp3" unless="web" embed="true"/>
 	<assets path="assets/week2"         library="week2"         exclude="*.ogg" if="web"/>
 	<assets path="assets/week2"         library="week2"         exclude="*.mp3" unless="web"/>
 	<assets path="assets/week3"         library="week3"         exclude="*.ogg" if="web"/>
@@ -131,11 +134,11 @@
 	<!--In case you want to use the ui package-->
 	<haxelib name="flixel-ui" />
 	<haxelib name="linc_luajit" if="LUA_ALLOWED"/>
-	<haxelib name="hxCodec" if="VIDEOS_ALLOWED"/>
+	<haxelib name="hxCodec" if="desktop || android"/>
 	<haxelib name="faxe" if='switch'/>
 	<haxelib name="tjson"/>
 	<haxelib name="extension-androidtools" if="android" />
-
+	<haxelib name="discord_rpc" if="desktop"/>
 	<!-- <haxelib name="extension-webm" if="VIDEOS_ALLOWED" /> -->
 	<!-- <haxelib name="markdown" /> -->
 	<!-- <haxelib name="HtmlParser" /> -->
@@ -188,11 +191,29 @@
 	<haxedef name="HXCPP_CHECK_POINTER" if="release" />
 	<haxedef name="HXCPP_STACK_LINE" if="release" />
 
+	<haxedef name="loop_unroll_max_cost" value="25"/>
+
 	<!--Android-Internet-Connection-->
-	<config:android permission="android.permission.ACCESS_NETWORK_STATE" />
-	<config:android permission="android.permission.ACCESS_WIFI_STATE" />
-	<config:android permission="android.permission.INTERNET" />
-	<!-- _________________________________ Custom _______________________________ -->
+	<config:android permission="android.permission.ACCESS_NETWORK_STATE"/>
+	<config:android permission="android.permission.ACCESS_WIFI_STATE"/>
+	<config:android permission="android.permission.INTERNET"/>
+
+	<!--Storage permissions for Android 10+ (API 29+)-->
+	<config:android permission="android.permission.READ_EXTERNAL_STORAGE" if="android"/>
+	<config:android permission="android.permission.WRITE_EXTERNAL_STORAGE" if="android"/>
+	<config:android permission="android.permission.MANAGE_EXTERNAL_STORAGE" if="android"/>
+
+	<!--Granular media permissions for Android 13+ (API 33+)-->
+	<config:android permission="android.permission.READ_MEDIA_IMAGES" if="android"/>
+	<config:android permission="android.permission.READ_MEDIA_VIDEO" if="android"/>
+	<config:android permission="android.permission.READ_MEDIA_AUDIO" if="android"/>
+
+	<!--Notifications for Android 13+ (API 33+)-->
+	<config:android permission="android.permission.POST_NOTIFICATIONS" if="android"/>
+
+	<config:android gradle-version="6.7.1"/>
+
+	<certificate path="key.keystore" password="mohong" alias="SeiunEngine" alias-password="mohong" if="android" unless="debug" />
 
 	<!--Place custom nodes like icons here (higher priority to override the HaxeFlixel icon)-->
 	

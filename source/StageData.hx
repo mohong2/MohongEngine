@@ -11,6 +11,7 @@ import haxe.format.JsonParser;
 import Song;
 
 using StringTools;
+import mohong.TraceManager;
 
 typedef StageFile = {
 	var directory:String;
@@ -70,7 +71,8 @@ class StageData {
 
 	public static function getStageFile(stage:String):StageFile {
 		var rawJson:String = null;
-		var path:String = Paths.getPreloadPath('stages/' + stage + '.json');
+		try{
+			var path:String = Paths.getPreloadPath('stages/' + stage + '.json');
 
 		#if MODS_ALLOWED
 		var modPath:String = Paths.modFolders('stages/' + stage + '.json');
@@ -89,5 +91,9 @@ class StageData {
 			return null;
 		}
 		return cast Json.parse(rawJson);
+	}catch(e){
+		TraceManager.error('trace.error', 'Exception: {}', [e]);
+		return null;
 	}
+}
 }

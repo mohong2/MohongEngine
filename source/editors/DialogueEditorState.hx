@@ -3,24 +3,12 @@ package editors;
 #if cpp
 import Discord.DiscordClient;
 #end
- 
- 
+
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
- 
- 
- 
- 
 import flixel.system.FlxSound;
-import flixel.addons.ui.FlxInputText;
-import flixel.addons.ui.FlxUI9SliceSprite;
-import flixel.addons.ui.FlxUI;
-import flixel.addons.ui.FlxUICheckBox;
-import flixel.addons.ui.FlxUIInputText;
-import flixel.addons.ui.FlxUINumericStepper;
-import flixel.addons.ui.FlxUITabMenu;
 import flixel.ui.FlxButton;
-import openfl.net.FileReference;
+
 import openfl.events.Event;
 import openfl.events.IOErrorEvent;
 import flash.net.FileFilter;
@@ -28,20 +16,55 @@ import haxe.Json;
 import DialogueBoxPsych;
 import lime.system.Clipboard;
 import Alphabet;
+import backend.ui.*;
+import editors.content.FileDialogHandler;
 #if sys
 import sys.io.File;
 #end
- 
+
 using StringTools;
 
-class DialogueEditorState extends MusicBeatState
+class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent
 {
+	/** Unsaved changes flag — prompts confirm dialog on exit. */
+	public static var staticUnsavedChanges:Bool = false;
+	public var unsavedChanges(get, set):Bool;
+	function get_unsavedChanges():Bool return staticUnsavedChanges;
+	function set_unsavedChanges(v:Bool):Bool
+	{
+		staticUnsavedChanges = v;
+		backend.UnsavedChangesTracker.hasUnsavedChanges = v;
+		if(v) backend.UnsavedChangesTracker.currentEditorState = this;
+		return staticUnsavedChanges;
+	}
+
+	function markUnsaved():Void { unsavedChanges = true; }
+	function clearUnsaved():Void { unsavedChanges = false; }
+	function confirmExitDialogue():Void
+	{
+		if(unsavedChanges)
+		{
+			openSubState(new editors.content.Prompt(
+				'There\'s unsaved progress,\nare you sure you want to exit?',
+				function()
+				{
+					clearUnsaved();
+					MusicBeatState.switchState(new editors.MasterEditorMenu());
+				}
+			));
+		}
+		else
+		{
+			MusicBeatState.switchState(new editors.MasterEditorMenu());
+		}
+	}
+
 	var character:DialogueCharacter;
 	var box:FlxSprite;
 	var daText:TypedAlphabet;
 
-	var selectedText:FlxText;
-	var animText:FlxText;
+	var selectedText:EditorsText;
+	var animText:EditorsText;
 
 	var defaultLine:DialogueLine;
 	var dialogueFile:DialogueFile = null;
@@ -64,7 +87,7 @@ class DialogueEditorState extends MusicBeatState
 				copyDefaultLine()
 			]
 		};
-		
+
 		character = new DialogueCharacter();
 		character.scrollFactor.set();
 		add(character);
@@ -85,21 +108,21 @@ class DialogueEditorState extends MusicBeatState
 		addEditorBox();
 		FlxG.mouse.visible = true;
 
-		var addLineText:FlxText = new FlxText(10, 10, FlxG.width - 20, 'Press O to remove the current dialogue line, Press P to add another line after the current one.', 8);
-		addLineText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		var addLineText:EditorsText = new EditorsText(10, 10, FlxG.width - 20, 'Press O to remove the current dialogue line, Press P to add another line after the current one.', 8);
+		addLineText.setFormat(Paths.font("editors.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		addLineText.scrollFactor.set();
 		add(addLineText);
 
-		selectedText = new FlxText(10, 32, FlxG.width - 20, '', 8);
-		selectedText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		selectedText = new EditorsText(10, 32, FlxG.width - 20, '', 8);
+		selectedText.setFormat(Paths.font("editors.ttf"), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		selectedText.scrollFactor.set();
 		add(selectedText);
 
-		animText = new FlxText(10, 62, FlxG.width - 20, '', 8);
-		animText.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		animText = new EditorsText(10, 62, FlxG.width - 20, '', 8);
+		animText.setFormat(Paths.font("editors.ttf"), 24, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		animText.scrollFactor.set();
 		add(animText);
-		
+
 		daText = new TypedAlphabet(DialogueBoxPsych.DEFAULT_TEXT_X, DialogueBoxPsych.DEFAULT_TEXT_Y, DEFAULT_TEXT);
 		daText.scaleX = 0.7;
 		daText.scaleY = 0.7;
@@ -111,67 +134,102 @@ class DialogueEditorState extends MusicBeatState
 		super.create();
 	}
 
-	var UI_box:FlxUITabMenu;
+	var UI_box:PsychUIBox;
 	function addEditorBox() {
 		var tabs = [
-			{name: 'Dialogue Line', label: 'Dialogue Line'},
+			Language.get('dialogueEditor_dialogue_line', 'Dialogue Line')
 		];
-		UI_box = new FlxUITabMenu(null, tabs, true);
-		UI_box.resize(250, 210);
-		UI_box.x = FlxG.width - UI_box.width - 10;
-		UI_box.y = 10;
+		UI_box = new PsychUIBox(FlxG.width - 260, 10, 250, 210, tabs);
 		UI_box.scrollFactor.set();
 		UI_box.alpha = 0.8;
 		addDialogueLineUI();
 		add(UI_box);
+		for (tab in UI_box.tabs) tab.text.font = 'assets/fonts/editors.ttf';
 	}
 
-	var characterInputText:FlxUIInputText;
-	var lineInputText:FlxUIInputText;
-	var angryCheckbox:FlxUICheckBox;
-	var speedStepper:FlxUINumericStepper;
-	var soundInputText:FlxUIInputText;
+	var characterInputText:PsychUIInputText;
+	var lineInputText:PsychUIInputText;
+	var angryCheckbox:PsychUICheckBox;
+	var speedStepper:PsychUINumericStepper;
+	var soundInputText:PsychUIInputText;
 	function addDialogueLineUI() {
-		var tab_group = new FlxUI(null, UI_box);
-		tab_group.name = "Dialogue Line";
+		var tab = UI_box.getTab(Language.get('dialogueEditor_dialogue_line', 'Dialogue Line'));
+		if(tab == null) return;
+		var tab_menu = tab.menu;
 
-		characterInputText = new FlxUIInputText(10, 20, 80, DialogueCharacter.DEFAULT_CHARACTER, 8);
+		characterInputText = new PsychUIInputText(10, 20, 80, DialogueCharacter.DEFAULT_CHARACTER, 8);
 		blockPressWhileTypingOn.push(characterInputText);
+		characterInputText.onChange = function(oldText:String, newText:String) {
+			character.reloadCharacterJson(newText);
+			reloadCharacter();
+			if(character.jsonFile.animations.length > 0) {
+				curAnim = 0;
+				if(character.jsonFile.animations.length > curAnim && character.jsonFile.animations[curAnim] != null) {
+					character.playAnim(character.jsonFile.animations[curAnim].anim, daText.finishedText);
+					animText.text = 'Animation: ' + character.jsonFile.animations[curAnim].anim + ' (' + (curAnim + 1) +' / ' + character.jsonFile.animations.length + ') - Press W or S to scroll';
+				} else {
+					animText.text = 'ERROR! NO ANIMATIONS FOUND';
+				}
+				characterAnimSpeed();
+			}
+			dialogueFile.dialogue[curSelected].portrait = newText;
+			reloadText(false);
+			updateTextBox();
+		};
 
-		speedStepper = new FlxUINumericStepper(10, characterInputText.y + 40, 0.005, 0.05, 0, 0.5, 3);
+		speedStepper = new PsychUINumericStepper(10, characterInputText.y + 40, 0.005, 0.05, 0, 0.5, 3);
+		speedStepper.textObj.font = 'assets/fonts/editors.ttf';
+		speedStepper.onValueChange = function() {
+			dialogueFile.dialogue[curSelected].speed = speedStepper.value;
+			if(Math.isNaN(dialogueFile.dialogue[curSelected].speed) || dialogueFile.dialogue[curSelected].speed == null || dialogueFile.dialogue[curSelected].speed < 0.001) {
+				dialogueFile.dialogue[curSelected].speed = 0.0;
+			}
+			daText.delay = dialogueFile.dialogue[curSelected].speed;
+			reloadText(false);
+		};
 
-		angryCheckbox = new FlxUICheckBox(speedStepper.x + 120, speedStepper.y, null, null, "Angry Textbox", 200);
-		angryCheckbox.callback = function()
-		{
+		angryCheckbox = new PsychUICheckBox(speedStepper.x + 120, speedStepper.y, Language.get('dialogueEditor_angry_textbox', 'Angry Textbox'), 200, null);
+		angryCheckbox.onClick = function() {
 			updateTextBox();
 			dialogueFile.dialogue[curSelected].boxState = (angryCheckbox.checked ? 'angry' : 'normal');
 		};
 
-		soundInputText = new FlxUIInputText(10, speedStepper.y + 40, 150, '', 8);
+		soundInputText = new PsychUIInputText(10, speedStepper.y + 40, 150, '', 8);
 		blockPressWhileTypingOn.push(soundInputText);
-		
-		lineInputText = new FlxUIInputText(10, soundInputText.y + 35, 200, DEFAULT_TEXT, 8);
+		soundInputText.onChange = function(oldText:String, newText:String) {
+			daText.finishText();
+			dialogueFile.dialogue[curSelected].sound = newText;
+			daText.sound = newText;
+			if(daText.sound == null) daText.sound = '';
+		};
+
+		lineInputText = new PsychUIInputText(10, soundInputText.y + 35, 200, DEFAULT_TEXT, 8);
 		blockPressWhileTypingOn.push(lineInputText);
+		lineInputText.onChange = function(oldText:String, newText:String) {
+			dialogueFile.dialogue[curSelected].text = newText;
+			daText.text = newText;
+			if(daText.text == null) daText.text = '';
+			reloadText(true);
+		};
 
-		var loadButton:FlxButton = new FlxButton(20, lineInputText.y + 25, "Load Dialogue", function() {
+		var loadButton = new PsychUIButton(20, lineInputText.y + 25, Language.get('dialogueEditor_load_dialogue', 'Load Dialogue'), function() {
 			loadDialogue();
-		});
-		var saveButton:FlxButton = new FlxButton(loadButton.x + 120, loadButton.y, "Save Dialogue", function() {
+		}, 80, 20);
+		var saveButton = new PsychUIButton(loadButton.x + 120, loadButton.y, Language.get('dialogueEditor_save_dialogue', 'Save Dialogue'), function() {
 			saveDialogue();
-		});
+		}, 80, 20);
 
-		tab_group.add(new FlxText(10, speedStepper.y - 18, 0, 'Interval/Speed (ms):'));
-		tab_group.add(new FlxText(10, characterInputText.y - 18, 0, 'Character:'));
-		tab_group.add(new FlxText(10, soundInputText.y - 18, 0, 'Sound file name:'));
-		tab_group.add(new FlxText(10, lineInputText.y - 18, 0, 'Text:'));
-		tab_group.add(characterInputText);
-		tab_group.add(angryCheckbox);
-		tab_group.add(speedStepper);
-		tab_group.add(soundInputText);
-		tab_group.add(lineInputText);
-		tab_group.add(loadButton);
-		tab_group.add(saveButton);
-		UI_box.addGroup(tab_group);
+		tab_menu.add(new EditorsText(10, speedStepper.y - 18, 0, Language.get('dialogueEditor_speed', 'Interval/Speed (ms):')));
+		tab_menu.add(new EditorsText(10, characterInputText.y - 18, 0, Language.get('dialogueEditor_character', 'Character:')));
+		tab_menu.add(new EditorsText(10, soundInputText.y - 18, 0, Language.get('dialogueEditor_sound_file', 'Sound file name:')));
+		tab_menu.add(new EditorsText(10, lineInputText.y - 18, 0, Language.get('dialogueEditor_text', 'Text:')));
+		tab_menu.add(characterInputText);
+		tab_menu.add(angryCheckbox);
+		tab_menu.add(speedStepper);
+		tab_menu.add(soundInputText);
+		tab_menu.add(lineInputText);
+		tab_menu.add(loadButton);
+		tab_menu.add(saveButton);
 	}
 
 	function copyDefaultLine():DialogueLine {
@@ -217,14 +275,14 @@ class DialogueEditorState extends MusicBeatState
 		switch(character.jsonFile.dialogue_pos) {
 			case 'right':
 				character.x = FlxG.width - character.width + DialogueBoxPsych.RIGHT_CHAR_X;
-			
+
 			case 'center':
 				character.x = FlxG.width / 2;
 				character.x -= character.width / 2;
 		}
 		character.x += character.jsonFile.position[0];
 		character.y += character.jsonFile.position[1];
-		character.playAnim(); //Plays random animation
+		character.playAnim();
 		characterAnimSpeed();
 
 		if(character.animation.curAnim != null && character.jsonFile.animations != null) {
@@ -244,7 +302,7 @@ class DialogueEditorState extends MusicBeatState
 		daText.text = textToType;
 		daText.resetDialogue();
 
-		if(skipDialogue) 
+		if(skipDialogue)
 			daText.finishText();
 		else if(daText.delay > 0)
 		{
@@ -258,62 +316,20 @@ class DialogueEditorState extends MusicBeatState
 		if(daText.rows > 2) daText.y -= DialogueBoxPsych.LONG_TEXT_ADD;
 
 		#if cpp
-		// Updating Discord Rich Presence
 		var rpcText:String = lineInputText.text;
 		if(rpcText == null || rpcText.length < 1) rpcText = '(Empty)';
-		if(rpcText.length < 3) rpcText += '   '; //Fixes a bug on RPC that triggers an error when the text is too short
+		if(rpcText.length < 3) rpcText += '   ';
 		DiscordClient.changePresence("Dialogue Editor", rpcText);
 		#end
 	}
 
-	override function getEvent(id:String, sender:Dynamic, data:Dynamic, ?params:Array<Dynamic>) {
-		if(id == FlxUIInputText.CHANGE_EVENT && (sender is FlxUIInputText)) {
-			if (sender == characterInputText)
-			{
-				character.reloadCharacterJson(characterInputText.text);
-				reloadCharacter();
-				if(character.jsonFile.animations.length > 0) {
-					curAnim = 0;
-					if(character.jsonFile.animations.length > curAnim && character.jsonFile.animations[curAnim] != null) {
-						character.playAnim(character.jsonFile.animations[curAnim].anim, daText.finishedText);
-						animText.text = 'Animation: ' + character.jsonFile.animations[curAnim].anim + ' (' + (curAnim + 1) +' / ' + character.jsonFile.animations.length + ') - Press W or S to scroll';
-					} else {
-						animText.text = 'ERROR! NO ANIMATIONS FOUND';
-					}
-					characterAnimSpeed();
-				}
-				dialogueFile.dialogue[curSelected].portrait = characterInputText.text;
-				reloadText(false);
-				updateTextBox();
-			}
-			else if(sender == lineInputText)
-			{
-				dialogueFile.dialogue[curSelected].text = lineInputText.text;
-
-				daText.text = lineInputText.text;
-				if(daText.text == null) daText.text = '';
-				reloadText(true);
-			}
-			else if(sender == soundInputText)
-			{
-				daText.finishText();
-				dialogueFile.dialogue[curSelected].sound = soundInputText.text;
-				daText.sound = soundInputText.text;
-				if(daText.sound == null) daText.sound = '';
-			}
-		} else if(id == FlxUINumericStepper.CHANGE_EVENT && (sender == speedStepper)) {
-			dialogueFile.dialogue[curSelected].speed = speedStepper.value;
-			if(Math.isNaN(dialogueFile.dialogue[curSelected].speed) || dialogueFile.dialogue[curSelected].speed == null || dialogueFile.dialogue[curSelected].speed < 0.001) {
-				dialogueFile.dialogue[curSelected].speed = 0.0;
-			}
-			daText.delay = dialogueFile.dialogue[curSelected].speed;
-			reloadText(false);
-		}
+	public function UIEvent(id:String, sender:Dynamic) {
+		// events handled via callbacks
 	}
 
 	var curSelected:Int = 0;
 	var curAnim:Int = 0;
-	var blockPressWhileTypingOn:Array<FlxUIInputText> = [];
+	var blockPressWhileTypingOn:Array<PsychUIInputText> = [];
 	var transitioning:Bool = false;
 	override function update(elapsed:Float) {
 		if(transitioning) {
@@ -333,7 +349,7 @@ class DialogueEditorState extends MusicBeatState
 
 		var blockInput:Bool = false;
 		for (inputText in blockPressWhileTypingOn) {
-			if(inputText.hasFocus) {
+			if(PsychUIInputText.focusOn == inputText) {
 				FlxG.sound.muteKeys = [];
 				FlxG.sound.volumeDownKeys = [];
 				FlxG.sound.volumeUpKeys = [];
@@ -344,7 +360,7 @@ class DialogueEditorState extends MusicBeatState
 						inputText.text += '\\n';
 						inputText.caretIndex += 2;
 					} else {
-						inputText.hasFocus = false;
+						PsychUIInputText.focusOn = null;
 					}
 				}
 				break;
@@ -359,7 +375,7 @@ class DialogueEditorState extends MusicBeatState
 				reloadText(false);
 			}
 			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
-				MusicBeatState.switchState(new editors.MasterEditorMenu());
+				confirmExitDialogue();
 				FlxG.sound.playMusic(Paths.music('freakyMenu'), 1);
 				transitioning = true;
 			}
@@ -386,7 +402,7 @@ class DialogueEditorState extends MusicBeatState
 
 			if(#if android virtualPad.buttonA.justPressed ||#end FlxG.keys.justPressed.O) {
 				dialogueFile.dialogue.remove(dialogueFile.dialogue[curSelected]);
-				if(dialogueFile.dialogue.length < 1) //You deleted everything, dumbo!
+				if(dialogueFile.dialogue.length < 1)
 				{
 					dialogueFile.dialogue = [
 						copyDefaultLine()
@@ -454,109 +470,81 @@ class DialogueEditorState extends MusicBeatState
 		}
 	}
 
-	var _file:FileReference = null;
+	var fileDialog:FileDialogHandler = new FileDialogHandler();
 	function loadDialogue() {
 		var jsonFilter:FileFilter = new FileFilter('JSON', 'json');
-		_file = new FileReference();
-		_file.addEventListener(Event.SELECT, onLoadComplete);
-		_file.addEventListener(Event.CANCEL, onLoadCancel);
-		_file.addEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file.browse([jsonFilter]);
+		fileDialog.open(null, null, [jsonFilter], function() {
+			onLoadComplete();
+		}, function() {
+			onLoadCancel();
+		}, function() {
+			onLoadError();
+		});
 	}
 
-	function onLoadComplete(_):Void
+	function onLoadComplete(?_):Void
 	{
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-
 		#if sys
-		var fullPath:String = null;
-		@:privateAccess
-		if(_file.__path != null) fullPath = _file.__path;
-
-		if(fullPath != null) {
-			var rawJson:String = File.getContent(fullPath);
-			if(rawJson != null) {
-				var loadedDialog:DialogueFile = cast Json.parse(rawJson);
-				if(loadedDialog.dialogue != null && loadedDialog.dialogue.length > 0) //Make sure it's really a dialogue file
+		var rawJson:String = fileDialog.data;
+		if(rawJson != null) {
+			var loadedDialog:DialogueFile = cast Json.parse(rawJson);
+			if(loadedDialog.dialogue != null && loadedDialog.dialogue.length > 0)
+			{
+				var cutName:String = '';
+				if(fileDialog.path != null)
 				{
-					var cutName:String = _file.name.substr(0, _file.name.length - 5);
-					trace("Successfully loaded file: " + cutName);
-					dialogueFile = loadedDialog;
-					changeText();
-					_file = null;
-					return;
+					var pathParts:Array<String> = fileDialog.path.split('\\');
+					if(pathParts.length == 1) pathParts = fileDialog.path.split('/');
+					var fileName:String = pathParts[pathParts.length - 1];
+					if(fileName != null && fileName.length > 5) cutName = fileName.substr(0, fileName.length - 5);
 				}
+				CoolUtil.traceMsg('trace.fileLoaded', 'Successfully loaded file: {}', [cutName]);
+				dialogueFile = loadedDialog;
+				changeText();
+				return;
 			}
 		}
-		_file = null;
 		#else
-		trace("File couldn't be loaded! You aren't on Desktop, are you?");
+		CoolUtil.traceMsg('trace.notDesktop', "File couldn't be loaded! You aren't on Desktop, are you?");
 		#end
 	}
 
-	/**
-		* Called when the save file dialog is cancelled.
-		*/
-	function onLoadCancel(_):Void
+	function onLoadCancel(?_):Void
 	{
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file = null;
-		trace("Cancelled file loading.");
+		CoolUtil.traceMsg('trace.fileCancelled', "Cancelled file loading.");
 	}
 
-	/**
-		* Called if there is an error while saving the gameplay recording.
-		*/
-	function onLoadError(_):Void
+	function onLoadError(?_):Void
 	{
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file = null;
-		trace("Problem loading file");
+		CoolUtil.traceMsg('trace.fileProblemSimple', "Problem loading file");
 	}
 
 	function saveDialogue() {
 		var data:String = Json.stringify(dialogueFile, "\t");
 		if (data.length > 0)
 		{
-			SUtil.saveContent('dialogue', '.json', data);
+			fileDialog.save('dialogue', data, function() {
+				onSaveComplete();
+			}, function() {
+				onSaveCancel();
+			}, function() {
+				onSaveError();
+			});
 		}
 	}
 
-	function onSaveComplete(_):Void
+	function onSaveComplete(?_):Void
 	{
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
 		FlxG.log.notice("Successfully saved file.");
 	}
 
-	/**
-		* Called when the save file dialog is cancelled.
-		*/
-	function onSaveCancel(_):Void
+	function onSaveCancel(?_):Void
 	{
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
+		// user cancelled save
 	}
 
-	/**
-		* Called if there is an error while saving the gameplay recording.
-		*/
-	function onSaveError(_):Void
+	function onSaveError(?_):Void
 	{
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
 		FlxG.log.error("Problem saving file");
 	}
 }

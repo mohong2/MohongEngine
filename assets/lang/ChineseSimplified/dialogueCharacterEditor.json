@@ -1,0 +1,21 @@
+{
+	"dialogueCharacterEditor_character_type": "角色类型",
+	"dialogueCharacterEditor_animations": "动画",
+	"dialogueCharacterEditor_character": "角色",
+	"dialogueCharacterEditor_left": "左",
+	"dialogueCharacterEditor_center": "中",
+	"dialogueCharacterEditor_right": "右",
+	"dialogueCharacterEditor_animations_label": "动画：",
+	"dialogueCharacterEditor_animation_name": "动画名称：",
+	"dialogueCharacterEditor_loop_name": ".XML 文件中的循环名称：",
+	"dialogueCharacterEditor_idle_name": ".XML 文件中的空闲/完成名称：",
+	"dialogueCharacterEditor_image_file": "图片文件名：",
+	"dialogueCharacterEditor_position_offset": "位置偏移：",
+	"dialogueCharacterEditor_scale": "缩放：",
+	"dialogueCharacterEditor_no_antialiasing": "无抗锯齿",
+	"dialogueCharacterEditor_add_update": "添加/更新",
+	"dialogueCharacterEditor_remove": "移除",
+	"dialogueCharacterEditor_reload_image": "重新加载图片",
+	"dialogueCharacterEditor_load_character": "加载角色",
+	"dialogueCharacterEditor_save_character": "保存角色"
+}

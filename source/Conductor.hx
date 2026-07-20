@@ -1,6 +1,7 @@
 package;
 
 import Song.SwagSong;
+import mohong.TraceManager;
 
 /**
  * ...
@@ -28,10 +29,6 @@ class Conductor
 	public static var safeZoneOffset:Float = (ClientPrefs.data.safeFrames / 60) * 1000; // is calculated in create(), is safeFrames in milliseconds
 
 	public static var bpmChangeMap:Array<BPMChangeEvent> = [];
-
-	public function new()
-	{
-	}
 
 	public static function judgeNote(note:Note, diff:Float=0):Rating // die
 	{
@@ -139,7 +136,7 @@ class Conductor
 			totalSteps += deltaSteps;
 			totalPos += ((60 / curBPM) * 1000 / 4) * deltaSteps;
 		}
-		trace("new BPM map BUDDY " + bpmChangeMap);
+		TraceManager.debug('trace.conductor.newBpmMap', 'new BPM map BUDDY {}', [bpmChangeMap]);
 	}
 
 	static function getSectionBeats(song:SwagSong, section:Int)

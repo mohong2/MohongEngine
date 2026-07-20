@@ -1,7 +1,8 @@
 package states;
 
-import states.substates.ResetScoreSubState;
-import states.substates.GameplayChangersSubstate;
+import substates.ResetScoreSubState;
+import substates.GameplayChangersSubstate;
+import substates.ModSelectSubstate;
 #if cpp
 import Discord.DiscordClient;
 #end
@@ -12,36 +13,43 @@ import flixel.group.FlxGroup;
 import lime.net.curl.CURLCode;
 import flixel.graphics.FlxGraphic;
 import WeekData;
+import flixel.input.keyboard.FlxKey;
 
 using StringTools;
 
-class StoryMenuState extends ScriptState
+class StoryMenuState extends MusicBeatState
 {
 	public static var weekCompleted:Map<String, Bool> = new Map<String, Bool>();
 
-	var scoreText:FlxText;
+	public var scoreText:FlxText;
 
 	private static var lastDifficultyName:String = '';
-	var curDifficulty:Int = 1;
+	public var curDifficulty:Int = 1;
 
-	var txtWeekTitle:FlxText;
-	var bgSprite:FlxSprite;
+	public var txtWeekTitle:FlxText;
+	public var bgSprite:FlxSprite;
 
 	private static var curWeek:Int = 0;
 
-	var txtTracklist:FlxText;
+	public var txtTracklist:FlxText;
 
-	var grpWeekText:FlxTypedGroup<MenuItem>;
-	var grpWeekCharacters:FlxTypedGroup<MenuCharacter>;
+	public var grpWeekText:FlxTypedGroup<MenuItem>;
+	public var grpWeekCharacters:FlxTypedGroup<MenuCharacter>;
 
-	var grpLocks:FlxTypedGroup<FlxSprite>;
+	public var grpLocks:FlxTypedGroup<FlxSprite>;
 
-	var difficultySelectors:FlxGroup;
-	var sprDifficulty:FlxSprite;
-	var leftArrow:FlxSprite;
-	var rightArrow:FlxSprite;
+	public var difficultySelectors:FlxGroup;
+	public var sprDifficulty:FlxSprite;
+	public var leftArrow:FlxSprite;
+	public var rightArrow:FlxSprite;
 
-	var loadedWeeks:Array<WeekData> = [];
+	public var loadedWeeks:Array<WeekData> = [];
+
+	// === NEW: Mod folder filtering ===
+	public var modList:Array<String> = [];
+	static var curSelectedMod:Int = 0;
+	static var lastSelectedModFolder:String = '';
+	var pendingModIndex:Int = -1;
 
 	override function create()
 	{
@@ -87,47 +95,21 @@ class StoryMenuState extends ScriptState
 		DiscordClient.changePresence("In the Menus", null);
 		#end
 
-		var num:Int = 0;
-		for (i in 0...WeekData.weeksList.length)
-		{
-			var weekFile:WeekData = WeekData.weeksLoaded.get(WeekData.weeksList[i]);
-			var isLocked:Bool = weekIsLocked(WeekData.weeksList[i]);
-			if(!isLocked || !weekFile.hiddenUntilUnlocked)
-			{
-				loadedWeeks.push(weekFile);
-				WeekData.setDirectoryFromWeek(weekFile);
-				var weekThing:MenuItem = new MenuItem(0, bgSprite.y + 396, WeekData.weeksList[i]);
-				weekThing.y += ((weekThing.height + 20) * num);
-				weekThing.targetY = num;
-				grpWeekText.add(weekThing);
+		// Build mod folder list first
+		buildModFolderList();
+		FlxG.keys.preventDefaultKeys.remove(TAB);
 
-				weekThing.screenCenter(X);
-				weekThing.antialiasing = ClientPrefs.data.globalAntialiasing;
-				// weekThing.updateHitbox();
+		// Restore Paths to the persisted mod selection
+		var modFolder:String = modList[curSelectedMod];
+		Paths.currentModDirectory = modFolder;
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
 
-				// Needs an offset thingie
-				if (isLocked)
-				{
-					var lock:FlxSprite = new FlxSprite(weekThing.width + 10 + weekThing.x);
-					lock.frames = ui_tex;
-					lock.animation.addByPrefix('lock', 'lock');
-					lock.animation.play('lock');
-					lock.ID = i;
-					lock.antialiasing = ClientPrefs.data.globalAntialiasing;
-					grpLocks.add(lock);
-				}
-				num++;
-			}
-		}
+		// Create mod filter header
+		createModFilterUI();
 
-		WeekData.setDirectoryFromWeek(loadedWeeks[0]);
-		var charArray:Array<String> = loadedWeeks[0].weekCharacters;
-		for (char in 0...3)
-		{
-			var weekCharacterThing:MenuCharacter = new MenuCharacter((FlxG.width * 0.25) * (1 + char) - 150, charArray[char]);
-			weekCharacterThing.y += 70;
-			grpWeekCharacters.add(weekCharacterThing);
-		}
+		// Load weeks for the first mod folder (also creates characters)
+		rebuildFilteredWeeks();
 
 		difficultySelectors = new FlxGroup();
 		add(difficultySelectors);
@@ -179,9 +161,16 @@ class StoryMenuState extends ScriptState
 		changeDifficulty();
 		updateArrowVisibility();
 		#if android
-		addVirtualPad(LEFT_FULL, A_B_X_Y);
+		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 	}
 
 	private function updateArrowVisibility():Void {
@@ -198,19 +187,175 @@ class StoryMenuState extends ScriptState
 }
 
 
-	override function closeSubState() {
+	// === NEW: Mod folder filtering functions ===
 
+	function buildModFolderList()
+	{
+		modList = WeekData.getModFolders();
+		// Restore previously selected mod from static folder name
+		curSelectedMod = 0;
+		if (lastSelectedModFolder.length > 0)
+		{
+			var idx = modList.indexOf(lastSelectedModFolder);
+			if (idx >= 0) curSelectedMod = idx;
+		}
+		if (curSelectedMod >= modList.length) curSelectedMod = 0;
+	}
+
+	function createModFilterUI()
+	{
+		// Small hint for mod switching
+		var hint = new FlxText(FlxG.width - 5, FlxG.height - 30, 0,
+			#if android
+			Language.get('Mod.hint.android', '[G] Switch Mod'),
+			#else
+			Language.get('Mod.hint', '[TAB] Switch Mod'),
+			#end
+			16);
+		hint.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT);
+		hint.alpha = 0.5;
+		hint.x = FlxG.width - hint.width - 10;
+		add(hint);
+	}
+
+	function refreshModFilterUI()
+	{
+		// No top bar to update
+	}
+
+	function openModSelect()
+	{
+		pendingModIndex = -1;
+		persistentUpdate = false;
+		openSubState(new ModSelectSubstate(
+			modList,
+			curSelectedMod,
+			function(newModIndex:Int) {
+				pendingModIndex = newModIndex;
+			},
+			function() {
+				// Cancel
+			}
+		));
+	}
+
+	function applyPendingModSelection()
+	{
+		if (pendingModIndex < 0 || pendingModIndex >= modList.length || pendingModIndex == curSelectedMod)
+		{
+			pendingModIndex = -1;
+			return;
+		}
+
+		curSelectedMod = pendingModIndex;
+		lastSelectedModFolder = modList[curSelectedMod]; // Save for next state creation
+		pendingModIndex = -1;
+		curWeek = 0;
+
+		var modFolder:String = modList[curSelectedMod];
+		Paths.currentModDirectory = modFolder;
+
+		// Reload menu music from the mod
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
+
+		rebuildFilteredWeeks();
+		// changeWeek(0) will reload the background based on the current week
+		changeWeek(0);
+		changeDifficulty();
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+	}
+
+	function rebuildFilteredWeeks()
+	{
+		var currentModFolder:String = modList[curSelectedMod];
+
+		// Clear existing week display
+		grpWeekText.clear();
+		grpLocks.clear();
+		grpWeekCharacters.clear();
+		loadedWeeks = [];
+
+		// Collect weeks from WeekData that belong to this mod folder
+		var allWeeks = WeekData.getWeeksForModFolder(currentModFolder);
+		var num:Int = 0;
+
+		for (weekName in allWeeks)
+		{
+			var weekFile:WeekData = WeekData.weeksLoaded.get(weekName);
+			if (weekFile == null) continue;
+
+			var isLocked:Bool = weekIsLocked(weekName);
+			if (!isLocked || !weekFile.hiddenUntilUnlocked)
+			{
+				loadedWeeks.push(weekFile);
+
+				WeekData.setDirectoryFromWeek(weekFile);
+				var weekThing:MenuItem = new MenuItem(0, bgSprite.y + 396, weekName);
+				weekThing.y += ((weekThing.height + 20) * num);
+				weekThing.targetY = num;
+				grpWeekText.add(weekThing);
+
+				weekThing.screenCenter(X);
+				weekThing.antialiasing = ClientPrefs.data.globalAntialiasing;
+
+				if (isLocked)
+				{
+					var ui_tex = Paths.getSparrowAtlas('campaign_menu_UI_assets');
+					var lock:FlxSprite = new FlxSprite(weekThing.width + 10 + weekThing.x);
+					lock.frames = ui_tex;
+					lock.animation.addByPrefix('lock', 'lock');
+					lock.animation.play('lock');
+					lock.ID = grpWeekText.members.indexOf(weekThing);
+					lock.antialiasing = ClientPrefs.data.globalAntialiasing;
+					grpLocks.add(lock);
+				}
+				num++;
+			}
+		}
+
+		if (loadedWeeks.length > 0)
+		{
+			curWeek = 0;
+			if (curWeek >= loadedWeeks.length) curWeek = loadedWeeks.length - 1;
+
+			WeekData.setDirectoryFromWeek(loadedWeeks[curWeek]);
+
+			// Recreate week characters
+			var charArray:Array<String> = loadedWeeks[curWeek].weekCharacters;
+			for (char in 0...3)
+			{
+				var weekCharacterThing:MenuCharacter = new MenuCharacter((FlxG.width * 0.25) * (1 + char) - 150, charArray[char]);
+				weekCharacterThing.y += 70;
+				grpWeekCharacters.add(weekCharacterThing);
+			}
+		}
+	}
+
+	override function closeSubState() {
+		if (pendingModIndex >= 0)
+		{
+			applyPendingModSelection();
+		}
 		persistentUpdate = true;
 		changeWeek();
+		changeDifficulty();
+		refreshModFilterUI();
 		#if android
 		removeVirtualPad();
-		addVirtualPad(LEFT_FULL, A_B_X_Y);
+		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.closeSubState();
 	}
 
 	override function update(elapsed:Float)
 	{
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 
 		updateArrowVisibility();
 		// scoreText.setFormat('VCR OSD Mono', 32);
@@ -223,6 +368,20 @@ class StoryMenuState extends ScriptState
 
 		if (!movedBack && !selectedWeek)
 		{
+			// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
+			if (FlxG.keys.justPressed.TAB
+				#if android || virtualPad.buttonEx.justPressed #end)
+			{
+				openModSelect();
+			}
+
+			// Skip week navigation when mod select is open
+			if (persistentUpdate == false) // substate is open
+			{
+				super.update(elapsed);
+				return;
+			}
+
 			var upP = controls.UI_UP_P;
 			var downP = controls.UI_DOWN_P;
 			if (upP)
@@ -285,6 +444,12 @@ class StoryMenuState extends ScriptState
 			MusicBeatState.switchState(new MainMenuState());
 		}
 
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 		super.update(elapsed);
 
 
@@ -368,7 +533,7 @@ class StoryMenuState extends ScriptState
 		WeekData.setDirectoryFromWeek(loadedWeeks[curWeek]);
 
 		var diff:String = CoolUtil.difficulties[curDifficulty];
-		var newImage:FlxGraphic = Paths.image('menudifficulties/' + Paths.formatToSongPath(diff));
+		var newImage:FlxGraphic = Paths.languageImage('menudifficulties/' + Paths.formatToSongPath(diff));
 		//trace(Paths.currentModDirectory + ', menudifficulties/' + Paths.formatToSongPath(diff));
 
 		if(sprDifficulty.graphic != newImage)

@@ -1,7 +1,10 @@
 package states;
 
-import states.substates.ResetScoreSubState;
-import states.substates.GameplayChangersSubstate;
+import substates.ResetScoreSubState;
+import substates.GameplayChangersSubstate;
+import substates.ScoreHistorySubstate;
+import substates.ModSelectSubstate;
+
 import flixel.ui.FlxBar;
 import flixel.effects.FlxFlicker;
 #if cpp
@@ -15,13 +18,15 @@ import lime.utils.Assets;
 import flixel.system.FlxSound;
 import openfl.utils.Assets as OpenFlAssets;
 import WeekData;
+import mohong.TraceManager;
+import flixel.input.keyboard.FlxKey;
 #if MODS_ALLOWED
 import sys.FileSystem;
 #end
 
 using StringTools;
 
-class FreeplayState extends ScriptState
+class FreeplayState extends MusicBeatState
 {
 	public static var instance:FreeplayState = null;
 	public var songs:Array<SongMetadata> = [];
@@ -62,6 +67,19 @@ class FreeplayState extends ScriptState
 	private var holdTime:Float = 0;
 	private var instPlaying:Int = -1;
 
+	// 新增：错误提示相关变量
+	public var missingTextBG:FlxSprite;
+	public var missingText:FlxText;
+	public var isShowingError:Bool = false;
+
+	// === NEW: Mod folder filtering ===
+	public static inline var ALL_FILTER:String = '__ALL__'; // Sentinel for "show all songs"
+	public var modList:Array<String> = [];        // Unique mod folders (sorted, vanilla first, ALL_FILTER first)
+	public var filteredSongIndices:Array<Int> = []; // Maps visual index → songs array index
+	static var curSelectedMod:Int = 0;            // Persists across state recreations
+	static var lastSelectedModFolder:String = ALL_FILTER;  // Folder name for restoring after state rebuild; starts at "All"
+	var modFilterText:FlxText;                    // Shows current filter name
+
 	override function create()
 	{
 		//Paths.clearStoredMemory();
@@ -97,10 +115,30 @@ class FreeplayState extends ScriptState
 				{
 					colors = [146, 113, 253];
 				}
-				addSong(song[0], i, song[1], FlxColor.fromRGB(colors[0], colors[1], colors[2]));
+				// Pass the week's mod folder to identify which mod this song belongs to
+				var weekModFolder:String = (leWeek.folder != null && leWeek.folder.length > 0) ? leWeek.folder : '';
+				addSong(song[0], i, song[1], FlxColor.fromRGB(colors[0], colors[1], colors[2]), weekModFolder);
 			}
 		}
-		WeekData.loadTheFirstEnabledMod();
+		// The globally active mod (selected via MainMenuState's ModSelectSubstate)
+		// always determines asset loading.  Freeplay's own mod filter is only
+		// for song display — it does NOT change which mod's assets are used.
+		// However, if the Freeplay filter is set to a specific mod folder, we
+		// must point Paths.currentModDirectory there so PlayState can resolve
+		// the mod's audio/images when the user enters a song.
+		Paths.currentModDirectory = MainMenuState.selectedModFolder;
+
+		// === Build mod folder list and restore last selected mod ===
+		buildModList();
+		FlxG.keys.preventDefaultKeys.remove(TAB);
+
+		// Apply the restored filter: for ALL_FILTER keep the MainMenu mod,
+		// for a specific mod switch to it.
+		if (curSelectedMod >= 0 && curSelectedMod < modList.length)
+		{
+			var selMod:String = modList[curSelectedMod];
+			if (selMod != ALL_FILTER) Paths.currentModDirectory = selMod;
+		}
 
 		/*		//KIND OF BROKEN NOW AND ALSO PRETTY USELESS//
 
@@ -143,33 +181,31 @@ class FreeplayState extends ScriptState
 		progressBar.visible = false;
 		add(progressBar);
 
-		for (i in 0...songs.length)
-		{
-			var songText:Alphabet = new Alphabet(90, 325, songs[i].songName, true);
-			songText.isMenuItem = true;
-			songText.targetY = i - curSelected;
-			grpSongs.add(songText);
+		// === Create mod filter header bar ===
+		createModFilterUI();
 
-			var maxWidth = 980;
-			if (songText.width > maxWidth)
-			{
-				songText.scaleX = maxWidth / songText.width;
-			}
-			songText.snapToPosition();
-
-			Paths.currentModDirectory = songs[i].folder;
-			var icon:HealthIcon = new HealthIcon(songs[i].songCharacter);
-			icon.sprTracker = songText;
-
-			// using a FlxGroup is too much fuss!
-			iconArray.push(icon);
-			add(icon);
-
-			//songText.x += 40;
-			// DONT PUT X IN THE FIRST PARAMETER OF new ALPHABET() !!
-			// songText.screenCenter(X);
-		}
+		// === Only create song items for the currently selected mod folder ===
+		rebuildFilteredSongs();
 		WeekData.setDirectoryFromWeek();
+
+		// Sync the asset directory with Freeplay's own mod filter.
+		// This ensures PlayState loads the correct mod resources without touching
+		// MainMenuState.selectedModFolder (the "fully loaded mod").
+		// NOTE: must be placed AFTER WeekData.setDirectoryFromWeek() which resets to "".
+		if (curSelectedMod >= 0 && curSelectedMod < modList.length)
+		{
+			var selMod:String = modList[curSelectedMod];
+			if (selMod != ALL_FILTER) Paths.currentModDirectory = selMod;
+		}
+
+		// Always reload background and menu music from the (possibly updated) directory.
+		// This also cleanly replaces any music started by PlayStateResultsSubstate / PauseSubState
+		// before switching back here, so there is no one-frame "vanilla music" artifact.
+		bg.loadGraphic(Paths.image('menuDesat'));
+		bg.screenCenter();
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
 
 		scoreText = new FlxText(FlxG.width * 0.7, 5, 0, "", 32);
 		scoreText.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, RIGHT);
@@ -184,9 +220,23 @@ class FreeplayState extends ScriptState
 
 		add(scoreText);
 
-		if(curSelected >= songs.length) curSelected = 0;
-		bg.color = songs[curSelected].color;
-		intendedColor = bg.color;
+		missingTextBG = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+		missingTextBG.alpha = 0.6;
+		missingTextBG.visible = false;
+		add(missingTextBG);
+		
+		missingText = new FlxText(50, 0, FlxG.width - 100, '', 24);
+		missingText.setFormat(Paths.font("vcr.ttf"), 24, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		missingText.scrollFactor.set();
+		missingText.visible = false;
+		add(missingText);
+
+		if(curSelected >= filteredSongIndices.length) curSelected = 0;
+		var initSong = getCurrentSong();
+		if(initSong != null) {
+			bg.color = initSong.color;
+			intendedColor = bg.color;
+		}
 
 
 		if(lastDifficultyName == '')
@@ -224,36 +274,294 @@ class FreeplayState extends ScriptState
 
 
 		#if PRELOAD_ALL
-		var leText:String = Language.get("FreeplayState.leText", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy.");
+		var leText:String = Language.get("FreeplayState.leText", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
+
+		#if android
+		var leText:String = Language.get("FreeplayState.leText.android", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
+		var size:Int = 16;
+		#end
+
 		#else
-		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy.");
+		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
 		var size:Int = 18;
+
+		#if android
+		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL.android", "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
+		var size:Int = 16;
+		#end
+
 		#end
 		var text:FlxText = new FlxText(textBG.x, textBG.y + 4, FlxG.width, leText, size);
 		text.setFormat(Paths.languageFont(), size, FlxColor.WHITE, RIGHT);
 		text.scrollFactor.set();
 		add(text);
 		#if android
-		addVirtualPad(LEFT_FULL, A_B_C_X_Y_Z);
+		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 	}
 
 
 	override function closeSubState() {
+		if (pendingModIndex >= 0)
+		{
+			applyPendingModSelection();
+		}
 		changeSelection(0, false);
 		persistentUpdate = true;
+		canInput = true;
 		#if android
 		removeVirtualPad();
-		addVirtualPad(LEFT_FULL, A_B_C_X_Y_Z);
+		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.closeSubState();
 	}
 
-	public function addSong(songName:String, weekNum:Int, songCharacter:String, color:Int)
+	public function addSong(songName:String, weekNum:Int, songCharacter:String, color:Int, ?modFolder:String = '')
 	{
-		songs.push(new SongMetadata(songName, weekNum, songCharacter, color));
+		songs.push(new SongMetadata(songName, weekNum, songCharacter, color, modFolder));
+	}
+
+	// === NEW: Mod folder filtering functions ===
+
+	/** Get the real songs[] index for the currently selected filtered item */
+	function getRealSelectedIndex():Int
+	{
+		if (filteredSongIndices.length == 0) return -1;
+		if (curSelected < 0 || curSelected >= filteredSongIndices.length) return -1;
+		return filteredSongIndices[curSelected];
+	}
+
+	/** Get the current SongMetadata from the filtered list */
+	function getCurrentSong():SongMetadata
+	{
+		var idx = getRealSelectedIndex();
+		return (idx >= 0) ? songs[idx] : null;
+	}
+
+	function buildModList()
+	{
+		modList = [];
+		// "All Songs" filter goes first
+		modList.push(ALL_FILTER);
+		for (song in songs)
+		{
+			var mf:String = (song.modFolder != null && song.modFolder.length > 0) ? song.modFolder : '';
+			if (!modList.contains(mf))
+				modList.push(mf);
+		}
+		// Sort the non-sentinel entries: vanilla first, then alphabetically
+		var tail:Array<String> = modList.filter(function(v) return v != ALL_FILTER);
+		tail.sort(function(a, b) {
+			if (a == '') return -1;
+			if (b == '') return 1;
+			return (a < b) ? -1 : ((a > b) ? 1 : 0);
+		});
+		modList = [ALL_FILTER].concat(tail);
+
+		// Restore previously selected mod:
+		// - If lastSelectedModFolder is ALL_FILTER (initial/default), stay on "All" (index 0).
+		// - Otherwise try to restore the exact folder the user picked (including '' for Vanilla).
+		curSelectedMod = 0;
+		if (lastSelectedModFolder != ALL_FILTER)
+		{
+			var idx = modList.indexOf(lastSelectedModFolder);
+			if (idx >= 0) curSelectedMod = idx;
+		}
+		if (curSelectedMod >= modList.length) curSelectedMod = 0;
+	}
+
+	function createModFilterUI()
+	{
+		// Current filter name (top-left)
+		modFilterText = new FlxText(10, 10, 0, '', 20);
+		modFilterText.setFormat(Paths.languageFont(), 20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		modFilterText.borderSize = 1.5;
+		modFilterText.scrollFactor.set();
+		add(modFilterText);
+
+		// Small hint for mod switching
+		var hint = new FlxText(FlxG.width - 5, FlxG.height - 50, 0,
+			#if android
+			Language.get('Mod.hint.android', '[G] Switch Mod'),
+			#else
+			Language.get('Mod.hint', '[TAB] Switch Mod'),
+			#end
+			16);
+		hint.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT);
+		hint.alpha = 0.5;
+		hint.x = FlxG.width - hint.width - 10;
+		add(hint);
+	}
+
+	function refreshModFilterUI()
+	{
+		updateModFilterText();
+	}
+
+	// Pending mod switch (set by substate callback, applied in closeSubState)
+	var pendingModIndex:Int = -1;
+
+	function openModSelect()
+	{
+		// Stop preview if playing
+		if (playingMusic) stopPreview();
+
+		pendingModIndex = -1;
+		persistentUpdate = false;
+		var substate = new ModSelectSubstate(
+			modList,
+			curSelectedMod,
+			function(newModIndex:Int) {
+				pendingModIndex = newModIndex;
+			},
+			function() {
+				// Cancel - do nothing
+			}
+		);
+		// Freeplay 的模组切换仅用于过滤歌曲列表，不涉及游戏重启，隐藏重启警告
+		substate.suppressRestartWarning = true;
+		openSubState(substate);
+	}
+
+	function applyPendingModSelection()
+	{
+		if (pendingModIndex < 0 || pendingModIndex >= modList.length || pendingModIndex == curSelectedMod)
+		{
+			pendingModIndex = -1;
+			return;
+		}
+
+		curSelectedMod = pendingModIndex;
+		lastSelectedModFolder = modList[curSelectedMod]; // Save for next state creation
+		pendingModIndex = -1;
+		curSelected = 0;
+		holdTime = 0;
+
+		// When the user picks a different mod filter via TAB, switch asset
+		// loading to that mod so background, character icons, menu music etc.
+		// resolve correctly.  This does NOT affect the "fully loaded mod"
+		// selected in MainMenuState — that one controls TitleState, window
+		// title/icon and other global aspects.
+		var modFolder:String = modList[curSelectedMod];
+		if (modFolder == ALL_FILTER)
+		{
+			// "All" filter — keep MainMenu's active mod for asset loading
+			Paths.currentModDirectory = MainMenuState.selectedModFolder;
+		}
+		else
+		{
+			Paths.currentModDirectory = modFolder;
+		}
+
+		// Reload background image from the (possibly new) mod — for ALL_FILTER
+		// this stays on MainMenu's mod so the background is consistent.
+		bg.loadGraphic(Paths.image('menuDesat'));
+		bg.screenCenter();
+		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
+
+		// Reload menu music: will pick up mod's freakyMenu.ogg if it exists
+		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
+
+		// Rebuild song list with the new mod's songs
+		rebuildFilteredSongs();
+		changeSelection(0, false);
+		changeDiff();
+
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+	}
+
+	function rebuildFilteredSongs()
+	{
+		// Clear existing song display
+		grpSongs.clear();
+		for (icon in iconArray)
+		{
+			remove(icon);
+			icon.destroy();
+		}
+		iconArray = [];
+		mouseOverlapIndex = -1; // Reset mouse tracking to prevent stale index crash
+
+		// Build filtered indices
+		var currentModFolder:String = modList[curSelectedMod];
+		var isAllFilter:Bool = (currentModFolder == ALL_FILTER);
+		filteredSongIndices = [];
+		for (i in 0...songs.length)
+		{
+			if (isAllFilter)
+			{
+				filteredSongIndices.push(i); // Show ALL songs
+			}
+			else
+			{
+				var mf:String = (songs[i].modFolder != null && songs[i].modFolder.length > 0) ? songs[i].modFolder : '';
+				if (mf == currentModFolder)
+					filteredSongIndices.push(i);
+			}
+		}
+
+		// Create display items for filtered songs
+		var savedModDir:String = Paths.currentModDirectory;
+		for (vi in 0...filteredSongIndices.length)
+		{
+			var realIndex:Int = filteredSongIndices[vi];
+			var songData:SongMetadata = songs[realIndex];
+
+			// Use plain song name (mod is shown at top)
+			var songText:Alphabet = new Alphabet(90, 325, songData.songName, true);
+			songText.isMenuItem = true;
+			songText.targetY = vi;
+			grpSongs.add(songText);
+
+			var maxWidth = 980;
+			if (songText.width > maxWidth)
+			{
+				songText.scaleX = maxWidth / songText.width;
+			}
+			songText.snapToPosition();
+
+			// Temporarily switch to the song's original mod folder to load its
+			// character icon, then restore the active (fully loaded) mod.
+			Paths.currentModDirectory = songData.folder;
+			var icon:HealthIcon = new HealthIcon(songData.songCharacter);
+			Paths.currentModDirectory = savedModDir;
+			icon.sprTracker = songText;
+			iconArray.push(icon);
+			add(icon);
+		}
+
+		if (filteredSongIndices.length > 0)
+		{
+			if (curSelected >= filteredSongIndices.length) curSelected = filteredSongIndices.length - 1;
+			if (curSelected < 0) curSelected = 0;
+			bg.color = songs[filteredSongIndices[curSelected]].color;
+			intendedColor = bg.color;
+		}
+
+		// Update the filter display text
+		updateModFilterText();
+	}
+
+	function updateModFilterText()
+	{
+		if (modFilterText == null) return;
+		var currentModFolder:String = modList[curSelectedMod];
+		var label:String;
+		if (currentModFolder == ALL_FILTER)
+			label = Language.get("FreeplayState.allMods", "All Mods");
+		else
+			label = WeekData.getModFolderDisplayName(currentModFolder);
+		modFilterText.text = Language.get("FreeplayState.modFilter", "Mod: ") + label;
 	}
 
 	public function weekIsLocked(name:String):Bool {
@@ -279,7 +587,15 @@ class FreeplayState extends ScriptState
 
 	override function update(elapsed:Float)
 	{
-		currentsongname = songs[curSelected].songName;
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
+
+		var curSong = getCurrentSong();
+		if(curSong != null) currentsongname = curSong.songName;
 		
 		if (FlxG.sound.music.volume < 0.7)
 		{
@@ -310,6 +626,17 @@ class FreeplayState extends ScriptState
 		var accepted = controls.ACCEPT;
 		var space = #if android virtualPad.buttonX.justPressed  || #end	FlxG.keys.justPressed.SPACE;
 		var ctrl = #if android virtualPad.buttonC.justPressed   || #end FlxG.keys.justPressed.CONTROL;
+		var history = #if android virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.H;
+		// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
+		if (!playingMusic)
+		{
+			if (FlxG.keys.justPressed.TAB
+				#if android || virtualPad.buttonEx.justPressed #end)
+			{
+				openModSelect();
+				return;
+			}
+		}
 		#if !android
 		var newMouseOverlapIndex = -1;
 		for (i in 0...grpSongs.length) {
@@ -351,7 +678,7 @@ class FreeplayState extends ScriptState
 		var shiftMult:Int = 1;
 		if(#if android virtualPad.buttonZ.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 		if (!playingMusic){
-		if(songs.length > 1)
+		if(filteredSongIndices.length > 1)
 		{
 			if (upP)
 			{
@@ -393,7 +720,7 @@ class FreeplayState extends ScriptState
 }
 	
 
-		if (controls.BACK)
+		if (controls.BACK && canInput)
 		{
 			if (playingMusic)
 			{
@@ -407,13 +734,14 @@ class FreeplayState extends ScriptState
 			MusicBeatState.switchState(new MainMenuState());
 			}
 		}
-		if (FlxG.keys.justPressed.SPACE && canInput)
+		if (space && canInput)
     	{
-        if (instPlaying != curSelected && !playingMusic)
+		var realIdx = getRealSelectedIndex();
+        if (instPlaying != realIdx && !playingMusic)
         {
             startPreview();
         }
-        else if (instPlaying == curSelected && playingMusic)
+        else if (instPlaying == realIdx && playingMusic)
         {
             if (paused)
             {
@@ -474,16 +802,27 @@ class FreeplayState extends ScriptState
 			persistentUpdate = false;
 			openSubState(new GameplayChangersSubstate());
 		}
-		else if(space)
+		else if(history)
 		{
-			if(instPlaying != curSelected)
+			canInput = false;
+			persistentUpdate = false;
+    		openSubState(new ScoreHistorySubstate(getCurrentSong().songName, curDifficulty));
+		}
+		else if(space && canInput)
+		{
+			var realIdx = getRealSelectedIndex();
+			if(instPlaying != realIdx)
 			{
 				#if PRELOAD_ALL
 				destroyFreeplayVocals();
 				FlxG.sound.music.volume = 0;
-				Paths.currentModDirectory = songs[curSelected].folder;
-				var poop:String = Highscore.formatSong(songs[curSelected].songName.toLowerCase(), curDifficulty);
-				PlayState.SONG = Song.loadFromJson(poop, songs[curSelected].songName.toLowerCase());
+
+				// Temporarily switch to the song's mod folder for chart/voice loading,
+				// then restore the globally active mod.
+				var prevModDir:String = Paths.currentModDirectory;
+				Paths.currentModDirectory = getCurrentSong().folder;
+				var poop:String = Highscore.formatSong(getCurrentSong().songName.toLowerCase(), curDifficulty);
+				PlayState.SONG = Song.loadFromJson(poop, getCurrentSong().songName.toLowerCase());
 				if (PlayState.SONG.needsVoices)
 					vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
 				else
@@ -495,92 +834,113 @@ class FreeplayState extends ScriptState
 				vocals.persist = true;
 				vocals.looped = true;
 				vocals.volume = 0.7;
-				instPlaying = curSelected;
+				Paths.currentModDirectory = prevModDir;
+				instPlaying = realIdx;
 				#end
 			}
 		}
-
-		else if (accepted)
+		else if (accepted && canInput && !isShowingError)
 		{
-		canInput = false;
-		persistentUpdate = false;
-		
-		FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
-		var selectedSong:Alphabet = grpSongs.members[curSelected];
-		var icon:HealthIcon = iconArray[curSelected]; 
-		
-		FlxFlicker.flicker(selectedSong, 1, 0.07, false, true, function(flick:FlxFlicker) {
-
-			confirmTween = FlxTween.tween(selectedSong, {
-				x: selectedSong.x - 600,
-				alpha: 0
-			}, 2.0, {
-				ease: FlxEase.quadIn
-			});
+			PlayState.replayMode = false;
+			var selectedSong:Alphabet = grpSongs.members[curSelected];
+			var icon:HealthIcon = iconArray[curSelected]; 
 			
-			FlxTween.tween(icon, {
-				alpha: 0,
-				scale: { x: 0.5, y: 0.5 }
-			}, 1.0, {
-				ease: FlxEase.cubeOut,
-				onComplete: function(twn:FlxTween) {
-					
-					var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
-					var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
-					PlayState.SONG = Song.loadFromJson(poop, songLowercase);
-					LoadingState.loadAndSwitchState(new PlayState());
-				}
-			});
-		});
-    
-
-    for (i in 0...grpSongs.length) {
-        if(i != curSelected) {
-            FlxTween.tween(grpSongs.members[i], {
-                alpha: 0,
-                x: grpSongs.members[i].x + 200
-            }, 0.8, {ease: FlxEase.quadOut});
-        }
-    }
-
-			var songLowercase:String = Paths.formatToSongPath(songs[curSelected].songName);
+			var curSongData = getCurrentSong();
+			var songLowercase:String = Paths.formatToSongPath(curSongData.songName);
 			var poop:String = Highscore.formatSong(songLowercase, curDifficulty);
-			/*#if MODS_ALLOWED
-			if(!sys.FileSystem.exists(Paths.modsJson(songLowercase + '/' + poop)) && !sys.FileSystem.exists(Paths.json(songLowercase + '/' + poop))) {
-			#else
-			if(!OpenFlAssets.exists(Paths.json(songLowercase + '/' + poop))) {
-			#end
-				poop = songLowercase;
-				curDifficulty = 1;
-				trace('Couldnt find file');
-			}*/
-			trace(poop);
-			PlayState.SONG = Song.loadFromJson(poop, songLowercase);
-			PlayState.isStoryMode = false;
-			PlayState.storyDifficulty = curDifficulty;
-
-
-			trace('CURRENT WEEK: ' + WeekData.getWeekFileName());
-			if(colorTween != null) {
-				colorTween.cancel();
+			
+			// Switch to the song's own mod folder so chart JSON loads correctly.
+			// DO NOT restore prevModDir after success — PlayState must keep this
+			// mod directory to resolve the mod's audio/images during gameplay.
+			// FreeplayState.create() will re-sync the directory when we return.
+			var prevModDir:String = Paths.currentModDirectory;
+			Paths.currentModDirectory = curSongData.folder;
+			try
+			{
+				var testSong = Song.loadFromJson(poop, songLowercase);
+				if (testSong == null)
+				{
+					Paths.currentModDirectory = prevModDir;
+					throw "Song data is null";
+				}
+				PlayState.SONG = testSong;
+				PlayState.isStoryMode = false;
+				PlayState.storyDifficulty = curDifficulty;
+				// Intentionally NOT restoring prevModDir — PlayState needs this.
+			}
+			catch(e:Dynamic)
+			{
+				Paths.currentModDirectory = prevModDir;
+				TraceManager.error('trace.freeplay.loadError', 'ERROR! {}', [e]);
+				var errorStr:String = e.toString();
+				if (Std.string(e).startsWith('[file_contents,assets/data/')) 
+					errorStr = 'Missing file: ' + errorStr.substring(34, errorStr.length-1);
+				else if (errorStr == "Song data is null")
+					errorStr = "Song data is empty or corrupted";
+				
+				missingText.text = 'ERROR WHILE LOADING CHART:\n$errorStr';
+				missingText.screenCenter(Y);
+				missingText.visible = true;
+				missingTextBG.visible = true;
+				FlxG.sound.play(Paths.sound('cancelMenu'));
+				
+				isShowingError = true;
+				canInput = true;
+				persistentUpdate = true;
+				return;
 			}
 			
+			canInput = false;
+			persistentUpdate = false;
+			FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
+			
+			TraceManager.info('trace.freeplay.currentWeek', 'CURRENT WEEK: {}', [WeekData.getWeekFileName()]);
+				if(colorTween != null) {
+				colorTween.cancel();
+			}
+						
+			missingText.visible = false;
+			missingTextBG.visible = false;
+
+			#if android
+			// 在切换状态前移除虚拟手柄，防止按键状态残留到 PlayState
+			removeVirtualPad();
+			#end
+
 			if (FlxG.keys.pressed.SHIFT){
-				LoadingState.loadAndSwitchState(new ChartingState());
+			if(ClientPrefs.data.newchartingstate)
+			LoadingState.loadAndSwitchState(new editors.NewChartingState());
+			else
+				LoadingState.loadAndSwitchState(new editors.ChartingState());
 			}else{
 				LoadingState.loadAndSwitchState(new PlayState());
 			}
 
 			FlxG.sound.music.volume = 0;
-					
+								
 			destroyFreeplayVocals();
+
+			for (i in 0...grpSongs.length) {
+				if(i != curSelected) {
+					FlxTween.tween(grpSongs.members[i], {
+						alpha: 0,
+						x: grpSongs.members[i].x + 200
+					}, 0.8, {ease: FlxEase.quadOut});
+				}
+			}
+
+			trace(poop);
 		}
 		else if(#if android virtualPad.buttonY.justPressed ||#end controls.RESET)
 		{
 			persistentUpdate = false;
-			openSubState(new ResetScoreSubState(songs[curSelected].songName, curDifficulty, songs[curSelected].songCharacter));
+			var resetSong = getCurrentSong();
+			openSubState(new ResetScoreSubState(resetSong.songName, curDifficulty, resetSong.songCharacter));
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 		super.update(elapsed);
 	}
 
@@ -603,9 +963,12 @@ class FreeplayState extends ScriptState
 
 		lastDifficultyName = CoolUtil.difficulties[curDifficulty];
 
+		var curSong = getCurrentSong();
 		#if !switch
-		intendedScore = Highscore.getScore(songs[curSelected].songName, curDifficulty);
-		intendedRating = Highscore.getRating(songs[curSelected].songName, curDifficulty);
+		if(curSong != null) {
+			intendedScore = Highscore.getScore(curSong.songName, curDifficulty);
+			intendedRating = Highscore.getRating(curSong.songName, curDifficulty);
+		}
 		#end
 
 		PlayState.storyDifficulty = curDifficulty;
@@ -614,6 +977,9 @@ class FreeplayState extends ScriptState
 		diffText.text = '< ' + CoolUtil.difficultyString() + ' >';
 
 		positionHighscore();
+		missingText.visible = false;
+		missingTextBG.visible = false;
+		isShowingError = false;
 	}
 
 	public function changeSelection(change:Int = 0, playSound:Bool = true)
@@ -623,12 +989,16 @@ class FreeplayState extends ScriptState
 
 		curSelected += change;
 
+		var maxVis:Int = filteredSongIndices.length;
 		if (curSelected < 0)
-			curSelected = songs.length - 1;
-		if (curSelected >= songs.length)
+			curSelected = maxVis - 1;
+		if (curSelected >= maxVis)
 			curSelected = 0;
+
+		var curSong = getCurrentSong();
+		if(curSong == null) return;
 			
-		var newColor:Int = songs[curSelected].color;
+		var newColor:Int = curSong.color;
 		if(newColor != intendedColor) {
 			if(colorTween != null) {
 				colorTween.cancel();
@@ -640,6 +1010,11 @@ class FreeplayState extends ScriptState
 				}
 			});
 		}
+		
+		missingText.visible = false;
+		missingTextBG.visible = false;
+		isShowingError = false;
+		
 		for (i in 0...grpSongs.length) {
         var item = grpSongs.members[i];
         var icon = iconArray[i];
@@ -675,8 +1050,10 @@ class FreeplayState extends ScriptState
 		// selector.y = (70 * curSelected) + 30;
 
 		#if !switch
-		intendedScore = Highscore.getScore(songs[curSelected].songName, curDifficulty);
-		intendedRating = Highscore.getRating(songs[curSelected].songName, curDifficulty);
+		if(curSong != null) {
+			intendedScore = Highscore.getScore(curSong.songName, curDifficulty);
+			intendedRating = Highscore.getRating(curSong.songName, curDifficulty);
+		}
 		#end
 
 		var bullShit:Int = 0;
@@ -702,9 +1079,12 @@ class FreeplayState extends ScriptState
 				// item.setGraphicSize(Std.int(item.width));
 			}
 		}
-		
-		Paths.currentModDirectory = songs[curSelected].folder;
-		PlayState.storyWeek = songs[curSelected].week;
+
+		// NOTE: Do NOT set Paths.currentModDirectory here!
+		// The globally active mod (selected via ModSelectSubstate / MainMenuState)
+		// must stay intact. Song-specific mod folders are only used temporarily
+		// when actually loading chart/voice data (see preview & accept handlers).
+		PlayState.storyWeek = curSong.week;
 
 		CoolUtil.difficulties = CoolUtil.defaultDifficulties.copy();
 		var diffStr:String = WeekData.getCurrentWeek().difficulties;
@@ -761,9 +1141,14 @@ class FreeplayState extends ScriptState
 		#if PRELOAD_ALL
 		destroyFreeplayVocals();
 		FlxG.sound.music.volume = 0;
-		Paths.currentModDirectory = songs[curSelected].folder;
-		var poop:String = Highscore.formatSong(songs[curSelected].songName.toLowerCase(), curDifficulty);
-		PlayState.SONG = Song.loadFromJson(poop, songs[curSelected].songName.toLowerCase());
+		var previewSong = getCurrentSong();
+
+		// Temporarily switch to the song's mod for chart/voice loading,
+		// then restore the globally active mod.
+		var prevModDir:String = Paths.currentModDirectory;
+		Paths.currentModDirectory = previewSong.folder;
+		var poop:String = Highscore.formatSong(previewSong.songName.toLowerCase(), curDifficulty);
+		PlayState.SONG = Song.loadFromJson(poop, previewSong.songName.toLowerCase());
 		
 		if (PlayState.SONG.needsVoices)
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
@@ -776,9 +1161,10 @@ class FreeplayState extends ScriptState
 		vocals.persist = true;
 		vocals.looped = true;
 		vocals.volume = 0.7;
+		Paths.currentModDirectory = prevModDir;
 		#end
 		
-		instPlaying = curSelected;
+		instPlaying = getRealSelectedIndex();
 		playingMusic = true;
 		paused = false;
 		curTime = 0;
@@ -828,7 +1214,8 @@ class FreeplayState extends ScriptState
 			paused = true;
 			FlxG.sound.music.pause();
 			if (vocals != null) vocals.pause();
-			previewSongTxt.text = 'PLAYING: ' + songs[curSelected].songName + ' (PAUSED)';
+			var pSong = getCurrentSong();
+			previewSongTxt.text = 'PLAYING: ' + (pSong != null ? pSong.songName : '?') + ' (PAUSED)';
 		}
 	}
 
@@ -839,7 +1226,8 @@ class FreeplayState extends ScriptState
 			paused = false;
 			FlxG.sound.music.resume();
 			if (vocals != null) vocals.resume();
-			previewSongTxt.text = 'PLAYING: ' + songs[curSelected].songName;
+			var pSong = getCurrentSong();
+			previewSongTxt.text = 'PLAYING: ' + (pSong != null ? pSong.songName : '?');
 		}
 	}
 
@@ -875,10 +1263,12 @@ class FreeplayState extends ScriptState
 		}
 
 		var rateText = ' (' + playbackRate + 'x)';
+		var pSong = getCurrentSong();
+		var pName:String = (pSong != null) ? pSong.songName : '?';
 		if (paused)
-			previewSongTxt.text = 'PLAYING: ' + songs[curSelected].songName + rateText + ' (PAUSED)';
+			previewSongTxt.text = 'PLAYING: ' + pName + rateText + ' (PAUSED)';
 		else
-			previewSongTxt.text = 'PLAYING: ' + songs[curSelected].songName + rateText;
+			previewSongTxt.text = 'PLAYING: ' + pName + rateText;
 	}
 	
 	public function formatTime(seconds:Float):String
@@ -950,8 +1340,9 @@ class SongMetadata
 	public var songCharacter:String = "";
 	public var color:Int = -7179779;
 	public var folder:String = "";
+	public var modFolder:String = "";
 
-	public function new(song:String, week:Int, songCharacter:String, color:Int)
+	public function new(song:String, week:Int, songCharacter:String, color:Int, ?modFolder:String = '')
 	{
 		this.songName = song;
 		this.week = week;
@@ -959,5 +1350,6 @@ class SongMetadata
 		this.color = color;
 		this.folder = Paths.currentModDirectory;
 		if(this.folder == null) this.folder = '';
+		this.modFolder = (modFolder != null && modFolder.length > 0) ? modFolder : this.folder;
 	}
 }

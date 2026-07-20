@@ -12,7 +12,7 @@ import Achievements;
 
 using StringTools;
 
-class AchievementsMenuState extends ScriptState
+class AchievementsMenuState extends MusicBeatState
 {
 	#if ACHIEVEMENTS_ALLOWED
 	public static var instance:AchievementsMenuState;
@@ -72,10 +72,30 @@ class AchievementsMenuState extends ScriptState
 		addVirtualPad(UP_DOWN, B);
 		#end
 		super.create();
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 	}
 
 	override function update(elapsed:Float) {
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
+
 		super.update(elapsed);
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 
 		if (controls.UI_UP_P) {
 			changeSelection(-1);

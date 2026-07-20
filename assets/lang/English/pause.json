@@ -14,5 +14,9 @@
   "Paused": "Paused",
   "Blueballed": "Blueballed",
   "Practice Mode": "PRACTICE MODE",
-  "Charting Mode": "CHARTING MODE"
+  "Charting Mode": "CHARTING MODE",
+  "PauseSubState.Replay" : "Replay MODE",
+  "ReplayDifficultyLock": "Replay MODE does not allow difficulty adjustment.",
+  "ReplayDifficultyLock": "Replay MODE does not allow difficulty adjustment.",
+  "PauseSubState.replayTitle2" : "(Replay data is not necessarily accurate)"
 }

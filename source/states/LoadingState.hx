@@ -10,6 +10,7 @@ import lime.utils.AssetLibrary;
 import lime.utils.AssetManifest;
 
 import haxe.io.Path;
+import mohong.TraceManager;
 
 class LoadingState extends MusicBeatState
 {
@@ -40,6 +41,13 @@ class LoadingState extends MusicBeatState
 	override function create()
 	{
 		instance = this;
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 
 		var bg:FlxSprite = new FlxSprite(0, 0).makeGraphic(FlxG.width, FlxG.height, 0xffcaff4d);
 		add(bg);
@@ -95,7 +103,7 @@ class LoadingState extends MusicBeatState
 	}
 	
 	function checkLibrary(library:String) {
-		trace(Assets.hasLibrary(library));
+		TraceManager.debug('trace.loading.checkLibrary', 'Checking library: {} - {}', [library, Assets.hasLibrary(library)]);
 		if (Assets.getLibrary(library) == null)
 		{
 			@:privateAccess
@@ -109,7 +117,19 @@ class LoadingState extends MusicBeatState
 	
 	override function update(elapsed:Float)
 	{
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 		super.update(elapsed);
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 		funkay.setGraphicSize(Std.int(0.88 * FlxG.width + 0.9 * (funkay.width - 0.88 * FlxG.width)));
 		funkay.updateHitbox();
 		if(controls.ACCEPT)
@@ -156,7 +176,7 @@ class LoadingState extends MusicBeatState
 		if(weekDir != null && weekDir.length > 0 && weekDir != '') directory = weekDir;
 
 		Paths.setCurrentLevel(directory);
-		trace('Setting asset folder to ' + directory);
+		TraceManager.info('trace.loading.setAssetFolder', 'Setting asset folder to {}', [directory]);
 
 		/*#if NO_PRELOAD_ALL
 		var loaded:Bool = false;
@@ -310,7 +330,7 @@ class MultiCallback
 	inline function log(msg):Void
 	{
 		if (logId != null)
-			trace('$logId: $msg');
+			TraceManager.debug('trace.loading.log', '{}: {}', [logId, msg]);
 	}
 	
 	public function getFired() return fired.copy();

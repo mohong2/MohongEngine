@@ -18,14 +18,14 @@ class DiscordClient
 	public function new()
 	{
 	  #if flash
-		trace("Discord Client starting...");
+		CoolUtil.traceMsg('trace.discordStart', 'Discord Client starting...');
 		DiscordRpc.start({
 			clientID: "863222024192262205",
 			onReady: onReady,
 			onError: onError,
 			onDisconnected: onDisconnected
 		});
-		trace("Discord Client started.");
+		CoolUtil.traceMsg('trace.discordStarted', 'Discord Client started.');
 
 		while (true)
 		{
@@ -48,23 +48,37 @@ class DiscordClient
 	static function onReady()
 	{
 	  #if flash
+		// Read mod config for Discord overrides on initial presence
+		#if MODS_ALLOWED
+		var logoKey:String = 'icon';
+		var logoText:String = "Psych Engine";
+		if (states.MainMenuState.selectedModFolder != null && states.MainMenuState.selectedModFolder.length > 0) {
+			var cfg = backend.ModConfig.load(states.MainMenuState.selectedModFolder);
+			if (cfg.discordLogoKey.length > 0) logoKey = cfg.discordLogoKey;
+			if (cfg.discordLogoText.length > 0) logoText = cfg.discordLogoText;
+		}
+		#else
+		var logoKey:String = 'icon';
+		var logoText:String = "Psych Engine";
+		#end
+
 		DiscordRpc.presence({
 			details: "In the Menus",
 			state: null,
-			largeImageKey: 'icon',
-			largeImageText: "Psych Engine"
+			largeImageKey: logoKey,
+			largeImageText: logoText
 		});
 		#end
 	}
 
 	static function onError(_code:Int, _message:String)
 	{
-		trace('Error! $_code : $_message');
+		CoolUtil.traceMsg('trace.discordError', 'Error! {} : {}', [_code, _message]);
 	}
 
 	static function onDisconnected(_code:Int, _message:String)
 	{
-		trace('Disconnected! $_code : $_message');
+		CoolUtil.traceMsg('trace.discordDisconnected', 'Disconnected! {} : {}', [_code, _message]);
 	}
 
 	public static function initialize()
@@ -74,7 +88,7 @@ class DiscordClient
 		{
 			new DiscordClient();
 		});
-		trace("Discord Client initialized");
+		CoolUtil.traceMsg('trace.discordInit', 'Discord Client initialized');
 		isInitialized = true;
 		#end
 	}
@@ -89,11 +103,25 @@ class DiscordClient
 			endTimestamp = startTimestamp + endTimestamp;
 		}
 
+		// Read mod config for Discord overrides (logoKey / logoText)
+		#if MODS_ALLOWED
+		var logoKey:String = 'icon';
+		var logoText:String = "Engine Version: " + MainMenuState.psychEngineVersion;
+		if (states.MainMenuState.selectedModFolder != null && states.MainMenuState.selectedModFolder.length > 0) {
+			var cfg = backend.ModConfig.load(states.MainMenuState.selectedModFolder);
+			if (cfg.discordLogoKey.length > 0) logoKey = cfg.discordLogoKey;
+			if (cfg.discordLogoText.length > 0) logoText = cfg.discordLogoText;
+		}
+		#else
+		var logoKey:String = 'icon';
+		var logoText:String = "Engine Version: " + MainMenuState.psychEngineVersion;
+		#end
+
 		DiscordRpc.presence({
 			details: details,
 			state: state,
-			largeImageKey: 'icon',
-			largeImageText: "Engine Version: " + MainMenuState.psychEngineVersion,
+			largeImageKey: logoKey,
+			largeImageText: logoText,
 			smallImageKey : smallImageKey,
 			// Obtained times are in milliseconds so they are divided so Discord can use it
 			startTimestamp : Std.int(startTimestamp / 1000),

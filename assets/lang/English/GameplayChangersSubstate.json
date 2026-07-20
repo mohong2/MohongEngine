@@ -1,0 +1,14 @@
+{
+    "Scroll Type": "Scroll Type",
+    "Scroll Speed": "Scroll Speed",
+    "Playback Rate": "Playback Rate",
+    "Health Gain Multiplier": "Health Gain Multiplier",
+    "Health Loss Multiplier": "Health Loss Multiplier",
+    "Instakill on Miss": "Instakill on Miss",
+    "Practice Mode": "Practice Mode",
+    "Botplay": "Botplay",
+    "multiplicative": "Multiplicative",
+    "constant": "Constant",
+    "Play as Opponent": "Play as Opponent",
+    "Reverse the goodNoteHit and opponentNoteHit script functions": "Reverse the goodNoteHit and\n opponentNoteHit script functions"
+}

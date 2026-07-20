@@ -12,7 +12,11 @@ import flixel.util.FlxSave;
 import haxe.Json;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
+import flixel.tweens.FlxEase;
+import flixel.tweens.FlxTween;
+import flixel.util.FlxTimer;
 import Controls;
+import FlxTextMenuItem;
 
 using StringTools;
 
@@ -20,7 +24,7 @@ class NotesSubState extends MusicBeatSubstate
 {
 	private static var curSelected:Int = 0;
 	private static var typeSelected:Int = 0;
-	private var grpNumbers:FlxTypedGroup<Alphabet>;
+	private var grpNumbers:FlxTypedGroup<FlxTextMenuItem>;
 	private var grpNotes:FlxTypedGroup<FlxSprite>;
 	private var shaderArray:Array<ColorSwap> = [];
 	var curValue:Float = 0;
@@ -28,7 +32,7 @@ class NotesSubState extends MusicBeatSubstate
 	var nextAccept:Int = 5;
 
 	var blackBG:FlxSprite;
-	var hsbText:Alphabet;
+	var hsbText:FlxTextMenuItem;
 
 	var posX = 230;
 	public function new() {
@@ -40,42 +44,19 @@ class NotesSubState extends MusicBeatSubstate
 		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 		add(bg);
 		
-		blackBG = new FlxSprite(posX - 25).makeGraphic(870, 200, FlxColor.BLACK);
+		blackBG = new FlxSprite(posX - 25, 200).makeGraphic(870, 200, FlxColor.BLACK);
 		blackBG.alpha = 0.4;
 		add(blackBG);
 
 		grpNotes = new FlxTypedGroup<FlxSprite>();
 		add(grpNotes);
-		grpNumbers = new FlxTypedGroup<Alphabet>();
+		grpNumbers = new FlxTypedGroup<FlxTextMenuItem>();
 		add(grpNumbers);
 
-		for (i in 0...ClientPrefs.data.arrowHSV.length) {
-			var yPos:Float = (165 * i) + 35;
-			for (j in 0...3) {
-				var optionText:Alphabet = new Alphabet(posX + (225 * j) + 250, yPos + 60, Std.string(ClientPrefs.data.arrowHSV[i][j]), true);
-				grpNumbers.add(optionText);
-			}
+		// 创建三个 Note：左（上一个）、中（当前）、下（下一个）
+		createThreeNotes();
 
-			var note:FlxSprite = new FlxSprite(posX, yPos);
-			note.frames = Paths.getSparrowAtlas('NOTE_assets');
-
-			var animations:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
-			note.animation.addByPrefix('idle', animations[i]);
-			note.animation.play('idle');
-			note.antialiasing = ClientPrefs.data.globalAntialiasing;
-			grpNotes.add(note);
-
-			var newShader:ColorSwap = new ColorSwap();
-			note.shader = newShader.shader;
-			newShader.hue = ClientPrefs.data.arrowHSV[i][0] / 360;
-			newShader.saturation = ClientPrefs.data.arrowHSV[i][1] / 100;
-			newShader.brightness = ClientPrefs.data.arrowHSV[i][2] / 100;
-			shaderArray.push(newShader);
-		}
-
-		hsbText = new Alphabet(posX + 265, 0, "Hue    Saturation  Brightness", false);
-		hsbText.scaleX = 0.6;
-		hsbText.scaleY = 0.6;
+		hsbText = new FlxTextMenuItem(posX + 265, 150, Language.get("notes.hsb_label", "Hue    Saturation  Brightness"), 32);
 		add(hsbText);
 		changeSelection();
 		#if android
@@ -86,6 +67,7 @@ class NotesSubState extends MusicBeatSubstate
 	}
 
 	var changingNote:Bool = false;
+	var switchingNote:Bool = false;
 	override function update(elapsed:Float) {
 		if(changingNote) {
 			if(holdTime < 0.5) {
@@ -120,13 +102,13 @@ class NotesSubState extends MusicBeatSubstate
 				}
 			}
 		} else {
-			if (controls.UI_UP_P) {
-				changeSelection(-1);
-				FlxG.sound.play(Paths.sound('scrollMenu'));
-			}
-			if (controls.UI_DOWN_P) {
-				changeSelection(1);
-				FlxG.sound.play(Paths.sound('scrollMenu'));
+			if (!switchingNote) {
+				if (controls.UI_UP_P) {
+					changeSelection(-1);
+				}
+				if (controls.UI_DOWN_P) {
+					changeSelection(1);
+				}
 			}
 			if (controls.UI_LEFT_P) {
 				changeType(-1);
@@ -146,20 +128,7 @@ class NotesSubState extends MusicBeatSubstate
 				FlxG.sound.play(Paths.sound('scrollMenu'));
 				changingNote = true;
 				holdTime = 0;
-				for (i in 0...grpNumbers.length) {
-					var item = grpNumbers.members[i];
-					item.alpha = 0;
-					if ((curSelected * 3) + typeSelected == i) {
-						item.alpha = 1;
-					}
-				}
-				for (i in 0...grpNotes.length) {
-					var item = grpNotes.members[i];
-					item.alpha = 0;
-					if (curSelected == i) {
-						item.alpha = 1;
-					}
-				}
+				highlightCurrent();
 				super.update(elapsed);
 				return;
 			}
@@ -182,35 +151,190 @@ class NotesSubState extends MusicBeatSubstate
 		super.update(elapsed);
 	}
 
+	/** 创建三个 Note 精灵：左（上一个）、中（当前）、下（下一个） */
+	function createThreeNotes()
+	{
+		var animations:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
+		var prevIdx = getPrevIndex(curSelected);
+		var nextIdx = getNextIndex(curSelected);
+
+		// 位置常量
+		var leftX = 100;
+		var centerX = 300;
+		var belowX = 330;
+		var centerY = 200;
+		var belowY = 400;
+
+		// 三个位置的数据：[索引, x, y, 缩放]
+		var noteData = [
+			{idx: prevIdx,        x: leftX,   y: centerY, scale: 0.65, alpha: 0.5},
+			{idx: curSelected,    x: centerX, y: centerY, scale: 1.0,  alpha: 1.0},
+			{idx: nextIdx,        x: belowX,  y: belowY,  scale: 0.65, alpha: 0.5}
+		];
+
+		for (d in noteData)
+		{
+			var note = new FlxSprite(d.x, d.y);
+			note.frames = Paths.getSparrowAtlas('NOTE_assets');
+			note.animation.addByPrefix('idle', animations[d.idx]);
+			note.animation.play('idle');
+			note.antialiasing = ClientPrefs.data.globalAntialiasing;
+			note.scale.set(d.scale, d.scale);
+			note.alpha = d.alpha;
+			grpNotes.add(note);
+
+			var shader = new ColorSwap();
+			note.shader = shader.shader;
+			shader.hue = ClientPrefs.data.arrowHSV[d.idx][0] / 360;
+			shader.saturation = ClientPrefs.data.arrowHSV[d.idx][1] / 100;
+			shader.brightness = ClientPrefs.data.arrowHSV[d.idx][2] / 100;
+			shaderArray.push(shader);
+		}
+
+		// HSV 文字（在当前 Note 下方）
+		for (j in 0...3) {
+			var optionText:FlxTextMenuItem = new FlxTextMenuItem(posX + (225 * j) + 250, centerY + 60, Std.string(ClientPrefs.data.arrowHSV[curSelected][j]), 48);
+			optionText.fieldWidth = 200;
+			optionText.alignment = CENTER;
+			optionText.ID = j;
+			grpNumbers.add(optionText);
+		}
+	}
+
+	/** 更新三个 Note 的显示数据 */
+	function updateThreeNotes(?mapping:Array<Int>)
+	{
+		var animations:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
+		if (mapping == null)
+			mapping = [getPrevIndex(curSelected), curSelected, getNextIndex(curSelected)];
+
+		for (i in 0...3)
+		{
+			if (i >= grpNotes.members.length) break;
+			var note = grpNotes.members[i];
+			var idx = mapping[i];
+			note.animation.addByPrefix('idle', animations[idx]);
+			note.animation.play('idle');
+			if (i < shaderArray.length) {
+				var s = shaderArray[i];
+				s.hue = ClientPrefs.data.arrowHSV[idx][0] / 360;
+				s.saturation = ClientPrefs.data.arrowHSV[idx][1] / 100;
+				s.brightness = ClientPrefs.data.arrowHSV[idx][2] / 100;
+			}
+		}
+
+		// 更新中心 Note 对应的 HSV 文字（mapping[1] 是当前居中的 Note 索引）
+		var centerIdx = (mapping.length >= 3) ? mapping[1] : curSelected;
+		for (j in 0...3) {
+			if (j < grpNumbers.length) {
+				grpNumbers.members[j].text = Std.string(ClientPrefs.data.arrowHSV[centerIdx][j]);
+			}
+		}
+	}
+
+	function getPrevIndex(idx:Int):Int
+	{
+		var v = idx - 1;
+		if (v < 0) v = ClientPrefs.data.arrowHSV.length - 1;
+		return v;
+	}
+	function getNextIndex(idx:Int):Int
+	{
+		var v = idx + 1;
+		if (v >= ClientPrefs.data.arrowHSV.length) v = 0;
+		return v;
+	}
+
 	function changeSelection(change:Int = 0) {
+		if (change == 0) {
+			// 初始化高亮
+			curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
+			updateValue();
+			highlightCurrent();
+			FlxG.sound.play(Paths.sound('scrollMenu'));
+			return;
+		}
+		if (switchingNote) return; // 动画进行中忽略新切换
+
+		switchingNote = true;
+		var oldIdx = curSelected;
 		curSelected += change;
-		if (curSelected < 0)
-			curSelected = ClientPrefs.data.arrowHSV.length-1;
-		if (curSelected >= ClientPrefs.data.arrowHSV.length)
-			curSelected = 0;
+		if (curSelected < 0) curSelected = ClientPrefs.data.arrowHSV.length - 1;
+		if (curSelected >= ClientPrefs.data.arrowHSV.length) curSelected = 0;
 
 		curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
 		updateValue();
 
-		for (i in 0...grpNumbers.length) {
-			var item = grpNumbers.members[i];
-			item.alpha = 0.6;
-			if ((curSelected * 3) + typeSelected == i) {
-				item.alpha = 1;
+		// 动画：三个 Note 同步移动到新位置，同时更新数据
+		var leftX = 100;
+		var centerX = 300;
+		var belowX = 330;
+		var centerY = 200;
+		var belowY = 400;
+
+		if (change < 0)
+		{
+			// UP：左→中，中→下，下→左
+			if (grpNotes.members.length >= 3)
+			{
+				var left = grpNotes.members[0];
+				var center = grpNotes.members[1];
+				var below = grpNotes.members[2];
+
+				// 左→中
+				FlxTween.tween(left, {x: centerX, y: centerY, alpha: 1}, 0.35, {ease: FlxEase.backOut});
+				FlxTween.tween(left.scale, {x: 1, y: 1}, 0.35, {ease: FlxEase.backOut});
+
+				// 中→下
+				FlxTween.tween(center, {x: belowX, y: belowY, alpha: 0.5}, 0.3, {ease: FlxEase.cubeIn});
+				FlxTween.tween(center.scale, {x: 0.65, y: 0.65}, 0.3, {ease: FlxEase.cubeIn});
+
+				// 下→左
+				FlxTween.tween(below, {x: leftX, y: centerY, alpha: 0.5}, 0.35, {ease: FlxEase.cubeOut});
+				FlxTween.tween(below.scale, {x: 0.65, y: 0.65}, 0.35, {ease: FlxEase.cubeOut});
+
+				// 位置交换后：members[0]=新中, members[1]=新下, members[2]=新左
+				updateThreeNotes([curSelected, getNextIndex(curSelected), getPrevIndex(curSelected)]);
 			}
 		}
-		for (i in 0...grpNotes.length) {
-			var item = grpNotes.members[i];
-			item.alpha = 0.6;
-			item.scale.set(0.75, 0.75);
-			if (curSelected == i) {
-				item.alpha = 1;
-				item.scale.set(1, 1);
-				hsbText.y = item.y - 70;
-				blackBG.y = item.y - 20;
+		else
+		{
+			// DOWN：下→中，中→左，左→下
+			if (grpNotes.members.length >= 3)
+			{
+				var left = grpNotes.members[0];
+				var center = grpNotes.members[1];
+				var below = grpNotes.members[2];
+
+				// 下→中
+				FlxTween.tween(below, {x: centerX, y: centerY, alpha: 1}, 0.35, {ease: FlxEase.backOut});
+				FlxTween.tween(below.scale, {x: 1, y: 1}, 0.35, {ease: FlxEase.backOut});
+
+				// 中→左
+				FlxTween.tween(center, {x: leftX, y: centerY, alpha: 0.5}, 0.3, {ease: FlxEase.cubeIn});
+				FlxTween.tween(center.scale, {x: 0.65, y: 0.65}, 0.3, {ease: FlxEase.cubeIn});
+
+				// 左→下
+				FlxTween.tween(left, {x: belowX, y: belowY, alpha: 0.5}, 0.35, {ease: FlxEase.cubeOut});
+				FlxTween.tween(left.scale, {x: 0.65, y: 0.65}, 0.35, {ease: FlxEase.cubeOut});
+
+				// 位置交换后：members[0]=新下, members[1]=新左, members[2]=新中
+				updateThreeNotes([getNextIndex(curSelected), getPrevIndex(curSelected), curSelected]);
 			}
 		}
 		FlxG.sound.play(Paths.sound('scrollMenu'));
+
+		// 动画结束后解锁切换
+		new FlxTimer().start(0.4, function(_) { switchingNote = false; });
+	}
+
+	/** 高亮当前选中的 HSV 文字 */
+	function highlightCurrent()
+	{
+		for (i in 0...grpNumbers.length) {
+			var item = grpNumbers.members[i];
+			item.alpha = (i == typeSelected) ? 1 : 0.6;
+		}
 	}
 
 	function changeType(change:Int = 0) {
@@ -222,32 +346,23 @@ class NotesSubState extends MusicBeatSubstate
 
 		curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
 		updateValue();
-
-		for (i in 0...grpNumbers.length) {
-			var item = grpNumbers.members[i];
-			item.alpha = 0.6;
-			if ((curSelected * 3) + typeSelected == i) {
-				item.alpha = 1;
-			}
-		}
+		highlightCurrent();
 	}
 
 	function resetValue(selected:Int, type:Int) {
 		curValue = 0;
 		ClientPrefs.data.arrowHSV[selected][type] = 0;
-		switch(type) {
-			case 0: shaderArray[selected].hue = 0;
-			case 1: shaderArray[selected].saturation = 0;
-			case 2: shaderArray[selected].brightness = 0;
+		// 更新中心 Note 的 shader
+		if (shaderArray.length > 1) {
+			switch(type) {
+				case 0: shaderArray[1].hue = 0;
+				case 1: shaderArray[1].saturation = 0;
+				case 2: shaderArray[1].brightness = 0;
+			}
 		}
-
-		var item = grpNumbers.members[(selected * 3) + type];
-		item.text = '0';
-
-		var add = (40 * (item.letters.length - 1)) / 2;
-		for (letter in item.letters)
-		{
-			letter.offset.x += add;
+		if (type < grpNumbers.length) {
+			grpNumbers.members[type].text = '0';
+			grpNumbers.members[type].alignment = CENTER;
 		}
 	}
 	function updateValue(change:Float = 0) {
@@ -257,29 +372,22 @@ class NotesSubState extends MusicBeatSubstate
 		switch(typeSelected) {
 			case 1 | 2: max = 100;
 		}
-
-		if(roundedValue < -max) {
-			curValue = -max;
-		} else if(roundedValue > max) {
-			curValue = max;
-		}
+		if(roundedValue < -max) { curValue = -max; }
+		else if(roundedValue > max) { curValue = max; }
 		roundedValue = Math.round(curValue);
 		ClientPrefs.data.arrowHSV[curSelected][typeSelected] = roundedValue;
 
-		switch(typeSelected) {
-			case 0: shaderArray[curSelected].hue = roundedValue / 360;
-			case 1: shaderArray[curSelected].saturation = roundedValue / 100;
-			case 2: shaderArray[curSelected].brightness = roundedValue / 100;
+		// 实时更新中心 Note 颜色（shaderArray[1] = 中央 Note）
+		if (shaderArray.length > 1) {
+			switch(typeSelected) {
+				case 0: shaderArray[1].hue = roundedValue / 360;
+				case 1: shaderArray[1].saturation = roundedValue / 100;
+				case 2: shaderArray[1].brightness = roundedValue / 100;
+			}
 		}
-
-		var item = grpNumbers.members[(curSelected * 3) + typeSelected];
-		item.text = Std.string(roundedValue);
-
-		var add = (40 * (item.letters.length - 1)) / 2;
-		for (letter in item.letters)
-		{
-			letter.offset.x += add;
-			if(roundedValue < 0) letter.offset.x += 10;
+		if (typeSelected < grpNumbers.length) {
+			grpNumbers.members[typeSelected].text = Std.string(roundedValue);
+			grpNumbers.members[typeSelected].alignment = CENTER;
 		}
 	}
 }

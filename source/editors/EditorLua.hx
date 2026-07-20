@@ -55,11 +55,11 @@ class EditorLua {
 		if(resultStr != null && result != 0) {
 			SUtil.showPopUp(resultStr, 'Error on .LUA script!');
 			lime.app.Application.current.window.alert(resultStr, 'Error on .LUA script!');
-			trace('Error on .LUA script! ' + resultStr);
+			CoolUtil.traceMsg('trace.luaError', 'Error on .LUA script! {}', [resultStr]);
 			lua = null;
 			return;
 		}
-		trace('Lua file loaded succesfully:' + script);
+		CoolUtil.traceMsg('trace.luaLoaded', 'Lua file loaded successfully: {}', [script]);
 
 		// Lua variables
 		set('Function_Stop', Function_Stop);

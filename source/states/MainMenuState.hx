@@ -1,7 +1,11 @@
 package states;
 
+import backend.seiun.ui.*;
 import script.lua.FunkinLua;
 import options.OptionsState;
+import substates.ModSelectSubstate;
+import states.ModState;
+import backend.ModConfig;
 #if cpp
 import Discord.DiscordClient;
 #end
@@ -13,25 +17,27 @@ import flixel.tweens.FlxEase.EaseFunction;
 import lime.app.Application;
 import Achievements;
 import editors.MasterEditorMenu;
+import mohong.TraceManager;
+import haxe.Json;
 import flixel.input.keyboard.FlxKey;
+#if MODS_ALLOWED
+import sys.FileSystem;
+import sys.io.File;
+#end
 
 using StringTools;
 
-class MainMenuState extends ScriptState
+class MainMenuState extends MusicBeatState
 {
-	#if desktop
-	public static var mohongEngineVersion:String = '1.0'; 
-	#else
-	public static var mohongEngineVersion:String = '0.0.1'; // Android version
-	#end
-	public static var psychEngineVersion:String = '0.6.3.1';
+	public static var seiunengineVersion:String = '0.2.1'; 
+	public static var psychEngineVersion:String = '0.6.4';
 	public static var curSelected:Int = 0;
 
-	var menuItems:FlxTypedGroup<FlxSprite>;
-	private var camGame:FlxCamera;
-	private var camAchievement:FlxCamera;
-	
-	var optionShit:Array<String> = [
+	public var menuItems:FlxTypedGroup<FlxSprite>;
+	public var camGame:FlxCamera;
+	public var camAchievement:FlxCamera;
+
+	public var optionShit:Array<String> = [
 		'story_mode',
 		'freeplay',
 		#if MODS_ALLOWED 'mods', #end
@@ -41,26 +47,40 @@ class MainMenuState extends ScriptState
 		'options'
 	];
 
-	var magenta:FlxSprite;
-	var camFollow:FlxObject;
-	var camFollowPos:FlxObject;
-	var debugKeys:Array<FlxKey>;
-	var mouseOverlapIndex = -1;
+	public var bg:FlxSprite;
+	public var magenta:FlxSprite;
+	public var camFollow:FlxObject;
+	public var camFollowPos:FlxObject;
+	public var debugKeys:Array<FlxKey>;
+	public var mouseOverlapIndex = -1;
 	public static var instance:MainMenuState;
+
+	// === Mod Selection (persists across state transitions) ===
+	public static var selectedModFolder:String = '';
+
+	var currentModText:FlxText;
+	var pendingModIndex:Int = -1;
+	var pendingModRestart:Bool = false;
 	
 	override function create()
 	{
 		instance = this;
+
 		#if MODS_ALLOWED
+		loadActiveMod();
 		Paths.pushGlobalMods();
+		// Use the user-selected mod folder (from ModSelectSubstate), default to vanilla
+		Paths.currentModDirectory = selectedModFolder;
+		// Apply mod pack.json config: window title, state/substate replacements
+		ModState.applyModPackConfig(selectedModFolder);
 		#end
-		WeekData.loadTheFirstEnabledMod();
 		FlxG.mouse.visible = true;
 		#if cpp
 		// Updating Discord Rich Presence
 		DiscordClient.changePresence("In the Menus", null);
 		#end
 		debugKeys = ClientPrefs.copyKey(ClientPrefs.keyBinds.get('debug_1'));
+		FlxG.keys.preventDefaultKeys.remove(TAB);
 
 		camGame = new FlxCamera();
 		camAchievement = new FlxCamera();
@@ -76,7 +96,7 @@ class MainMenuState extends ScriptState
 		persistentUpdate = persistentDraw = true;
 
 		var yScroll:Float = Math.max(0.25 - (0.05 * (optionShit.length - 4)), 0.1);
-		var bg:FlxSprite = new FlxSprite(-80).loadGraphic(Paths.image('menuBG'));
+		bg = new FlxSprite(-80).loadGraphic(Paths.image('menuBG'));
 		bg.scrollFactor.set(0, yScroll);
 		bg.setGraphicSize(Std.int(bg.width * 1.175));
 		bg.updateHitbox();
@@ -134,7 +154,7 @@ class MainMenuState extends ScriptState
 		FlxG.camera.follow(camFollowPos, null, 1);
 		var versionShitx = 1000;
 		
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 64, 0, #if !android "Mohong Engine v" #else "Mohong Engine Android v" #end + mohongEngineVersion, 12);
+		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 64, 0, "Seiun Engine v" + seiunengineVersion, 12);
 		versionShit.scrollFactor.set();
 		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(versionShit);
@@ -157,6 +177,17 @@ class MainMenuState extends ScriptState
 		luaversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(luaversionShit);
 
+		// === Active mod indicator ===
+		currentModText = new FlxText(5, FlxG.height - 24, 0, "", 16);
+		currentModText.scrollFactor.set();
+		currentModText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		currentModText.borderSize = 1;
+		add(currentModText);
+
+		// Ensure menu music is playing (may not be if TitleState was replaced)
+		if (FlxG.sound.music == null)
+			FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
+
 		// NG.core.calls.event.logEvent('swag').send();
 
 		changeItem();
@@ -177,6 +208,18 @@ class MainMenuState extends ScriptState
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 		super.create();
+
+		// Language is now loaded (by MusicBeatState.create), safe to use translations
+		// Re-set font because languageFont() now returns the correct language-specific font
+		currentModText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		updateActiveModText();
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 	}
 
 	#if ACHIEVEMENTS_ALLOWED
@@ -184,7 +227,7 @@ class MainMenuState extends ScriptState
 	function giveAchievement() {
 		add(new AchievementObject('friday_night_play', camAchievement));
 		FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
-		trace('Giving achievement "friday_night_play"');
+		TraceManager.info('trace.mainMenu.giveAchievement', 'Giving achievement "friday_night_play"');
 	}
 	#end
 
@@ -192,7 +235,24 @@ class MainMenuState extends ScriptState
 
 	override function update(elapsed:Float)
 	{
-		if (FlxG.sound.music.volume < 0.8)
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
+		// Handle deferred mod restart (from ModSelectSubstate selection)
+		if (pendingModRestart)
+		{
+			pendingModRestart = false;
+			FlxG.sound.music.fadeOut(0.3);
+			TitleState.initialized = false;
+			TitleState.closedState = false;
+			FlxG.camera.fade(FlxColor.BLACK, 0.5, false, FlxG.resetGame, false);
+			return;
+		}
+
+		if (FlxG.sound.music != null && FlxG.sound.music.volume < 0.8)
 		{
 			FlxG.sound.music.volume += 0.5 * FlxG.elapsed;
 			if(FreeplayState.vocals != null) FreeplayState.vocals.volume += 0.5 * elapsed;
@@ -249,6 +309,14 @@ class MainMenuState extends ScriptState
 				MusicBeatState.switchState(new TitleState());
 			}
 
+			// TAB to open mod selection (when there are mods installed)
+			#if MODS_ALLOWED
+			if (FlxG.keys.justPressed.TAB && !selectedSomethin)
+			{
+				openModSelectSubstate();
+			}
+			#end
+
 			if (FlxG.mouse.justPressed && mouseOverlapIndex == curSelected && !selectedSomethin || controls.ACCEPT) {
 				if (optionShit[curSelected] == 'donate') {
 					CoolUtil.browserLoad('https://ninja-muffin24.itch.io/funkin');
@@ -304,6 +372,13 @@ class MainMenuState extends ScriptState
 		}
 
 		super.update(elapsed);
+
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 	}
 
 	function changeItem(huh:Int = 0)
@@ -335,6 +410,219 @@ class MainMenuState extends ScriptState
 			}
 		});
 	}
+	// =============== Mod Selection ===============
+
+	override function closeSubState() {
+		if (pendingModIndex >= 0)
+		{
+			applyModSelection(pendingModIndex);
+			pendingModIndex = -1;
+		}
+		persistentUpdate = true;
+		super.closeSubState();
+		// Restore camera follow after substate closes so menu scrolling works again
+		FlxG.camera.follow(camFollowPos, null, 1);
+	}
+
+	function openModSelectSubstate()
+	{
+		#if MODS_ALLOWED
+		// Reset camera to center before opening substate to prevent offset issues
+		camFollow.setPosition(FlxG.width / 2, FlxG.height / 2);
+		camFollowPos.setPosition(FlxG.width / 2, FlxG.height / 2);
+		FlxG.camera.scroll.set(0, 0);
+
+		// Build the mod list from modsList.txt + mod folders
+		var modFolders:Array<String> = []; // '' = vanilla
+		var modsListPath:String = 'modsList.txt';
+		if (FileSystem.exists(modsListPath))
+		{
+			var lines:Array<String> = CoolUtil.coolTextFile(modsListPath);
+			for (line in lines)
+			{
+				var parts = line.split('|');
+				if (parts.length >= 1 && parts[0].length > 0
+					&& !Paths.ignoreModFolders.contains(parts[0].toLowerCase())
+					&& !modFolders.contains(parts[0]))
+				{
+					modFolders.push(parts[0]);
+				}
+			}
+		}
+		// Also pick up any folders not yet in modsList.txt
+		for (folder in Paths.getModDirectories())
+		{
+			if (!Paths.ignoreModFolders.contains(folder) && !modFolders.contains(folder))
+				modFolders.push(folder);
+		}
+		modFolders.sort(function(a, b) return (a < b) ? -1 : ((a > b) ? 1 : 0));
+		modFolders.insert(0, ''); // Vanilla first
+
+		// Find current selection index
+		var selIdx:Int = 0;
+		for (i in 0...modFolders.length)
+		{
+			if (modFolders[i] == selectedModFolder) { selIdx = i; break; }
+		}
+
+		// Stop camera follow so the substate isn't affected by camera movement
+		FlxG.camera.follow(null);
+
+		pendingModIndex = -1;
+		persistentUpdate = false;
+		openSubState(new ModSelectSubstate(
+			modFolders,
+			selIdx,
+			function(newIdx:Int) { pendingModIndex = newIdx; },
+			function() { /* cancel */ }
+		));
+		#end
+	}
+
+	function applyModSelection(newIdx:Int)
+	{
+		#if MODS_ALLOWED
+		applyModSelectionExternal(newIdx);
+		#end
+	}
+
+	/** Public version that can be called from ModState (accepts pre-built modFolders). */
+	public static function applyModSelectionExternal(newIdx:Int, ?modFolders:Array<String>):Void
+	{
+		#if MODS_ALLOWED
+		if (modFolders == null) 
+			modFolders = [''];
+		var modsListPath:String = 'modsList.txt';
+		if (FileSystem.exists(modsListPath))
+		{
+			var lines:Array<String> = CoolUtil.coolTextFile(modsListPath);
+			for (line in lines)
+			{
+				var parts = line.split('|');
+				if (parts.length >= 1 && parts[0].length > 0
+					&& !Paths.ignoreModFolders.contains(parts[0].toLowerCase())
+					&& !modFolders.contains(parts[0]))
+				{
+					modFolders.push(parts[0]);
+				}
+			}
+		}
+		for (folder in Paths.getModDirectories())
+		{
+			if (!Paths.ignoreModFolders.contains(folder) && !modFolders.contains(folder))
+				modFolders.push(folder);
+		}
+		modFolders.sort(function(a, b) return (a < b) ? -1 : ((a > b) ? 1 : 0));
+		// Insert vanilla at front after sort
+		if (modFolders.indexOf('') < 0) modFolders.insert(0, '');
+
+		if (newIdx < 0 || newIdx >= modFolders.length) return;
+
+		var newFolder:String = modFolders[newIdx];
+		if (newFolder == selectedModFolder) return;
+
+		// Apply selection
+		selectedModFolder = newFolder;
+		Paths.currentModDirectory = newFolder;
+		saveActiveMod();
+
+		// Apply mod pack.json config: window title, state/substate replacements
+		ModState.applyModPackConfig(newFolder);
+
+		// Check mod config: API version + restart requirements
+		var needsRestart:Bool = false;
+		if (newFolder.length > 0)
+		{
+			var modCfg:ModConfig = ModConfig.load(newFolder);
+
+			// ── API version compatibility check ──
+			if (!ModConfig.isCompatible(modCfg))
+			{
+				var reason:String = ModConfig.incompatibilityReason(modCfg);
+				TraceManager.warn('trace.mainMenu.incompatibleMod', 'Incompatible mod: {}', [reason]);
+				// Still allow selection but show warning — the ModsMenu will display the reason.
+			}
+
+			needsRestart = modCfg.restartRequired;
+
+			// If the mod defines any state/substate replacements,
+			// force a restart regardless of the "restart" field.
+			if (!needsRestart)
+			{
+				if (modCfg.stateReplacements.keys().hasNext())
+					needsRestart = true;
+				else if (modCfg.substateReplacements.keys().hasNext())
+					needsRestart = true;
+			}
+		}
+		
+
+		// Always force a full game restart (through TitleState) when switching mods,
+		// even when switching to "vanilla" (empty folder).  This ensures:
+		//   - stateReplacements are properly cleared and TitleState is not replaced
+		//   - global mods are re-evaluated
+		//   - assets reload cleanly
+		if (instance != null) {
+			instance.pendingModRestart = true;
+			instance.currentModText.text = Language.get("MainMenu.activeMod", "Active Mod: ")
+				+ WeekData.getModFolderDisplayName(newFolder)
+				+ "\n" + Language.get("Mod.restart", "(Restarting...)");
+			instance.currentModText.color = 0xFFFF6666;
+			instance.currentModText.setFormat(Paths.languageFont(), 16, 0xFFFF6666, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			return;
+		}
+		else
+		{
+			// Called from outside MainMenuState (e.g. ModState TAB) — force a
+			// full game restart so state replacements, window title etc. apply.
+			TitleState.initialized = false;
+			TitleState.closedState = false;
+			FlxG.resetGame();
+			return;
+		}
+		#end
+	}
+
+	function updateActiveModText()
+	{
+		#if MODS_ALLOWED
+		var displayName:String = WeekData.getModFolderDisplayName(selectedModFolder);
+		currentModText.text = Language.get("MainMenu.activeMod", "Active Mod:") + displayName;
+		#else
+		currentModText.text = '';
+		#end
+	}
+
+	// =============== Persist active mod selection ===============
+
+	/** Read the previously-selected mod folder from `activeMod.txt` (game root). */
+	public static function loadActiveMod():Void {
+		#if MODS_ALLOWED
+		var path:String = 'activeMod.txt';
+		if (FileSystem.exists(path)) {
+			try {
+				var content:String = File.getContent(path).trim();
+				if (content.length > 0) {
+					selectedModFolder = content;
+				}
+			} catch (e:Dynamic) {
+				TraceManager.error('trace.error', 'Failed to load activeMod.txt: {}', [e]);
+			}
+		}
+		#end
+	}
+
+	/** Persist the current mod folder to `activeMod.txt` (game root). */
+	static function saveActiveMod():Void {
+		#if MODS_ALLOWED
+		try {
+			File.saveContent('activeMod.txt', selectedModFolder);
+		} catch (e:Dynamic) {
+			TraceManager.error('trace.error', 'Failed to save activeMod.txt: {}', [e]);
+		}
+		#end
+	}
+
 	override function destroy() {
 		instance = null;
 		super.destroy();

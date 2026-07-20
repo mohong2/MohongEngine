@@ -1,9 +1,37 @@
 {
 	"name": "Name",
 	"description": "Description",
-	"restart":false,
+	"zhdescription": "中文描述",
+	"zhtdescription": "繁体中文描述",
+	"author": "",
+	"version": "1.0.0",
+	"apiVersion": 1,
+	"restart": false,
 	"runsGlobally": false,
+
+	"disableWarningScreen": false,
+	"disableLanguages": false,
+
+	"dependencies": [],
+
 	"color": [170, 0, 255],
+	"iconFramerate": 10,
+	"useOldFPS": false,
+
+	"iconPath": "pack.png",
+	"iconPath64": "icon64",
+	"iconPath32": "icon32",
+	"iconPath24": "icon24",
+	"iconPath16": "icon16",
+
+	"windowTitle": "",
+
+	"stateReplacements": {},
+	"substateReplacements": {},
+
 	"discordRPC": "863222024192262205",
-	"iconFramerate": 10
+	"discordLogoKey": "icon",
+	"discordLogoText": "",
+
+	"downloadLink": ""
 }

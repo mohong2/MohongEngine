@@ -107,13 +107,12 @@ class KeyboardDisplay extends FlxSpriteGroup
 	{
 		members[4 + key].alpha = 1 * ClientPrefs.data.keyboardAlpha;
 		members[8 + key].color = FlxColor.BLACK;
-		/*
-		if (!PlayState.replayMode)*/
+		
+		if (!PlayState.replayMode)
 			total++;
 		totalText.text = Std.string(total);
 		hitArray.unshift(Date.now());
 		
-		//你看Mohong Engine有replay这个东西吗?
 		if (!ClientPrefs.data.keyboardTimeDisplay)
 			return;
 

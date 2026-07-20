@@ -1,0 +1,10 @@
+{
+	"dialogueEditor_dialogue_line": "Dialogue Line",
+	"dialogueEditor_character": "Character:",
+	"dialogueEditor_speed": "Interval/Speed (ms):",
+	"dialogueEditor_angry_textbox": "Angry Textbox",
+	"dialogueEditor_sound_file": "Sound file name:",
+	"dialogueEditor_text": "Text:",
+	"dialogueEditor_load_dialogue": "Load Dialogue",
+	"dialogueEditor_save_dialogue": "Save Dialogue"
+}

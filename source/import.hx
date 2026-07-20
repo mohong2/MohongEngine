@@ -19,13 +19,12 @@ import flixel.tweens.FlxTween;
 import flixel.group.FlxSpriteGroup;
 import flixel.group.FlxGroup.FlxTypedGroup;
 
-import states.MusicBeatState;
+import backend.MusicBeatSubstate;
 import states.PlayState;
 import states.LoadingState;
 import states.TitleState;
-import states.substates.MusicBeatSubstate;
+import backend.MusicBeatSubstate;
 using StringTools;
 #if HSCRIPT_ALLOWED
 import script.hscript.*;
-import script.hstools.*;
 #end

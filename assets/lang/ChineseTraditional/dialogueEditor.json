@@ -1,0 +1,10 @@
+{
+	"dialogueEditor_dialogue_line": "對話行",
+	"dialogueEditor_character": "角色：",
+	"dialogueEditor_speed": "間隔/速度（毫秒）：",
+	"dialogueEditor_angry_textbox": "憤怒文字框",
+	"dialogueEditor_sound_file": "音效檔案名稱：",
+	"dialogueEditor_text": "文字：",
+	"dialogueEditor_load_dialogue": "載入對話",
+	"dialogueEditor_save_dialogue": "儲存對話"
+}

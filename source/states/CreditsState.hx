@@ -13,22 +13,22 @@ import lime.utils.Assets;
 
 using StringTools;
 
-class CreditsState extends ScriptState
+class CreditsState extends MusicBeatState
 {
 	public static var instance:CreditsState;
-	var curSelected:Int = -1;
+	public var curSelected:Int = -1;
 
-	private var grpOptions:FlxTypedGroup<Alphabet>;
-	private var iconArray:Array<AttachedSprite> = [];
-	private var creditsStuff:Array<Array<String>> = [];
+	public var grpOptions:FlxTypedGroup<Alphabet>;
+	public var iconArray:Array<AttachedSprite> = [];
+	public var creditsStuff:Array<Array<String>> = [];
 
-	var bg:FlxSprite;
-	var descText:FlxText;
-	var intendedColor:Int;
-	var colorTween:FlxTween;
-	var descBox:AttachedSprite;
+	public var bg:FlxSprite;
+	public var descText:FlxText;
+	public var intendedColor:Int;
+	public var colorTween:FlxTween;
+	public var descBox:AttachedSprite;
 
-	var offsetThing:Float = -75;
+	public var offsetThing:Float = -75;
 
 	override function create()
 	{
@@ -75,9 +75,9 @@ class CreditsState extends ScriptState
 		#end
 
 		var pisspoop:Array<Array<String>> = [ //Name - Icon name - Description - Link - BG Color
-			['Mohong Engine Team'],
-			['Mo_Hong',		'mohong',		'Main Programmer of mohong Engine(Modified from Psych Engine)',								'https://space.bilibili.com/672029688',	'87ceeb'],
-			['Li.tmc', 'Li.tmc', 'Engine icon', 'https://space.bilibili.com/3537117498051255', 'FF69B4'],
+			['Seiun Engine Team'],
+			['Mo_Hong',	'mohong','Main Programmer of Seiun Engine(Modified from Psych Engine)','https://space.bilibili.com/672029688',	'87ceeb'],
+			['Li.tmc', 'Li.tmc', '(Old Mohong Engine)Engine icon', 'https://space.bilibili.com/3537117498051255', 'FF69B4'],
 			['None', 'none', 'Android port lol.', 'https://space.bilibili.com/392851046', 'A07275'],
 			
 			[''],
@@ -110,6 +110,7 @@ class CreditsState extends ScriptState
 			creditsStuff.push(i);
 		}
 	
+		var savedModDir:String = Paths.currentModDirectory;
 		for (i in 0...creditsStuff.length)
 		{
 			var isSelectable:Bool = !unselectableCheck(i);
@@ -133,7 +134,7 @@ class CreditsState extends ScriptState
 				// using a FlxGroup is too much fuss!
 				iconArray.push(icon);
 				add(icon);
-				Paths.currentModDirectory = '';
+				Paths.currentModDirectory = savedModDir;
 
 				if(curSelected == -1) curSelected = i;
 			}
@@ -162,17 +163,28 @@ class CreditsState extends ScriptState
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 		super.create();
+
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 	}
 
 	var quitting:Bool = false;
 	var holdTime:Float = 0;
+
 	override function update(elapsed:Float)
 	{
-
-		if (FlxG.sound.music.volume < 0.7)
-		{
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 			FlxG.sound.music.volume += 0.5 * FlxG.elapsed;
-		}
+		
 
 		if(!quitting)
 		{
@@ -240,6 +252,9 @@ class CreditsState extends ScriptState
 			}
 		}
 		super.update(elapsed);
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 	}
 
 	var moveTween:FlxTween = null;

@@ -1,0 +1,60 @@
+import funkin.modding.module.Module;
+import funkin.ui.options.OptionsState;
+import flixel.util.FlxSave;
+import funkin.util.Constants;
+// From https://gamebanana.com/mods/521810
+
+class Car_Script_CarScriptOptions extends Module
+{
+    public function new()
+    {
+        super('CarScriptOptions');
+    }
+
+    public static var carScriptOptions:FlxSave = new FlxSave();
+
+    public function onStateChangeEnd(event:StateChangeScriptEvent)
+    {
+        saveShit();
+
+        if(Std.isOfType(event.targetState, OptionsState) && event.targetState.optionsCodex.pages.get("preferences") != null)
+        {
+
+            event.targetState.optionsCodex.pages.get("preferences").createPrefItemCheckbox('Chaos Mode', 
+            "If enabled, the movement of the character(s) will be way more chaotic.", function(value:Bool):Void
+            {
+            carScriptOptions.data.chaos = value;
+            carScriptOptions.flush();
+            }, carScriptOptions.data.chaos);
+
+            event.targetState.optionsCodex.pages.get("preferences").createPrefItemCheckbox('Car Crash Boyfriend', 
+            "If enabled, Boyfriend will go zoom.", function(value:Bool):Void
+            {
+            carScriptOptions.data.boyfriendCar = value;
+            carScriptOptions.flush();
+            }, carScriptOptions.data.boyfriendCar);
+
+            event.targetState.optionsCodex.pages.get("preferences").createPrefItemCheckbox('Car Crash Dad', 
+            "If enabled, Dad will go zoom.", function(value:Bool):Void
+            {
+            carScriptOptions.data.dadCar = value;
+            carScriptOptions.flush();
+            }, carScriptOptions.data.dadCar);
+
+            event.targetState.optionsCodex.pages.get("preferences").createPrefItemCheckbox('Focus Like Psych', 
+            "If enabled, the camera will focus on the character(s) like Psych Engine's camera system.", function(value:Bool):Void
+            {
+            carScriptOptions.data.focusLikePsych = value;
+            carScriptOptions.flush();
+            }, carScriptOptions.data.focusLikePsych);
+        }
+    }
+
+    public static function saveShit() {
+    carScriptOptions.bind(Constants.SAVE_NAME + "carScriptOptions", Constants.SAVE_PATH);
+    if (carScriptOptions.data.chaos == null) carScriptOptions.data.chaos = false;
+    if (carScriptOptions.data.boyfriendCar == null) carScriptOptions.data.boyfriendCar = true;
+    if (carScriptOptions.data.dadCar == null) carScriptOptions.data.dadCar = false;
+    if (carScriptOptions.data.focusLikePsych == null) carScriptOptions.data.focusLikePsych = false;
+    }
+}

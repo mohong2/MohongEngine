@@ -15,9 +15,10 @@ import haxe.zip.Entry;
 import haxe.zip.Uncompress;
 import haxe.zip.Writer;*/
 import options.ModSettingsSubState;
+import mohong.TraceManager;
 using StringTools;
 
-class ModsMenuStateOld extends ScriptState
+class ModsMenuStateOld extends MusicBeatState
 {
 	var instance:ModsMenuStateOld;
 	var mods:Array<ModMetadata> = [];
@@ -29,7 +30,6 @@ class ModsMenuStateOld extends ScriptState
 	var noModsTxt:FlxText;
 	var selector:AttachedSprite;
 	var descriptionTxt:FlxText;
-	var needaReset = false;
 	private static var curSelected:Int = 0;
 	public static var defaultColor:FlxColor = 0xFF665AFF;
 	//0.7.3
@@ -127,10 +127,6 @@ class ModsMenuStateOld extends ScriptState
 
 		buttonToggle = new FlxButton(startX, 0, "ON", function()
 		{
-			if(mods[curSelected].restart)
-			{
-				needaReset = true;
-			}
 			modsList[curSelected][1] = !modsList[curSelected][1];
 			updateButtonToggle();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
@@ -173,15 +169,9 @@ class ModsMenuStateOld extends ScriptState
 
 		startX -= 100;
 		buttonTop = new FlxButton(startX, 0, top, function() {
-			var doRestart:Bool = (mods[0].restart || mods[curSelected].restart);
 			for (i in 0...curSelected) //so it shifts to the top instead of replacing the top one
 			{
 				moveMod(-1, true);
-			}
-
-			if(doRestart)
-			{
-				needaReset = true;
 			}
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 		});
@@ -200,14 +190,6 @@ class ModsMenuStateOld extends ScriptState
 			{
 				i[1] = false;
 			}
-			for (mod in mods)
-			{
-				if (mod.restart)
-				{
-					needaReset = true;
-					break;
-				}
-			}
 			updateButtonToggle();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 		});
@@ -225,14 +207,6 @@ class ModsMenuStateOld extends ScriptState
 			for (i in modsList)
 			{
 				i[1] = true;
-			}
-			for (mod in mods)
-			{
-				if (mod.restart)
-				{
-					needaReset = true;
-					break;
-				}
 			}
 			updateButtonToggle();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
@@ -284,7 +258,7 @@ class ModsMenuStateOld extends ScriptState
 			var path = haxe.io.Path.join([Paths.mods(), modsList[curSelected][0]]);
 			if(FileSystem.exists(path) && FileSystem.isDirectory(path))
 			{
-				trace('Trying to delete directory ' + path);
+				TraceManager.info('trace.modsMenuOld.deleteDir', 'Trying to delete directory {}', [path]);
 				try
 				{
 					FileSystem.deleteFile(path); //FUCK YOU HAXE WHY DONT YOU WORK WAAAAAAAAAAAAH
@@ -303,7 +277,7 @@ class ModsMenuStateOld extends ScriptState
 				}
 				catch(e)
 				{
-					trace('Error deleting directory: ' + e);
+					TraceManager.error('trace.modsMenuOld.deleteError', 'Error deleting directory: {}', [e]);
 				}
 			}
 		});
@@ -382,10 +356,24 @@ class ModsMenuStateOld extends ScriptState
 		changeSelection();
 		updatePosition();
 		FlxG.sound.play(Paths.sound('scrollMenu'));
+
 		#if android
 		addVirtualPad(UP_DOWN, B);
 		#end
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 		super.create();
+
+		// === Mod loading tip (v0.2.1+) — after super.create so Language is loaded ===
+		var loadingTip:FlxText = new FlxText(15, FlxG.height - 30, FlxG.width - 30,
+			Language.get("Mod.loadingTip", "Since v0.2.1: Top mod here no longer affects game assets.\nSelect your active mod in Main Menu -> Mod Select."), 13);
+		loadingTip.setFormat(Paths.languageFont(), 13, 0xFFFFCC00, CENTER);
+		loadingTip.scrollFactor.set();
+		add(loadingTip);
 	}
 			function updateButtonPositions()
 	{
@@ -429,7 +417,7 @@ class ModsMenuStateOld extends ScriptState
 			}
 			catch (e:Dynamic)
 			{
-				trace('Error loading settings: $e');
+				TraceManager.error('trace.modsMenuOld.settingsError', 'Error loading settings: {}', [e]);
 			}
 		}
 		return null;
@@ -477,8 +465,6 @@ class ModsMenuStateOld extends ScriptState
 	{
 		if(mods.length > 1)
 		{
-			var doRestart:Bool = (mods[0].restart);
-
 			var newPos:Int = curSelected + change;
 			if(newPos < 0)
 			{
@@ -502,8 +488,6 @@ class ModsMenuStateOld extends ScriptState
 			}
 			changeSelection(change);
 
-			if(!doRestart) doRestart = mods[curSelected].restart;
-			if(!skipResetCheck && doRestart) needaReset = true;
 		}
 	}
 
@@ -525,6 +509,12 @@ class ModsMenuStateOld extends ScriptState
 	var canExit:Bool = true;
 	override function update(elapsed:Float)
 	{
+		#if LUA_ALLOWED
+		callOnLuas('onUpdate', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdate', [elapsed]);
+		#end
 		if(noModsTxt.visible)
 		{
 			noModsSine += 180 * elapsed;
@@ -538,23 +528,7 @@ class ModsMenuStateOld extends ScriptState
 			}
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 			saveTxt();
-			if(needaReset)
-			{
-				//MusicBeatState.switchState(new TitleState());
-				TitleState.initialized = false;
-				TitleState.closedState = false;
-				FlxG.sound.music.fadeOut(0.3);
-				if(FreeplayState.vocals != null)
-				{
-					FreeplayState.vocals.fadeOut(0.3);
-					FreeplayState.vocals = null;
-				}
-				FlxG.camera.fade(FlxColor.BLACK, 0.5, false, FlxG.resetGame, false);
-			}
-			else
-			{
-				MusicBeatState.switchState(new MainMenuState());
-			}
+			MusicBeatState.switchState(new MainMenuState());
 		}
 
 		if(controls.UI_UP_P)
@@ -568,6 +542,12 @@ class ModsMenuStateOld extends ScriptState
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 		updatePosition(elapsed);
+		#if LUA_ALLOWED
+		callOnLuas('onUpdatePost', [elapsed]);
+		#end
+		#if HSCRIPT_ALLOWED
+		callOnHscript('onUpdatePost', [elapsed]);
+		#end
 		super.update(elapsed);
 	}
 

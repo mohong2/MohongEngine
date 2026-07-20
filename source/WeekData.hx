@@ -94,6 +94,18 @@ class WeekData {
 		var modsListPath:String = 'modsList.txt';
 		var directories:Array<String> = [Paths.mods(), Paths.getPreloadPath()];
 		var originalLength:Int = directories.length;
+
+		// ── Insert the actively selected mod's folder right after vanilla ──
+		// so its weeks are found before other mods' weeks.
+		// This prevents the top mod in modsList.txt from bleeding its
+		// resources into a different active mod.
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+		{
+			var activeModPath:String = Paths.mods(Paths.currentModDirectory + '/');
+			if (!directories.contains(activeModPath))
+				directories.push(activeModPath);
+		}
+
 		if(FileSystem.exists(modsListPath))
 		{
 			var stuff:Array<String> = CoolUtil.coolTextFile(modsListPath);
@@ -263,5 +275,72 @@ class WeekData {
 			}
 		}
 		#end
+	}
+
+	// === NEW: Mod folder grouping helpers ===
+
+	/**
+	 * Get a sorted list of all unique mod folders from loaded weeks.
+	 * Empty string ("") represents the vanilla/base game.
+	 */
+	public static function getModFolders():Array<String>
+	{
+		var folders:Array<String> = [];
+		for (week in weeksLoaded)
+		{
+			var modFolder:String = (week.folder != null && week.folder.length > 0) ? week.folder : '';
+			if (!folders.contains(modFolder))
+				folders.push(modFolder);
+		}
+		folders.sort(function(a, b) {
+			if (a == '') return -1;  // Vanilla first
+			if (b == '') return 1;
+			return (a < b) ? -1 : ((a > b) ? 1 : 0);
+		});
+		return folders;
+	}
+
+	/**
+	 * Get a user-friendly display name for a mod folder.
+	 * Empty folder = "Vanilla" (localized).
+	 */
+	public static function getModFolderDisplayName(modFolder:String):String
+	{
+		if (modFolder == null || modFolder.length == 0)
+			return Language.get("WeekData.vanilla", "Vanilla");
+		if (modFolder == '__ALL__')
+			return Language.get("WeekData.allMods", "All Mods");
+		return modFolder;
+	}
+
+	/**
+	 * Get all weeks that belong to a specific mod folder.
+	 * @param modFolder Empty string for vanilla weeks.
+	 * @return Array of week file names.
+	 */
+	public static function getWeeksForModFolder(modFolder:String):Array<String>
+	{
+		var result:Array<String> = [];
+		for (weekName in weeksList)
+		{
+			var week = weeksLoaded.get(weekName);
+			if (week != null)
+			{
+				var weekModFolder:String = (week.folder != null && week.folder.length > 0) ? week.folder : '';
+				if (weekModFolder == modFolder)
+					result.push(weekName);
+			}
+		}
+		return result;
+	}
+
+	/**
+	 * Get the mod folder for a given week name.
+	 */
+	public static function getModFolderForWeek(weekName:String):String
+	{
+		var week = weeksLoaded.get(weekName);
+		if (week == null) return '';
+		return (week.folder != null && week.folder.length > 0) ? week.folder : '';
 	}
 }

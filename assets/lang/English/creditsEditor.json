@@ -1,0 +1,20 @@
+{
+	"creditsEditor_credits": "Credits",
+	"creditsEditor_section": "Section",
+	"creditsEditor_name": "Name:",
+	"creditsEditor_icon": "Icon:",
+	"creditsEditor_description": "Description:",
+	"creditsEditor_link": "Link:",
+	"creditsEditor_color": "Color:",
+	"creditsEditor_is_section_header": "Is Section Header",
+	"creditsEditor_reload_icon": "Reload Icon",
+	"creditsEditor_entry_management": "Entry Management:",
+	"creditsEditor_move_up": "Move Up",
+	"creditsEditor_move_down": "Move Down",
+	"creditsEditor_add_section": "Add Section",
+	"creditsEditor_add_space": "Add Space",
+	"creditsEditor_load_credits": "Load Credits",
+	"creditsEditor_add_entry": "Add Entry",
+	"creditsEditor_remove_entry": "Remove Entry",
+	"creditsEditor_save_credits": "Save Credits"
+}

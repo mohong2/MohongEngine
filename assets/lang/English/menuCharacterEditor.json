@@ -1,0 +1,15 @@
+{
+	"menuCharacterEditor_character_type": "Character Type",
+	"menuCharacterEditor_character": "Character",
+	"menuCharacterEditor_opponent": "Opponent",
+	"menuCharacterEditor_boyfriend": "Boyfriend",
+	"menuCharacterEditor_girlfriend": "Girlfriend",
+	"menuCharacterEditor_image_file": "Image file name:",
+	"menuCharacterEditor_idle_anim": "Idle animation on the .XML:",
+	"menuCharacterEditor_confirm_anim": "Start Press animation on the .XML:",
+	"menuCharacterEditor_scale": "Scale:",
+	"menuCharacterEditor_flip_x": "Flip X",
+	"menuCharacterEditor_load_character": "Load Character",
+	"menuCharacterEditor_save_character": "Save Character",
+	"menuCharacterEditor_reload_char": "Reload Char"
+}

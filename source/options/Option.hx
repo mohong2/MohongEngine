@@ -1,31 +1,15 @@
 package options;
 
-import flash.text.TextField;
- 
- 
-import flixel.addons.display.FlxGridOverlay;
- 
- 
- 
- 
-import lime.utils.Assets;
-import flixel.FlxSubState;
-import flash.text.TextField;
- 
- 
-import flixel.util.FlxSave;
- 
- 
- 
-import flixel.input.keyboard.FlxKey;
-import flixel.graphics.FlxGraphic;
+import FlxTextMenuItem.FlxTextAttached;
+
+
 import Controls;
 
 using StringTools;
 
 class Option
 {
-	public var child:Alphabet;
+	public var child:FlxTextAttached;
 	public var text(get, set):String;
 	public var onChange:Void->Void = null; //Pressed enter (on Bool type options) or pressed/held left/right (on other types)
 
@@ -36,7 +20,7 @@ class Option
 	public var showBoyfriend:Bool = false;
 	public var scrollSpeed:Float = 50; //Only works on int/float, defines how fast it scrolls per second while holding left/right
 
-	private var variable:String = null; //Variable from ClientPrefs.data.hx
+	public var variable:String = null; //Variable from ClientPrefs.data.hx
 	public var defaultValue:Dynamic = null;
 
 	public var readOnly:Bool = false;
@@ -70,7 +54,7 @@ class Option
 			} else {
 				switch(type)
 				{
-					case 'bool':
+					case 'bool' | 'button':
 						defaultValue = false;
 					case 'int' | 'float':
 						defaultValue = 0;
@@ -78,7 +62,7 @@ class Option
 						defaultValue = 1;
 					case 'string':
 						defaultValue = '';
-						if(options.length > 0) {
+						if(options != null && options.length > 0) {
 							defaultValue = options[0];
 						}
 				}
@@ -92,9 +76,11 @@ class Option
 		switch(type)
 		{
 			case 'string':
-				var num:Int = options.indexOf(getValue());
-				if(num > -1) {
-					curOption = num;
+				if(options != null) {
+					var num:Int = options.indexOf(getValue());
+					if(num > -1) {
+						curOption = num;
+					}
 				}
 	
 			case 'percent':
@@ -133,19 +119,19 @@ class Option
 		}
 	}
 
-	public function setChild(child:Alphabet)
+	public function setChild(child:FlxTextAttached)
 	{
 		this.child = child;
 	}
 
-	private function get_text()
+	public function get_text()
 	{
 		if(child != null) {
 			return child.text;
 		}
 		return null;
 	}
-	private function set_text(newValue:String = '')
+	public function set_text(newValue:String = '')
 	{
 		if(child != null) {
 			child.text = newValue;
@@ -153,7 +139,7 @@ class Option
 		return null;
 	}
 
-	private function get_type()
+	public function get_type()
 	{
 		var newValue:String = 'bool';
 		switch(type.toLowerCase().trim())

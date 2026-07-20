@@ -1,0 +1,70 @@
+[
+	{
+		"id": "notecolor",
+		"nameKey": "option.notecolor",
+		"defaultName": "Note Colors",
+		"type": "substate",
+		"substateClass": "options.NotesSubState"
+	},
+	{
+		"id": "controls",
+		"nameKey": "option.controls",
+		"defaultName": "Controls",
+		"type": "substate",
+		"substateClass": "options.ControlsSubState"
+	},
+	{
+		"id": "adjust",
+		"nameKey": "option.adjust",
+		"defaultName": "Adjust Delay and Combo",
+		"type": "state",
+		"stateClass": "options.NoteOffsetState"
+	},
+	{
+		"id": "graphics",
+		"nameKey": "option.graphics",
+		"defaultName": "Graphics",
+		"type": "settings",
+		"optionsFile": "graphics",
+		"rpcTitleKey": "option.graphicsSettingsMenu.rctitle"
+	},
+	{
+		"id": "visuals",
+		"nameKey": "option.visuals",
+		"defaultName": "Visuals and UI",
+		"type": "settings",
+		"optionsFile": "visuals",
+		"rpcTitleKey": "option.graphicsSettingsMenu.rctitle"
+	},
+	{
+		"id": "gameplay",
+		"nameKey": "option.gameplay",
+		"defaultName": "Gameplay",
+		"type": "settings",
+		"optionsFile": "gameplay",
+		"rpcTitleKey": "option.gameplaySettings.rctitle"
+	},
+	{
+		"id": "backup",
+		"nameKey": "option.backup",
+		"defaultName": "Backup & Restore",
+		"type": "substate",
+		"substateClass": "options.BackupSettingsSubState"
+	},
+	{
+		"id": "extra_settings",
+		"nameKey": "option.extra_settings",
+		"defaultName": "Extra Setting",
+		"type": "settings",
+		"optionsFile": "extra_settings",
+		"rpcTitleKey": "option.extrasettings.rctitle"
+	},
+	{
+		"id": "android_settings",
+		"nameKey": "option.android_settings",
+		"defaultName": "Android Settings",
+		"type": "settings",
+		"optionsFile": "android_settings",
+		"rpcTitleKey": "option.androidSettings.rctitle"
+	}
+]

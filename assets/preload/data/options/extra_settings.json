@@ -1,0 +1,101 @@
+[
+	{
+		"nameKey": "option.language",
+		"defaultName": "Language",
+		"descKey": "option.language.desc",
+		"defaultDesc": "Select the game display language.",
+		"variable": "language",
+		"type": "string",
+		"defaultValue": "English",
+		"options": ["English", "ChineseSimplified", "ChineseTraditional"],
+		"onChange": "onChangeLanguage"
+	},
+	{
+		"nameKey": "option.luattf",
+		"defaultName": "Lua TTF",
+		"descKey": "option.luattf.desc",
+		"defaultDesc": "Change the font of lua (if lua is not set)",
+		"variable": "luattf",
+		"type": "string",
+		"defaultValue": "English",
+		"options": ["Default TTF", "Language TTF"]
+	},
+	{
+		"nameKey": "option.opponentfe",
+		"defaultName": "Bot flickering effect",
+		"descKey": "option.opponentfe.desc",
+		"defaultDesc": "If unchecked, the flickering effect will be canceled after the Bot hits.",
+		"variable": "opponentfe",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.sidehud",
+		"defaultName": "Side HUD",
+		"descKey": "option.sidehud.desc",
+		"defaultDesc": "If this is not checked, values such as sick and good on the left side of the game will not be displayed",
+		"variable": "sidehud",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.oldmodsmenu",
+		"defaultName": "OLD Mods Menu",
+		"descKey": "option.oldmodsmenu.desc",
+		"defaultDesc": "If checked, the old mods menu will be used instead of the new one",
+		"variable": "oldmodsmenu",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.newchartingstate",
+		"defaultName": "New Charting State",
+		"descKey": "option.newchartingstate.desc",
+		"defaultDesc": "If checked, the new charting state will be used instead of the old one",
+		"variable": "newchartingstate",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.traceConsole",
+		"defaultName": "Trace Console",
+		"descKey": "option.traceConsole.desc",
+		"defaultDesc": "Press ENTER to open/close the debug console window. Shows real-time colored trace output.",
+		"variable": "traceConsoleEnabled",
+		"type": "button",
+		"defaultValue": false,
+		"onChange": "onChangeTraceConsole",
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.traceConsoleLevel",
+		"defaultName": "Trace Level",
+		"descKey": "option.traceConsoleLevel.desc",
+		"defaultDesc": "Set the minimum trace level displayed in console. DEBUG shows all, ERROR only shows errors.",
+		"variable": "traceConsoleLevel",
+		"type": "string",
+		"defaultValue": "DEBUG",
+		"options": ["DEBUG", "INFO", "WARN", "ERROR"],
+		"onChange": "onChangeTraceConsoleLevel",
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.touchSwipe",
+		"defaultName": "Touch/Swipe Gestures",
+		"descKey": "option.touchSwipe.desc",
+		"defaultDesc": "If enabled, you can swipe/scroll by dragging with the mouse or touching the screen.\nDisable if you prefer standard click-only navigation.",
+		"variable": "touchSwipeEnabled",
+		"type": "bool",
+		"defaultValue": true,
+		"onChange": "onChangeTouchSwipe"
+	},
+	{
+		"nameKey": "option.oldPauseMenu",
+		"defaultName": "Old Pause Menu",
+		"descKey": "option.oldPauseMenu.desc",
+		"defaultDesc": "If checked, the old 0.6.3-style pause menu will be used instead of the new acrylic one.",
+		"variable": "oldPauseMenu",
+		"type": "bool",
+		"defaultValue": false
+	}
+]

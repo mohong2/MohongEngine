@@ -7,10 +7,14 @@ import Discord.DiscordClient;
 #end
 import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
- 
+
 import flixel.sound.FlxSound;
+import flixel.util.FlxSpriteUtil;
 #if MODS_ALLOWED
 import sys.FileSystem;
+import sys.io.File;
+import haxe.Json;
+import openfl.display.BitmapData;
 #end
 
 using StringTools;
@@ -18,20 +22,32 @@ using StringTools;
 class MasterEditorMenu extends MusicBeatState
 {
 	var options:Array<String> = [
-		'Week Editor',
-		'Menu Character Editor',
-		'Dialogue Editor',
-		'Dialogue Portrait Editor',
-		'Character Editor',
-		'Chart Editor',
-		'Credits Editor'
+		'editors_week',
+		'editors_menu_character',
+		'editors_dialogue',
+		'editors_dialogue_portrait',
+		'editors_character',
+		'editors_chart',
+		'editors_new_chart'//,
+		//'editors_background'
+		//,
+		//'editors_credits'
 	];
-	private var grpTexts:FlxTypedGroup<Alphabet>;
+	private var grpTexts:FlxTypedGroup<FlxTextMenuItem>;
 	private var directories:Array<String> = [null];
 
 	private var curSelected = 0;
 	private var curDirectory = 0;
-	private var directoryTxt:FlxText;
+	private var directoryTxt:EditorsText;
+
+	// MOD list UI
+	private var modsGroup:FlxTypedGroup<EditorModItem>;
+	private var curSelectedMod:Int = 0;
+	private var onMods:Bool = false;
+	private var bgModList:FlxSprite;
+
+	// Persist mod selection across state recreations
+	static var lastSelectedMod:String = '';
 
 	override function create()
 	{
@@ -46,37 +62,69 @@ class MasterEditorMenu extends MusicBeatState
 		bg.color = 0xFF353535;
 		add(bg);
 
-		grpTexts = new FlxTypedGroup<Alphabet>();
+		grpTexts = new FlxTypedGroup<FlxTextMenuItem>();
 		add(grpTexts);
 
 		for (i in 0...options.length)
 		{
-			var leText:Alphabet = new Alphabet(90, 320, options[i], true);
+			var displayText:String = getOptionDisplayName(options[i]);
+			var leText:FlxTextMenuItem = new FlxTextMenuItem(90, 320, displayText, 48);
 			leText.isMenuItem = true;
 			leText.targetY = i;
+			leText.setFormat(Paths.font("editors.ttf"), 48, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			leText.borderSize = 4;
+			leText.antialiasing = ClientPrefs.data.globalAntialiasing;
 			grpTexts.add(leText);
 			leText.snapToPosition();
 		}
-		
+
 		#if MODS_ALLOWED
-		var textBG:FlxSprite = new FlxSprite(0, FlxG.height - 42).makeGraphic(FlxG.width, 42, 0xFF000000);
-		textBG.alpha = 0.6;
-		add(textBG);
-
-		directoryTxt = new FlxText(textBG.x, textBG.y + 4, FlxG.width, '', 32);
-		directoryTxt.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, CENTER);
-		directoryTxt.scrollFactor.set();
-		add(directoryTxt);
-		
+		// ---- MOD list with icons (right side) ----
+		directories = [null];
 		for (folder in Paths.getModDirectories())
-		{
 			directories.push(folder);
-		}
 
-		var found:Int = directories.indexOf(Paths.currentModDirectory);
-		if(found > -1) curDirectory = found;
-		changeDirectory();
+		// Restore last selected mod (persists across state recreations)
+		var restoreMod:String = lastSelectedMod;
+		if (restoreMod.length == 0)
+			restoreMod = MainMenuState.selectedModFolder;
+		if (restoreMod.length > 0) {
+			var idx = directories.indexOf(restoreMod);
+			if (idx >= 0) {
+				curDirectory = idx;
+				curSelectedMod = idx;
+			}
+		}
+		// Also sync Paths.currentModDirectory to the restored selection
+		var modDir:String = (directories[curDirectory] == null || directories[curDirectory].length < 1) ? '' : directories[curDirectory];
+		Paths.currentModDirectory = modDir;
+
+		var listX:Float = 900;
+		var listY:Float = 100;
+		var listWidth:Float = 320;
+		var listHeight:Float = FlxG.height - 200;
+
+		bgModList = FlxSpriteUtil.drawRoundRect(new FlxSprite(listX - 10, listY - 10).makeGraphic(Std.int(listWidth) + 20, Std.int(listHeight) + 20, FlxColor.TRANSPARENT), 0, 0, Std.int(listWidth) + 20, Std.int(listHeight) + 20, 15, 15, FlxColor.BLACK);
+		bgModList.alpha = 0.4;
+		add(bgModList);
+
+		modsGroup = new FlxTypedGroup<EditorModItem>();
+		for (i in 0...directories.length)
+		{
+			var folder = directories[i];
+			var item:EditorModItem;
+			if (folder == null)
+				item = new EditorModItem(null);
+			else
+				item = new EditorModItem(folder);
+			modsGroup.add(item);
+		}
+		add(modsGroup);
+
+		curSelectedMod = curDirectory;
+		updateModItemPositions();
 		#end
+
 		changeSelection();
 		FlxG.mouse.visible = false;
 		#if android
@@ -85,70 +133,139 @@ class MasterEditorMenu extends MusicBeatState
 		super.create();
 	}
 
+	function getOptionDisplayName(key:String):String
+	{
+		var displayNames:Map<String, String> = [
+			'editors_week' => Language.get('editors_week', 'Week Editor'),
+			'editors_menu_character' => Language.get('editors_menu_character', 'Menu Character Editor'),
+			'editors_dialogue' => Language.get('editors_dialogue', 'Dialogue Editor'),
+			'editors_dialogue_portrait' => Language.get('editors_dialogue_portrait', 'Dialogue Portrait Editor'),
+			'editors_character' => Language.get('editors_character', 'Character Editor'),
+			'editors_chart' => Language.get('editors_chart', 'Chart Editor'),
+			'editors_new_chart' => Language.get('editors_new_chart', 'New Chart Editor'),
+			'editors_background' => Language.get('editors_background', 'Background Editor'),
+			'editors_credits' => Language.get('editors_credits', 'Credits Editor')
+		];
+		return displayNames.exists(key) ? displayNames.get(key) : key;
+	}
+
 	override function update(elapsed:Float)
 	{
-		if (controls.UI_UP_P)
-		{
-			changeSelection(-1);
-		}
-		if (controls.UI_DOWN_P)
-		{
-			changeSelection(1);
-		}
 		#if MODS_ALLOWED
-		if(controls.UI_LEFT_P)
+		if (onMods)
 		{
-			changeDirectory(-1);
+			// focus on mod list
+			if (controls.UI_UP_P)
+				changeModSelection(-1);
+			if (controls.UI_DOWN_P)
+				changeModSelection(1);
+			if (controls.UI_LEFT_P || controls.BACK)
+			{
+				onMods = false;
+				FlxG.sound.play(Paths.sound('cancelMenu'));
+			}
+			if (controls.ACCEPT)
+			{
+				curDirectory = curSelectedMod;
+				if (directories[curDirectory] == null || directories[curDirectory].length < 1)
+					Paths.currentModDirectory = '';
+				else
+					Paths.currentModDirectory = directories[curDirectory];
+				lastSelectedMod = Paths.currentModDirectory;
+				WeekData.setDirectoryFromWeek();
+				FlxG.sound.play(Paths.sound('confirmMenu'));
+				onMods = false;
+			}
 		}
-		if(controls.UI_RIGHT_P)
+		else
 		{
-			changeDirectory(1);
+			// focus on editor options
+			if (controls.UI_UP_P)
+				changeSelection(-1);
+			if (controls.UI_DOWN_P)
+				changeSelection(1);
+			if (controls.UI_RIGHT_P)
+			{
+				onMods = true;
+				FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+			}
+			if (controls.BACK)
+			{
+				MusicBeatState.switchState(new MainMenuState());
+			}
+			if (controls.ACCEPT)
+			{
+				switch(options[curSelected]) {
+					case 'editors_character':
+						LoadingState.loadAndSwitchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));
+					case 'editors_week':
+						MusicBeatState.switchState(new WeekEditorState());
+					case 'editors_menu_character':
+						MusicBeatState.switchState(new MenuCharacterEditorState());
+					case 'editors_dialogue_portrait':
+						LoadingState.loadAndSwitchState(new DialogueCharacterEditorState(), false);
+					case 'editors_dialogue':
+						LoadingState.loadAndSwitchState(new DialogueEditorState(), false);
+					case 'editors_chart':
+						LoadingState.loadAndSwitchState(new ChartingState(), false);
+					case 'editors_new_chart':
+						LoadingState.loadAndSwitchState(new NewChartingState(), false);
+					case 'editors_background':
+						LoadingState.loadAndSwitchState(new BackgroundEditorState(), false);
+					case 'editors_credits':
+						MusicBeatState.switchState(new CreditsEditorState());
+				}
+				FlxG.sound.music.volume = 0;
+				#if PRELOAD_ALL
+				FreeplayState.destroyFreeplayVocals();
+				#end
+			}
 		}
-		#end
 
+		updateEditorItemsAlpha();
+		updateModItemsAlpha();
+		#else
+		// Without MODS_ALLOWED
+		if (controls.UI_UP_P)
+			changeSelection(-1);
+		if (controls.UI_DOWN_P)
+			changeSelection(1);
 		if (controls.BACK)
-		{
 			MusicBeatState.switchState(new MainMenuState());
-		}
-
 		if (controls.ACCEPT)
 		{
 			switch(options[curSelected]) {
-				case 'Character Editor':
+				case 'editors_character':
 					LoadingState.loadAndSwitchState(new CharacterEditorState(Character.DEFAULT_CHARACTER, false));
-				case 'Week Editor':
+				case 'editors_week':
 					MusicBeatState.switchState(new WeekEditorState());
-				case 'Menu Character Editor':
+				case 'editors_menu_character':
 					MusicBeatState.switchState(new MenuCharacterEditorState());
-				case 'Dialogue Portrait Editor':
+				case 'editors_dialogue_portrait':
 					LoadingState.loadAndSwitchState(new DialogueCharacterEditorState(), false);
-				case 'Dialogue Editor':
+				case 'editors_dialogue':
 					LoadingState.loadAndSwitchState(new DialogueEditorState(), false);
-				case 'Chart Editor'://felt it would be cool maybe
+				case 'editors_chart':
 					LoadingState.loadAndSwitchState(new ChartingState(), false);
-				case 'Credits Editor':
-				MusicBeatState.switchState(new CreditsEditorState());
+				case 'editors_new_chart':
+					LoadingState.loadAndSwitchState(new NewChartingState(), false);
+				case 'editors_background':
+					LoadingState.loadAndSwitchState(new BackgroundEditorState(), false);
+				case 'editors_credits':
+					MusicBeatState.switchState(new CreditsEditorState());
 			}
 			FlxG.sound.music.volume = 0;
 			#if PRELOAD_ALL
 			FreeplayState.destroyFreeplayVocals();
 			#end
 		}
-		
+		#end
+
 		var bullShit:Int = 0;
 		for (item in grpTexts.members)
 		{
 			item.targetY = bullShit - curSelected;
 			bullShit++;
-
-			item.alpha = 0.6;
-			// item.setGraphicSize(Std.int(item.width * 0.8));
-
-			if (item.targetY == 0)
-			{
-				item.alpha = 1;
-				// item.setGraphicSize(Std.int(item.width));
-			}
 		}
 		super.update(elapsed);
 	}
@@ -166,26 +283,172 @@ class MasterEditorMenu extends MusicBeatState
 	}
 
 	#if MODS_ALLOWED
-	function changeDirectory(change:Int = 0)
+	function changeModSelection(change:Int = 0)
 	{
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 
-		curDirectory += change;
+		curSelectedMod += change;
 
-		if(curDirectory < 0)
-			curDirectory = directories.length - 1;
-		if(curDirectory >= directories.length)
-			curDirectory = 0;
-	
-		WeekData.setDirectoryFromWeek();
-		if(directories[curDirectory] == null || directories[curDirectory].length < 1)
-			directoryTxt.text = '< No Mod Directory Loaded >';
-		else
+		if (curSelectedMod < 0)
+			curSelectedMod = directories.length - 1;
+		if (curSelectedMod >= directories.length)
+			curSelectedMod = 0;
+
+		updateModItemPositions();
+	}
+
+	function updateModItemPositions()
+	{
+		var visibleCount:Int = Math.floor((bgModList.height - 20) / 86);
+		var startIdx:Int = onMods ? curSelectedMod : curDirectory;
+		var endIdx:Int = startIdx + visibleCount - 1;
+
+		if (endIdx >= directories.length)
 		{
-			Paths.currentModDirectory = directories[curDirectory];
-			directoryTxt.text = '< Loaded Mod Directory: ' + Paths.currentModDirectory + ' >';
+			endIdx = directories.length - 1;
+			startIdx = endIdx - visibleCount + 1;
+			if (startIdx < 0) startIdx = 0;
 		}
-		directoryTxt.text = directoryTxt.text.toUpperCase();
+
+		for (i => item in modsGroup.members)
+		{
+			item.visible = (i >= startIdx && i <= endIdx);
+			if (item.visible)
+			{
+				item.x = bgModList.x + 10;
+				item.y = bgModList.y + 10 + (86 * (i - startIdx));
+			}
+		}
+		updateModItemsAlpha();
+	}
+
+	function updateEditorItemsAlpha()
+	{
+		for (i => item in grpTexts.members)
+		{
+			item.alpha = onMods ? 0.3 : (i == curSelected) ? 1 : 0.6;
+		}
+	}
+
+	function updateModItemsAlpha()
+	{
+		for (i => item in modsGroup.members)
+		{
+			if (!onMods)
+			{
+				item.alpha = (i == curDirectory) ? 1 : 0.3;
+				item.selectBg.visible = (i == curDirectory);
+			}
+			else
+			{
+				item.alpha = (i == curSelectedMod) ? 1 : 0.6;
+				item.selectBg.visible = (i == curSelectedMod);
+			}
+		}
 	}
 	#end
 }
+
+#if MODS_ALLOWED
+class EditorModItem extends FlxSpriteGroup
+{
+	public var selectBg:FlxSprite;
+	public var icon:FlxSprite;
+	public var text:EditorsText;
+	public var totalFrames:Int = 0;
+
+	public var name:String = 'No Mod';
+	public var desc:String = 'No description provided.';
+	public var langdescription:String = null;
+	public var bgColor:FlxColor = 0xFF665AFF;
+	public var folder:String = null;
+	public var mustRestart:Bool = false;
+
+	public function new(?folder:String)
+	{
+		super();
+
+		this.folder = folder;
+
+		if (folder != null)
+		{
+			this.name = folder;
+			var path = Paths.mods(folder + '/pack.json');
+			if (FileSystem.exists(path))
+			{
+				try
+				{
+					var rawJson:String = File.getContent(path);
+					if (rawJson != null && rawJson.length > 0)
+					{
+						var stuff:Dynamic = Json.parse(rawJson);
+
+						var modName:String = Reflect.getProperty(stuff, "name");
+						if (modName != null && modName.length > 0)
+							this.name = modName;
+						if (modName == 'Name')
+							this.name = folder;
+
+						if (Reflect.hasField(stuff, "restart")) this.mustRestart = Reflect.field(stuff, "restart");
+
+						if (Reflect.hasField(stuff, "color"))
+						{
+							var colors:Array<Int> = Reflect.field(stuff, "color");
+							if (colors != null && colors.length >= 3)
+								this.bgColor = FlxColor.fromRGB(colors[0], colors[1], colors[2]);
+						}
+					}
+				}
+				catch (e:Dynamic)
+				{
+					CoolUtil.traceMsg('trace.modMetaError', 'Error loading mod metadata: {}', [e]);
+				}
+			}
+		}
+		else
+		{
+			this.name = 'No Mod';
+		}
+
+		selectBg = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
+		selectBg.alpha = 0.8;
+		selectBg.visible = false;
+		add(selectBg);
+
+		icon = new FlxSprite(5, 5);
+		icon.antialiasing = ClientPrefs.data.globalAntialiasing;
+		add(icon);
+
+		text = new EditorsText(95, 38, 230, "", 16);
+		text.setFormat(Paths.font("editors.ttf"), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		text.borderSize = 2;
+		text.y -= Std.int(text.height / 2);
+		add(text);
+
+		if (folder != null)
+		{
+			var iconPath = Paths.mods('${folder}/pack.png');
+			if (FileSystem.exists(iconPath))
+			{
+				var bmp = BitmapData.fromFile(iconPath);
+				icon.loadGraphic(bmp, true, 150, 150);
+				totalFrames = Math.floor(bmp.width / 150) * Math.floor(bmp.height / 150);
+			}
+			else
+			{
+				icon.loadGraphic(Paths.image('unknownMod'), true, 150, 150);
+			}
+		}
+		else
+		{
+			icon.loadGraphic(Paths.image('unknownMod'), true, 150, 150);
+		}
+		icon.scale.set(0.5, 0.5);
+		icon.updateHitbox();
+
+		text.text = this.name;
+		selectBg.scale.set(width + 5, height + 5);
+		selectBg.updateHitbox();
+	}
+}
+#end

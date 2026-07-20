@@ -6,6 +6,9 @@ import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
+import mohong.MemoryMonitor;
+import mohong.GPUTextureManager;
+import mohong.RenderOptimizer;
 #if sys
 import sys.io.Process;
 #end
@@ -36,6 +39,8 @@ import sys.io.Process;
 	public var hitboxType:String = "No Gradient";
 	public var mobileCAlpha:Float = 0.6;
 	public var mobileCEx:Bool = false;
+	public var hitboxExtraToggle:Bool = true;
+	public var hitboxExtraPos:String = "Bottom";
 	public var downScroll:Bool = false;
 	public var middleScroll:Bool = false;
 	public var opponentStrums:Bool = true;
@@ -46,6 +51,7 @@ import sys.io.Process;
 	public var lowQuality:Bool = false;
 	public var shaders:Bool = true;
 	public var framerate:Int = 60;
+	public var drawFramerate:Int = 144;
 	public var cursing:Bool = true;
 	public var violence:Bool = true;
 	public var camZooms:Bool = true;
@@ -76,7 +82,8 @@ import sys.io.Process;
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	public var cacheOnGPU:Bool = false; 
+	public var cacheOnGPU:Bool = false;
+	public var preloadAssets:Bool = false;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
@@ -96,12 +103,48 @@ import sys.io.Process;
 	public var goodWindow:Int = 90;
 	public var badWindow:Int = 130;
 	public var safeFrames:Float = 10;
+
+	public var saveReplayData:Bool = true;
+	public var lastNoteAnimation:Bool = false;
+
+	//not 063 compatible
+	public var debugEnabled:Bool = false;
+	public var hscriptErrorHandling:Bool = true;
+	public var newchartingstate:Bool = false;
+	public var runInBackground:Bool = false;
+	public var backgroundDim:Bool = false;
+	public var autoExtractAssets:Bool = true;
+
+	// Trace Console 调试设置
+	public var traceConsoleEnabled:Bool = false;
+	public var traceConsoleLevel:String = 'DEBUG';
+
+	// Touch/Swipe gestures
+	public var touchSwipeEnabled:Bool = true;
+
+	// Separate Update/Draw mode
+	public var separateUpdateDraw:Bool = false;
+
+	// Old pause menu style
+	public var oldPauseMenu:Bool = false;
+
+	// Android storage type (empty = auto-detect)
+	public var storageType:String = "";
+
+	// MohongEngine — Memory optimization flags
+	/** Whether automatic memory management is enabled (periodic GC, cache cleanup, pressure detection). */
+	public var memoryOptimization:Bool = true;
+	/** Whether GPU texture pooling is enabled (reduces VRAM fragmentation). */
+	public var texturePooling:Bool = true;
+	/** Render quality level: 0 = Low, 1 = Medium, 2 = High. */
+	public var renderQualityLevel:String = "High";
+	/** Mobile aggressive optimization: lower cache limits, auto-clean sounds, allow graphics to free when unused. */
+	public var mobileAggressiveOptimization:Bool = false;
 }
 
 class ClientPrefs {
 	public static var data:SaveVariables = {};
 	public static var defaultData:SaveVariables = {};
-
 	public static var arrowRGB(get, never):Array<Array<FlxColor>>;
 	public static var arrowRGBPixel(get, never):Array<Array<FlxColor>>;
 	public static var noteSkin(get, never):String;
@@ -117,6 +160,8 @@ class ClientPrefs {
 	public static var hitboxType(get, never):String;
 	public static var mobileCAlpha(get, never):Float;
 	public static var mobileCEx(get, never):Bool;
+	public static var hitboxExtraToggle(get, never):Bool;
+	public static var hitboxExtraPos(get, never):String;
 	public static var downScroll(get, never):Bool;
 	public static var middleScroll(get, never):Bool;
 	public static var opponentStrums(get, never):Bool;
@@ -127,6 +172,7 @@ class ClientPrefs {
 	public static var lowQuality(get, never):Bool;
 	public static var shaders(get, never):Bool;
 	public static var framerate(get, never):Int;
+	public static var drawFramerate(get, never):Int;
 	public static var cursing(get, never):Bool;
 	public static var violence(get, never):Bool;
 	public static var camZooms(get, never):Bool;
@@ -158,8 +204,14 @@ class ClientPrefs {
 	public static var smoothhpbar(get, never):Bool;
 	public static var unnotec(get, never):Bool;
 	public static var cacheOnGPU(get, never):Bool;
+	public static var preloadAssets(get, never):Bool;
 	public static var splashAlpha(get, never):Float;
 	public static var autoPause(get, never):Bool;
+	public static var runInBackground(get, never):Bool;
+	public static var backgroundDim(get, never):Bool;
+	public static var autoExtractAssets(get, never):Bool;
+	public static var traceConsoleEnabled(get, never):Bool;
+	public static var traceConsoleLevel(get, never):String;
 	public static var gameplaySettings(get, never):Map<String, Dynamic>;
 	public static var comboOffset(get, never):Array<Int>;
 	public static var ratingOffset(get, never):Int;
@@ -167,7 +219,12 @@ class ClientPrefs {
 	public static var goodWindow(get, never):Int;
 	public static var badWindow(get, never):Int;
 	public static var safeFrames(get, never):Float;
-	
+	public static var touchSwipeEnabled(get, never):Bool;
+	public static var separateUpdateDraw(get, never):Bool;
+	public static var memoryOptimization(get, never):Bool;
+	public static var texturePooling(get, never):Bool;
+	public static var renderQualityLevel(get, never):String;
+	public static var mobileAggressiveOptimization(get, never):Bool;
 	static inline function get_arrowRGB() return data.arrowRGB;
 	static inline function get_arrowRGBPixel() return data.arrowRGBPixel;
 	static inline function get_noteSkin() return data.noteSkin;
@@ -183,6 +240,8 @@ class ClientPrefs {
 	static inline function get_hitboxType() return data.hitboxType;
 	static inline function get_mobileCAlpha() return data.mobileCAlpha;
 	static inline function get_mobileCEx() return data.mobileCEx;
+	static inline function get_hitboxExtraToggle() return data.hitboxExtraToggle;
+	static inline function get_hitboxExtraPos() return data.hitboxExtraPos;
 	static inline function get_downScroll() return data.downScroll;
 	static inline function get_middleScroll() return data.middleScroll;
 	static inline function get_opponentStrums() return data.opponentStrums;
@@ -193,6 +252,7 @@ class ClientPrefs {
 	static inline function get_lowQuality() return data.lowQuality;
 	static inline function get_shaders() return data.shaders;
 	static inline function get_framerate() return data.framerate;
+	static inline function get_drawFramerate() return data.drawFramerate;
 	static inline function get_cursing() return data.cursing;
 	static inline function get_violence() return data.violence;
 	static inline function get_camZooms() return data.camZooms;
@@ -224,8 +284,14 @@ class ClientPrefs {
 	static inline function get_smoothhpbar() return data.smoothhpbar;
 	static inline function get_unnotec() return data.unnotec;
 	static inline function get_cacheOnGPU() return data.cacheOnGPU;
+	static inline function get_preloadAssets() return data.preloadAssets;
 	static inline function get_splashAlpha() return data.splashAlpha;
 	static inline function get_autoPause() return data.autoPause;
+	static inline function get_runInBackground() return data.runInBackground;
+	static inline function get_backgroundDim() return data.backgroundDim;
+	static inline function get_autoExtractAssets() return data.autoExtractAssets;
+	static inline function get_traceConsoleEnabled() return data.traceConsoleEnabled;
+	static inline function get_traceConsoleLevel() return data.traceConsoleLevel;
 	static inline function get_gameplaySettings() return data.gameplaySettings;
 	static inline function get_comboOffset() return data.comboOffset;
 	static inline function get_ratingOffset() return data.ratingOffset;
@@ -233,6 +299,12 @@ class ClientPrefs {
 	static inline function get_goodWindow() return data.goodWindow;
 	static inline function get_badWindow() return data.badWindow;
 	static inline function get_safeFrames() return data.safeFrames;
+	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
+	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
+	static inline function get_memoryOptimization() return data.memoryOptimization;
+	static inline function get_texturePooling() return data.texturePooling;
+	static inline function get_renderQualityLevel() return data.renderQualityLevel;
+	static inline function get_mobileAggressiveOptimization() return data.mobileAggressiveOptimization;
 
 	public static var keyBinds:Map<String, Array<FlxKey>> = [
 		//Key Bind, Name for ControlsSubState
@@ -260,9 +332,55 @@ class ClientPrefs {
 	];
 	public static var defaultKeys:Map<String, Array<FlxKey>> = null;
 
+	public static var gamepadBinds:Map<String, Array<FlxGamepadInputID>> = [
+		'note_up'		=> [DPAD_UP, Y],
+		'note_left'		=> [DPAD_LEFT, X],
+		'note_down'		=> [DPAD_DOWN, A],
+		'note_right'	=> [DPAD_RIGHT, B],
+		
+		'ui_up'			=> [DPAD_UP, LEFT_STICK_DIGITAL_UP],
+		'ui_left'		=> [DPAD_LEFT, LEFT_STICK_DIGITAL_LEFT],
+		'ui_down'		=> [DPAD_DOWN, LEFT_STICK_DIGITAL_DOWN],
+		'ui_right'		=> [DPAD_RIGHT, LEFT_STICK_DIGITAL_RIGHT],
+		
+		'accept'		=> [A, START],
+		'back'			=> [B],
+		'pause'			=> [START],
+		'reset'			=> [BACK]
+	];
+	public static var defaultButtons:Map<String, Array<FlxGamepadInputID>> = null;
+
+	public static function resetKeys(controller:Null<Bool> = null) //Null = both, False = Keyboard, True = Controller
+	{
+		if(controller != true)
+			for (key in keyBinds.keys())
+				if(defaultKeys.exists(key))
+					keyBinds.set(key, defaultKeys.get(key).copy());
+
+		#if !android // Android上不允许重置手柄按键
+		if(controller != false)
+			for (button in gamepadBinds.keys())
+				if(defaultButtons.exists(button))
+					gamepadBinds.set(button, defaultButtons.get(button).copy());
+		#end
+	}
+
+	public static function clearInvalidKeys(key:String)
+	{
+		var keyBind:Array<FlxKey> = keyBinds.get(key);
+		#if !android
+		var gamepadBind:Array<FlxGamepadInputID> = gamepadBinds.get(key);
+		while(gamepadBind != null && gamepadBind.contains(NONE)) gamepadBind.remove(NONE);
+		#end
+		while(keyBind != null && keyBind.contains(NONE)) keyBind.remove(NONE);
+	}
+
 	public static function loadDefaultKeys()
 	{
 		defaultKeys = keyBinds.copy();
+		#if !android
+		defaultButtons = gamepadBinds.copy();
+		#end
 	}
 
 	public static function saveSettings()
@@ -274,8 +392,11 @@ class ClientPrefs {
 
 		// Placing this in a separate save so that it can be manually deleted without removing your Score and stuff
 		var save:FlxSave = new FlxSave();
-		save.bind('controls_v2', 'ninjamuffin99');
+		save.bind('controls_v3', 'ninjamuffin99');
 		save.data.keyboard = keyBinds;
+		#if !android
+		save.data.gamepad = gamepadBinds;
+		#end
 		save.flush();
 		FlxG.log.add("Settings saved!");
 	}
@@ -286,24 +407,68 @@ class ClientPrefs {
 			if (key != 'gameplaySettings' && Reflect.hasField(FlxG.save.data, key))
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
 
-		if (Main.fpsVar != null)
-			Main.fpsVar.visible = data.showFPS;
+		if (Main.fpsVar != null) {
+			Main.fpsVar.visible = data.showFPS && !Main.useOldFPS;
+			Main.oldFpsVar.visible = data.showFPS && Main.useOldFPS;
+		}
 
 		#if (!html5 && !switch)
-		FlxG.autoPause = ClientPrefs.data.autoPause;
+		FlxG.autoPause = ClientPrefs.data.runInBackground ? false : ClientPrefs.data.autoPause;
 
 		if (FlxG.save.data.framerate == null) {
 			final refreshRate:Int = FlxG.stage.application.window.displayMode.refreshRate;
 			data.framerate = Std.int(FlxMath.bound(refreshRate, 60, 240));
+			data.drawFramerate = data.framerate;
 		}
 		#end
 
-		if (data.framerate > FlxG.drawFramerate) {
+		if (data.separateUpdateDraw) {
 			FlxG.updateFramerate = data.framerate;
-			FlxG.drawFramerate = data.framerate;
+			FlxG.drawFramerate = data.drawFramerate;
 		} else {
-			FlxG.drawFramerate = data.framerate;
-			FlxG.updateFramerate = data.framerate;
+			if (data.framerate > FlxG.drawFramerate) {
+				FlxG.updateFramerate = data.framerate;
+				FlxG.drawFramerate = data.framerate;
+			} else {
+				FlxG.drawFramerate = data.framerate;
+				FlxG.updateFramerate = data.framerate;
+			}
+		}
+
+		// Apply separate update/draw mode (property setter handles timer + FlxG sync)
+		if (FlxG.game != null)
+			FlxG.game.separateUpdateDraw = data.separateUpdateDraw;
+
+		// Ensure draw wrapper is null (threaded rendering removed)
+		if (FlxG.game != null)
+			FlxG.game.drawWrapper = null;
+
+		// Apply MohongEngine optimization flags
+		MemoryMonitor.monitoringEnabled = data.memoryOptimization;
+		GPUTextureManager.managementEnabled = data.texturePooling;
+		RenderOptimizer.optimizationEnabled = data.memoryOptimization;
+		var qualityStr:String = data.renderQualityLevel;
+		RenderOptimizer.renderQualityLevel = switch (qualityStr.toLowerCase())
+		{
+			case "low":    0;
+			case "medium": 1;
+			case "high":   2;
+			default:       2;
+		}
+
+		// Mobile-specific: auto-enable more frequent GC
+		#if mobile
+		if (data.memoryOptimization) {
+			MemoryMonitor.garbageCollectionInterval = 20.0;
+		}
+		#end
+
+		// Mobile aggressive optimization: trade visuals for max memory savings
+		if (data.mobileAggressiveOptimization) {
+			Paths.maxCachedAssets = 150;
+			Paths.allowGraphicAutoFree = true;
+			MemoryMonitor.garbageCollectionInterval = 15.0;
+			MemoryMonitor.garbageCollectOnStateSwitch = true;
 		}
 
 		if (FlxG.save.data.gameplaySettings != null) {
@@ -322,14 +487,51 @@ class ClientPrefs {
 		DiscordClient.check();
 		#end
 		var save:FlxSave = new FlxSave();
-		save.bind('controls_v2', 'ninjamuffin99');
-		if(save != null && save.data.customControls != null) {
-			var loadedControls:Map<String, Array<FlxKey>> = save.data.customControls;
-			for (control => keys in loadedControls) {
-				keyBinds.set(control, keys);
+		save.bind('controls_v3', 'ninjamuffin99');
+		if(save != null)
+		{
+			if(save.data.keyboard != null)
+			{
+				var loadedControls:Map<String, Array<FlxKey>> = save.data.keyboard;
+				for (control => keys in loadedControls)
+					if(keyBinds.exists(control)) keyBinds.set(control, keys);
 			}
-			reloadControls();
+			#if !android
+			if(save.data.gamepad != null)
+			{
+				var loadedControls:Map<String, Array<FlxGamepadInputID>> = save.data.gamepad;
+				for (control => keys in loadedControls)
+					if(gamepadBinds.exists(control)) gamepadBinds.set(control, keys);
+			}
+			#end
 		}
+		else
+		{
+			// Migrate from old controls_v2 save format
+			var oldSave:FlxSave = new FlxSave();
+			oldSave.bind('controls_v2', 'ninjamuffin99');
+			if(oldSave != null && oldSave.data.customControls != null)
+			{
+				var loadedControls:Map<String, Array<FlxKey>> = oldSave.data.customControls;
+				for (control => keys in loadedControls)
+					if(keyBinds.exists(control)) keyBinds.set(control, keys);
+			}
+			oldSave = null;
+		}
+
+		// Ensure volume keys are properly initialised
+		if(keyBinds.get('volume_mute') == null) keyBinds.set('volume_mute', [ZERO, NONE]);
+		if(keyBinds.get('volume_up') == null) keyBinds.set('volume_up', [NUMPADPLUS, PLUS]);
+		if(keyBinds.get('volume_down') == null) keyBinds.set('volume_down', [NUMPADMINUS, MINUS]);
+		#if !android
+		if(gamepadBinds.get('volume_mute') == null) gamepadBinds.set('volume_mute', [NONE]);
+		if(gamepadBinds.get('volume_up') == null) gamepadBinds.set('volume_up', [NONE]);
+		if(gamepadBinds.get('volume_down') == null) gamepadBinds.set('volume_down', [NONE]);
+		#end
+
+		// 将加载的按键绑定同步到 Controls 系统，否则 PlayerSettings 始终使用默认值
+		reloadControls();
+		reloadVolumeKeys();
 	}
 
 	inline public static function getGameplaySetting(name:String, defaultValue:Dynamic = null, ?customDefaultValue:Bool = false):Dynamic {
@@ -349,6 +551,21 @@ class ClientPrefs {
 		FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 		FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 	}
+	public static function reloadVolumeKeys()
+	{
+		TitleState.muteKeys = copyKey(keyBinds.get('volume_mute'));
+		TitleState.volumeDownKeys = copyKey(keyBinds.get('volume_down'));
+		TitleState.volumeUpKeys = copyKey(keyBinds.get('volume_up'));
+		toggleVolumeKeys(true);
+	}
+	public static function toggleVolumeKeys(?turnOn:Bool = true)
+	{
+		final emptyArray = [];
+		FlxG.sound.muteKeys = turnOn ? TitleState.muteKeys : emptyArray;
+		FlxG.sound.volumeDownKeys = turnOn ? TitleState.volumeDownKeys : emptyArray;
+		FlxG.sound.volumeUpKeys = turnOn ? TitleState.volumeUpKeys : emptyArray;
+	}
+
 	
 	public static function copyKey(arrayToCopy:Array<FlxKey>):Array<FlxKey> {
 		var copiedArray:Array<FlxKey> = arrayToCopy.copy();

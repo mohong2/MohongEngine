@@ -1,0 +1,40 @@
+[
+	{
+		"nameKey": "option.hitboxExtraToggle",
+		"defaultName": "Hitbox Extra Buttons",
+		"descKey": "option.hitboxExtraToggle.desc",
+		"defaultDesc": "If enabled, shows extra SPACE and SHIFT buttons on the hitbox.\nDisable to hide them.",
+		"variable": "hitboxExtraToggle",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.hitboxExtraPos",
+		"defaultName": "Extra Buttons Position",
+		"descKey": "option.hitboxExtraPos.desc",
+		"defaultDesc": "Choose where the extra SPACE/SHIFT buttons appear:\nBottom (default) or Top.",
+		"variable": "hitboxExtraPos",
+		"type": "string",
+		"defaultValue": "Bottom",
+		"options": ["Bottom", "Top"]
+	},
+	{
+		"nameKey": "option.autoExtractAssets",
+		"defaultName": "Auto-Extract Assets",
+		"descKey": "option.autoExtractAssets.desc",
+		"defaultDesc": "If enabled, the game will automatically extract necessary assets from the APK on first launch.",
+		"variable": "autoExtractAssets",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.storageType",
+		"defaultName": "Storage Type",
+		"descKey": "option.storageType.desc",
+		"defaultDesc": "Choose how the game accesses storage.\nEXTERNAL_DATA (default, safest) → /Android/data/<package>/files\nEXTERNAL (legacy) → /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\nIf the selected path is not accessible, the game will automatically fall back to a working type.",
+		"variable": "storageType",
+		"type": "string",
+		"defaultValue": "EXTERNAL_DATA",
+		"options": ["EXTERNAL_DATA", "EXTERNAL", "EXTERNAL_OBB", "EXTERNAL_MEDIA"]
+	}
+]

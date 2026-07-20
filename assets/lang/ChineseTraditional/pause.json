@@ -14,5 +14,8 @@
   "Paused": "已暫停",
   "Blueballed": "失敗次數",
   "Practice Mode": "練習模式", 
-  "Charting Mode": "譜面編輯模式"
+  "Charting Mode": "譜面編輯模式",
+  "PauseSubState.Replay": "回放模式",
+  "ReplayDifficultyLock": "回放模式下不允調整難度.",
+  "PauseSubState.replayTitle2" : "(Replay的回放数据不一定准确)"
 }

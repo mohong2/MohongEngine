@@ -25,6 +25,9 @@ import haxe.Json;
 import flash.media.Sound;
 
 using StringTools;
+import mohong.TraceManager;
+import mohong.MemoryMonitor;
+import mohong.GPUTextureManager;
 
 class Paths
 {
@@ -47,7 +50,8 @@ class Paths
 		'weeks',
 		'fonts',
 		'scripts',
-		'hscript',
+		'hscripts',
+		'options',
 		'achievements'
 	];
 	#end
@@ -63,22 +67,40 @@ class Paths
 		'assets/shared/music/breakfast.$SOUND_EXT',
 		'assets/shared/music/tea-time.$SOUND_EXT',
 	];
+	/** Whether to track graphic loads via MemoryMonitor for leak detection. */
+	public static var enableMemoryTracking:Bool = true;
+
+	/** Whether to force GPU texture upload on image load (improves runtime perf, costs load time). */
+	public static var forceGPUUploadOnLoad:Bool = true;
+
+	/** Maximum number of cached assets before triggering cleanup. 0 = unlimited. */
+	public static var maxCachedAssets:Int = #if mobile 200 #else 300 #end;
+
+	/** Whether loaded FlxGraphic objects auto-free when no sprite references them.
+	 *  false = persist forever (desktop); true = auto-collect when unused (mobile aggressive). */
+	public static var allowGraphicAutoFree:Bool = false;
+
 	/// haya I love you for the base cache dump I took to the max
 	public static function clearUnusedMemory() {
 		// clear non local assets in the tracked assets list
+		var keysToRemove:Array<String> = [];
 		for (key in currentTrackedAssets.keys()) {
 			// if it is not currently contained within the used local assets
 			if (!localTrackedAssets.contains(key)
 				&& !dumpExclusions.contains(key)) {
-				// get rid of it
-				var obj = currentTrackedAssets.get(key);
-				@:privateAccess
-				if (obj != null) {
-					openfl.Assets.cache.removeBitmapData(key);
-					FlxG.bitmap._cache.remove(key);
-					obj.destroy();
-					currentTrackedAssets.remove(key);
-				}
+				keysToRemove.push(key);
+			}
+		}
+		// Batch remove to avoid map modification during iteration
+		for (key in keysToRemove) {
+			var obj = currentTrackedAssets.get(key);
+			@:privateAccess
+			if (obj != null) {
+				openfl.Assets.cache.removeBitmapData(key);
+				FlxG.bitmap._cache.remove(key);
+				MemoryMonitor.untrackGraphic(key);
+				obj.destroy();
+				currentTrackedAssets.remove(key);
 			}
 		}
 		// run the garbage collector for good measure lmfao
@@ -114,7 +136,21 @@ class Paths
 		openfl.Assets.cache.clear("songs");
 	}
 
-	static public var currentModDirectory:String = '';
+	static public var currentModDirectory(get, set):String;
+	static var _currentModDirectory:String = '';
+
+	static function get_currentModDirectory():String return _currentModDirectory;
+	static function set_currentModDirectory(v:String):String {
+		if (_currentModDirectory == v) return v;
+		var oldMod = _currentModDirectory;
+		_currentModDirectory = v;
+		for (cb in onModDirectoryChanged) cb(oldMod, v);
+		return v;
+	}
+
+	/** 模组目录变更回调（供 HScript 等监听） **/
+	public static var onModDirectoryChanged:Array<String->String->Void> = [];
+
 	static public var currentLevel:String;
 	static public function setCurrentLevel(name:String)
 	{
@@ -195,12 +231,42 @@ class Paths
 	static public function video(key:String)
 	{
 		#if MODS_ALLOWED
-		var file:String = modsVideo(key);
+		// 1. Check active mod's folder
+		if (currentModDirectory != null && currentModDirectory.length > 0)
+		{
+			var file:String = mods(currentModDirectory + '/videos/' + key + '.' + VIDEO_EXT);
+			if(FileSystem.exists(file)) {
+				#if windows
+				return file.split('\\').join('/');
+				#else
+				return file;
+				#end
+			}
+		}
+		// 2. Check global mods
+		for (mod in getGlobalMods())
+		{
+			var file:String = mods(mod + '/videos/' + key + '.' + VIDEO_EXT);
+			if(FileSystem.exists(file)) {
+				#if windows
+				return file.split('\\').join('/');
+				#else
+				return file;
+				#end
+			}
+		}
+		// 3. Check root mods/
+		var file:String = mods('videos/' + key + '.' + VIDEO_EXT);
 		if(FileSystem.exists(file)) {
+			#if windows
+			return file.split('\\').join('/');
+			#else
 			return file;
+			#end
 		}
 		#end
 		return 'assets/videos/$key.$VIDEO_EXT';
+
 	}
 
 	static public function sound(key:String, ?library:String):Sound
@@ -226,6 +292,7 @@ class Paths
 		var voices = returnSound('songs', songKey);
 		return voices;
 	}
+
 		inline static public function opponentvoices(song:String):Any
 	{
 		var songKey:String = '${formatToSongPath(song)}/Voices-Opponent';
@@ -267,12 +334,9 @@ class Paths
 		var mergedList:Array<String> = [];
 		var paths:Array<String> = directoriesWithFile(defaultDirectory, path);
 
-		var defaultPath:String = defaultDirectory + path;
-		if(paths.contains(defaultPath))
-		{
-			paths.remove(defaultPath);
-			paths.insert(0, defaultPath);
-		}
+		// directoriesWithFile already returns paths in correct priority:
+		// active mod → global mods → mods/ root → default (lowest)
+		// No need to reorder; the natural order is authoritative.
 
 		for (file in paths)
 		{
@@ -286,33 +350,36 @@ class Paths
 	inline public static function directoriesWithFile(path:String, fileToFind:String, mods:Bool = true)
 	{
 		var foldersToCheck:Array<String> = [];
+
+		#if MODS_ALLOWED
+		if(mods)
+		{
+			// 1. Active mod's folder (highest priority)
+			if(currentModDirectory != null && currentModDirectory.length > 0)
+			{
+				var folder:String = Paths.mods(currentModDirectory + '/' + fileToFind);
+				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
+			}
+
+			// 2. Global mods
+			for(mod in getGlobalMods())
+			{
+				var folder:String = Paths.mods(mod + '/' + fileToFind);
+				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
+			}
+
+			// 3. Root "mods/" folder
+			var folder:String = Paths.mods(fileToFind);
+			if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
+		}
+		#end
+
+		// 4. Default path (lowest priority)
 		#if sys
 		if(FileSystem.exists(path + fileToFind))
 		#end
 			foldersToCheck.push(path + fileToFind);
 
-		#if MODS_ALLOWED
-		if(mods)
-		{
-			// Global mods first
-			for(mod in getGlobalMods())
-			{
-				var folder:String = modFolders(mod + '/' + fileToFind);
-				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
-			}
-
-			// Then "PsychEngine/mods/" main folder
-			var folder:String = modFolders(fileToFind);
-			if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(Paths.mods(fileToFind));
-
-			// And lastly, the loaded mod's folder
-			if(currentModDirectory != null && currentModDirectory.length > 0)
-			{
-				var folder:String = modFolders(currentModDirectory + '/' + fileToFind);
-				if(FileSystem.exists(folder) && !foldersToCheck.contains(folder)) foldersToCheck.push(folder);
-			}
-		}
-		#end
 		return foldersToCheck;
 	}
 
@@ -350,13 +417,57 @@ class Paths
 			if(retVal != null) return retVal;
 		}
 
-		trace('oh no its returning null NOOOO ($file)');
+		TraceManager.warn('trace.paths.nullReturn', 'oh no its returning null NOOOO ($file)');
 		return null;
 	}
+	static public function languageImage(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxGraphic
+	{
+		var currentLang:String = ClientPrefs.data.language;
+		
+		if (currentLang != null && currentLang.length > 0)
+		{
+			var langKey:String = '';
+			
+			if (key.indexOf('/') != -1)
+			{
+				var lastSlash:Int = key.lastIndexOf('/');
+				langKey = key.substring(0, lastSlash) + '/' + currentLang + '/' + key.substring(lastSlash + 1);
+			}
+			else
+			{
+				langKey = currentLang + '/' + key;
+			}
+			#if MODS_ALLOWED
+			var modPath:String = modsImages(langKey);
+			if (FileSystem.exists(modPath))
+			{
+				return image(langKey, library, allowGPU);
+			}
+			#end
+			
+			var mainPath:String = getPath('images/$langKey.png', IMAGE, library);
+			if (OpenFlAssets.exists(mainPath, IMAGE))
+			{
+				return image(langKey, library, allowGPU);
+			}
+		}
+		
+		return image(key, library, allowGPU);
+	}
+
 	static public function cacheBitmap(file: String, ?bitmap: BitmapData = null, ?allowGPU: Bool = true): FlxGraphic {
 			if (currentTrackedAssets.exists(file)) {
 				localTrackedAssets.push(file);
 				return currentTrackedAssets.get(file);
+			}
+
+			// Enforce cache size limit to prevent memory bloat
+			if (maxCachedAssets > 0) {
+				var currentCount:Int = 0;
+				for (_ in currentTrackedAssets) currentCount++;
+				if (currentCount >= maxCachedAssets) {
+					clearUnusedMemory();
+				}
 			}
 
 			if (bitmap == null) {
@@ -371,26 +482,36 @@ class Paths
 
 			localTrackedAssets.push(file);
 
-			if (allowGPU && ClientPrefs.data.cacheOnGPU) {
+			if (allowGPU && ClientPrefs.data.cacheOnGPU && forceGPUUploadOnLoad) {
 				var texture: RectangleTexture = FlxG.stage.context3D.createRectangleTexture(bitmap.width, bitmap.height, BGRA, true);
 				texture.uploadFromBitmapData(bitmap);
+				// Track GPU texture allocation for VRAM monitoring
+				GPUTextureManager.trackTextureAllocation(texture, bitmap.width, bitmap.height);
 				bitmap.image.data = null;
 				bitmap.dispose();
 				bitmap.disposeImage();
 				bitmap = BitmapData.fromTexture(texture);
 			}
-			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file); 
-			newGraphic.persist = true;
-			newGraphic.destroyOnNoUse = false;
+			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file);
+		newGraphic.persist = !allowGraphicAutoFree;
+		newGraphic.destroyOnNoUse = allowGraphicAutoFree;
 			currentTrackedAssets.set(file, newGraphic);
+			// Track graphic lifecycle for leak detection
+			if (enableMemoryTracking) {
+				MemoryMonitor.trackGraphic(file, newGraphic);
+			}
 			return newGraphic;
 		}
 	static public function getTextFromFile(key:String, ?ignoreMods:Bool = false):String
 	{
 		#if sys
 		#if MODS_ALLOWED
-		if (!ignoreMods && FileSystem.exists(modFolders(key)))
-			return File.getContent(modFolders(key));
+		if (!ignoreMods)
+		{
+			var foundPath:String = modFolders(key); // Now searches active mod → global mods → root mods/
+			if (FileSystem.exists(foundPath))
+				return File.getContent(foundPath);
+		}
 		#end
 
 		if (FileSystem.exists(getPreloadPath(key)))
@@ -427,19 +548,31 @@ class Paths
 		#end
 	}
 
+
 	inline static public function languageFont()
 	{
 		var language_ttf:String = Language.get("ttf", "vcr");
 		return 'assets/fonts/$language_ttf.ttf';
 	}
 
-	inline static public function font(key:String)
+	static public function font(key:String)
 	{
 		#if MODS_ALLOWED
-		var file:String = modsFont(key);
-		if(FileSystem.exists(file)) {
-			return file;
+		// 1. Check active mod
+		if (currentModDirectory != null && currentModDirectory.length > 0)
+		{
+			var file:String = mods(currentModDirectory + '/fonts/' + key);
+			if(FileSystem.exists(file)) return file;
 		}
+		// 2. Check global mods
+		for (mod in getGlobalMods())
+		{
+			var file:String = mods(mod + '/fonts/' + key);
+			if(FileSystem.exists(file)) return file;
+		}
+		// 3. Check root mods/
+		var file:String = mods('fonts/' + key);
+		if(FileSystem.exists(file)) return file;
 		#end
 		return 'assets/fonts/$key';
 	}
@@ -458,12 +591,21 @@ class Paths
 		return modFolders('lang/$key');
 	}
 
-	inline static public function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?library:String)
+	static public function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?library:String)
 	{
 		#if MODS_ALLOWED
-		if(FileSystem.exists(mods(currentModDirectory + '/' + key)) || FileSystem.exists(mods(key))) {
-			return true;
+		// 1. Check active mod's folder
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+		{
+			if(FileSystem.exists(mods(currentModDirectory + '/' + key))) return true;
 		}
+		// 2. Check global mods
+		for (mod in getGlobalMods())
+		{
+			if(FileSystem.exists(mods(mod + '/' + key))) return true;
+		}
+		// 3. Check root mods/
+		if(FileSystem.exists(mods(key))) return true;
 		#end
 
 		if(OpenFlAssets.exists(getPath(key, type))) {
@@ -489,7 +631,7 @@ class Paths
 
 	inline static public function formatToSongPath(path:String) {
 		var invalidChars = ~/[~&\\;:<>#]/;
-		var hideChars = ~/[.,'"%?!]/;
+		var hideChars = ~/[.,'"%?]/;
 
 		var path = invalidChars.split(path.replace(' ', '-')).join("-");
 		return hideChars.split(path).join("").toLowerCase();
@@ -523,7 +665,7 @@ class Paths
 			localTrackedAssets.push(path);
 			return currentTrackedAssets.get(path);
 		}
-		trace('oh no its returning null NOOOO');
+		TraceManager.warn('trace.paths.nullReturn', 'oh no its returning null NOOOO');
 		return null;
 	}
 
@@ -607,6 +749,7 @@ class Paths
 	}*/
 
 	static public function modFolders(key:String) {
+		// 1. Check active mod's folder (highest priority)
 		if(currentModDirectory != null && currentModDirectory.length > 0) {
 			var fileToCheck:String = mods(currentModDirectory + '/' + key);
 			if(FileSystem.exists(fileToCheck)) {
@@ -614,19 +757,34 @@ class Paths
 			}
 		}
 
-		for(mod in getGlobalMods()){
+		// 2. Check global mods (runsGlobally) — they should always be available
+		for (mod in getGlobalMods()) {
 			var fileToCheck:String = mods(mod + '/' + key);
-			if(FileSystem.exists(fileToCheck))
+			if(FileSystem.exists(fileToCheck)) {
 				return fileToCheck;
-
+			}
 		}
+
+		// 3. Fall back to root mods/ (lowest priority)
 		return Sys.getCwd() + 'mods/' + key;
 	}
 
 	public static var globalMods:Array<String> = [];
 
+	/** Add a single mod to the global mods list (used for dependency loading). */
+	public static function addGlobalMod(mod:String):Void
+	{
+		if (mod == null || mod.length == 0) return;
+		if (globalMods == null) globalMods = [];
+		if (!globalMods.contains(mod)) globalMods.push(mod);
+	}
+
 	static public function getGlobalMods()
 		return globalMods;
+
+	static public function clearGlobalMods() {
+		globalMods = [];
+	}
 
 	static public function pushGlobalMods() // prob a better way to do this but idc
 	{
@@ -651,7 +809,7 @@ class Paths
 								if(global)globalMods.push(dat[0]);
 							}
 						} catch(e:Dynamic){
-							trace(e);
+							TraceManager.error('trace.error', 'Exception: {}', [e]);
 						}
 					}
 				}

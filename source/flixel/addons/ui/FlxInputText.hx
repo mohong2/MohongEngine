@@ -3,6 +3,7 @@ package flixel.addons.ui;
 import lime.system.Clipboard;
 import flash.errors.Error;
 import flash.events.KeyboardEvent;
+import openfl.events.Event;
 import flash.geom.Rectangle;
 import flixel.addons.ui.FlxUI.NamedString;
  
@@ -193,6 +194,17 @@ class FlxInputText extends FlxText
 	private var lastScroll:Int;
 
 	/**
+	 * Prevents duplicate text input from TextEvent.TEXT_INPUT
+	 * when Ctrl+V paste was already handled by KEY_DOWN.
+	 */
+	private var _skipTextInput:Bool = false;
+	private var _textInputActive:Bool = false;
+
+	static var _hiddenTF:openfl.text.TextField = null;
+	static var _hiddenTFReady:Bool = false;
+	static var _focusedInput:FlxInputText = null;
+
+	/**
 	 * @param	X				The X position of the text.
 	 * @param	Y				The Y position of the text.
 	 * @param	Width			The width of the text object (height is determined automatically).
@@ -247,6 +259,7 @@ class FlxInputText extends FlxText
 	override public function destroy():Void
 	{
 		FlxG.stage.removeEventListener(KeyboardEvent.KEY_DOWN, onKeyDown);
+		disableIME();
 
 		backgroundSprite = FlxDestroyUtil.destroy(backgroundSprite);
 		fieldBorderSprite = FlxDestroyUtil.destroy(fieldBorderSprite);
@@ -381,6 +394,8 @@ class FlxInputText extends FlxText
 					onChange(PASTE_ACTION);
 				}
 
+				_skipTextInput = true;
+
 				// Same as before, but prevents typing out a v
 				return;
 			}
@@ -465,6 +480,9 @@ class FlxInputText extends FlxText
 			// Actually add some text
 			else
 			{
+				// When text input is active, ALL characters come through onWindowTextInput
+				if (_textInputActive) return;
+
 				if (e.charCode == 0) // non-printable characters crash String.fromCharCode
 				{
 					return;
@@ -887,6 +905,7 @@ class FlxInputText extends FlxText
 				caret.visible = true;
 				caretIndex = text.length;
 			}
+			enableIME();
 		}
 		else
 		{
@@ -896,6 +915,7 @@ class FlxInputText extends FlxText
 			{
 				_caretTimer.cancel();
 			}
+			disableIME();
 		}
 
 		if (newFocus != hasFocus)
@@ -903,6 +923,119 @@ class FlxInputText extends FlxText
 			calcFrame();
 		}
 		return hasFocus = newFocus;
+	}
+
+	function enableIME()
+	{
+		if(!_hiddenTFReady)
+			createHiddenTextField();
+
+		_textInputActive = true;
+		_focusedInput = this;
+
+		// Position at this input field's screen location
+		var pos = getScreenPosition();
+		_hiddenTF.x = pos.x;
+		_hiddenTF.y = pos.y;
+		_hiddenTF.width = width;
+		_hiddenTF.height = height;
+		setHiddenText(text);
+
+		if(_hiddenTF.stage == null)
+			FlxG.stage.addChild(_hiddenTF);
+		if(FlxG.stage.focus != _hiddenTF)
+			FlxG.stage.focus = _hiddenTF;
+	}
+
+	function disableIME()
+	{
+		_textInputActive = false;
+		if(_focusedInput == this)
+			_focusedInput = null;
+
+		if(_hiddenTFReady && _hiddenTF.stage != null)
+		{
+			if(FlxG.stage.focus == _hiddenTF)
+				FlxG.stage.focus = null;
+			FlxG.stage.removeChild(_hiddenTF);
+		}
+	}
+
+	static function createHiddenTextField()
+	{
+		if(_hiddenTFReady) return;
+
+		_hiddenTF = new openfl.text.TextField();
+		_hiddenTF.type = INPUT;
+		_hiddenTF.selectable = true;
+		_hiddenTF.background = false;
+		_hiddenTF.border = false;
+		_hiddenTF.alpha = 0.01;
+		_hiddenTF.width = 1;
+		_hiddenTF.height = 1;
+
+		var fmt = new openfl.text.TextFormat("_sans", 12, 0);
+		_hiddenTF.defaultTextFormat = fmt;
+		_hiddenTF.text = " ";
+		_hiddenTF.setTextFormat(fmt);
+		_hiddenTF.replaceText(0, 1, "");
+
+		_hiddenTF.addEventListener(Event.CHANGE, onHiddenTextChange);
+		_hiddenTF.addEventListener(openfl.events.FocusEvent.FOCUS_OUT, onHiddenFocusOut);
+
+		_hiddenTFReady = true;
+	}
+
+	static function setHiddenText(value:String)
+	{
+		if(_hiddenTF == null) return;
+		var oldLen = _hiddenTF.text.length;
+		if(oldLen == 0)
+			_hiddenTF.replaceText(0, 0, value);
+		else
+			_hiddenTF.replaceText(0, oldLen, value);
+	}
+
+	static function destroyHiddenTextField()
+	{
+		if(!_hiddenTFReady) return;
+
+		if(_hiddenTF.stage != null)
+		{
+			if(FlxG.stage.focus == _hiddenTF)
+				FlxG.stage.focus = null;
+			FlxG.stage.removeChild(_hiddenTF);
+		}
+		_hiddenTF.removeEventListener(Event.CHANGE, onHiddenTextChange);
+		_hiddenTF.removeEventListener(openfl.events.FocusEvent.FOCUS_OUT, onHiddenFocusOut);
+		_hiddenTF = null;
+		_hiddenTFReady = false;
+	}
+
+	static function onHiddenTextChange(e:Event)
+	{
+		var input = _focusedInput;
+		if(input == null) return;
+		if(!input.hasFocus) return;
+		if(_hiddenTF == null) return;
+
+		var newText = input.filter(_hiddenTF.text);
+		if(input.maxLength > 0 && newText.length > input.maxLength)
+			newText = newText.substr(0, input.maxLength);
+
+		if(newText == input.text) return;
+
+		input.text = newText;
+		input.caretIndex = _hiddenTF.selectionBeginIndex;
+		if(input.caretIndex < 0 || input.caretIndex > input.text.length)
+			input.caretIndex = input.text.length;
+		input.onChange(INPUT_ACTION);
+	}
+
+	static function onHiddenFocusOut(e:openfl.events.FocusEvent)
+	{
+		if(_focusedInput != null && _focusedInput.hasFocus)
+			_focusedInput.hasFocus = false;
 	}
 
 	private function getAlignStr():FlxTextAlign

@@ -1,0 +1,20 @@
+{
+	"creditsEditor_credits": "鸣谢",
+	"creditsEditor_section": "分区",
+	"creditsEditor_name": "名称：",
+	"creditsEditor_icon": "图标：",
+	"creditsEditor_description": "描述：",
+	"creditsEditor_link": "链接：",
+	"creditsEditor_color": "颜色：",
+	"creditsEditor_is_section_header": "是否为分区标题",
+	"creditsEditor_reload_icon": "重新加载图标",
+	"creditsEditor_entry_management": "条目管理：",
+	"creditsEditor_move_up": "上移",
+	"creditsEditor_move_down": "下移",
+	"creditsEditor_add_section": "添加分区",
+	"creditsEditor_add_space": "添加空格",
+	"creditsEditor_load_credits": "加载鸣谢",
+	"creditsEditor_add_entry": "添加条目",
+	"creditsEditor_remove_entry": "移除条目",
+	"creditsEditor_save_credits": "保存鸣谢"
+}

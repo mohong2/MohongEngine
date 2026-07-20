@@ -25,14 +25,17 @@ import sys.io.Process;
 import lime.system.System;
 import openfl.Lib;
 import tjson.TJSON;
+import FlxTextMenuItem;
+import mohong.TraceManager;
+import backend.ModConfig;
 
 using StringTools;
 
-class ModsMenuState extends ScriptState
+class ModsMenuState extends MusicBeatState
 {
 	var bg:FlxSprite;
 	var icon:FlxSprite;
-	var modName:Alphabet;
+	var modName:FlxTextMenuItem;
 	var modDesc:FlxText;
 	var modRestartText:FlxText;
 	var modsList:Array<Dynamic> = [];
@@ -71,7 +74,7 @@ class ModsMenuState extends ScriptState
 	
 	override function create()
 	{
-		 
+
 		Paths.clearStoredMemory();
 		Paths.clearUnusedMemory();
 		persistentUpdate = false;
@@ -80,7 +83,6 @@ class ModsMenuState extends ScriptState
 		#if cpp
 		DiscordClient.changePresence("In the Menus", null);
 		#end
-		// Parse mods list
 		modsList = [];
 		var path:String = 'modsList.txt';
 		if(FileSystem.exists(path))
@@ -98,7 +100,6 @@ class ModsMenuState extends ScriptState
 			}
 		}
 
-		// Find mod folders
 		if (FileSystem.exists("modsList.txt")){
 			for (folder in Paths.getModDirectories())
 			{
@@ -135,7 +136,7 @@ class ModsMenuState extends ScriptState
 		{
 			if(startMod == modsList[i][0]) curSelectedMod = i;
 			var modItem:ModItem = new ModItem(modsList[i][0]);
-			if(!modsList[i][1]) // Disabled
+			if(!modsList[i][1])
 			{
 				modItem.icon.color = 0xFFFF6666;
 				modItem.text.color = FlxColor.GRAY;
@@ -146,7 +147,6 @@ class ModsMenuState extends ScriptState
 		var mod:ModItem = modsGroup.members[curSelectedMod];
 		if(mod != null) bg.color = mod.bgColor;
 
-		// Buttons
 		var buttonX = bgList.x;
 		var buttonWidth = Std.int(bgList.width);
 		var buttonHeight = 80;
@@ -155,6 +155,7 @@ class ModsMenuState extends ScriptState
 		add(buttonReload);
 		
 		buttonToggleAll = new MenuButton(buttonX, buttonReload.y + buttonReload.bg.height + 20, buttonWidth, buttonHeight, "ENABLE ALL" , function() {
+			Language.load();
 			var allEnabled = true;
 			for (mod in modsList) {
 				if (!mod[1]) {
@@ -174,13 +175,20 @@ class ModsMenuState extends ScriptState
 			}
 			
 			buttonToggleAll.textOn.text = buttonToggleAll.textOff.text = !allEnabled ? 
-				"DISABLE ALL" : "ENABLE ALL";
+				Language.get("Mod.disableAll", "DISABLE ALL") : Language.get("Mod.enableAll", "ENABLE ALL");
 			buttonToggleAll.bg.color = !allEnabled ? 0xFFFF6666 : FlxColor.GREEN;
 			
 			updateModDisplayData();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 		});
 		buttonToggleAll.bg.color = FlxColor.GREEN;
+		buttonToggleAll.focusChangeCallback = function(focus:Bool) {
+			var allEnabled = true;
+			for (mod in modsList) {
+				if (!mod[1]) { allEnabled = false; break; }
+			}
+			buttonToggleAll.bg.color = allEnabled ? FlxColor.GREEN : 0xFFFF6666;
+		};
 		add(buttonToggleAll);
 
 		if(modsList.length < 1)
@@ -201,6 +209,12 @@ class ModsMenuState extends ScriptState
 
 			FlxG.autoPause = false;
 			changeSelectedMod();
+			#if LUA_ALLOWED
+			initLuaScripts();
+			setOnLuas('controls', controls);
+			setOnLuas('state', this);
+			callOnLuas('onCreatePost', []);
+			#end
 			return super.create();
 		}
 		
@@ -213,8 +227,9 @@ class ModsMenuState extends ScriptState
 		add(icon);
 
 		modNameInitialY = icon.y + 80;
-		modName = new Alphabet(icon.x + 165, modNameInitialY, "", true);
-		modName.scaleY = 0.8;
+		modName = new FlxTextMenuItem(icon.x + 165, modNameInitialY, "", 48);
+		modName.isMenuItem = false;
+		modName.scale.y = 0.8;
 		add(modName);
 
 		bgDescription = FlxSpriteUtil.drawRoundRectComplex(new FlxSprite(bgTitle.x, bgTitle.y + 200).makeGraphic(840, 450, FlxColor.TRANSPARENT), 0, 0, 840, 450, 0, 0, 15, 15, FlxColor.BLACK);
@@ -223,6 +238,8 @@ class ModsMenuState extends ScriptState
 		
 		modDesc = new FlxText(bgDescription.x + 15, bgDescription.y + 15, bgDescription.width - 30, "", 24);
 		modDesc.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, LEFT);
+		// 裁剪超出描述框的文字
+		modDesc.y = bgDescription.y + 15;
 		add(modDesc);
 
 		var myHeight = 100;
@@ -239,19 +256,19 @@ class ModsMenuState extends ScriptState
 		var buttonsX = bgButtons.x + 320;
 		var buttonsY = bgButtons.y + 10;
 
-		var button = new MenuButton(buttonsX, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(0), 54, 54); //Move to the top
+		var button = new MenuButton(buttonsX, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(0), 54, 54);
 		button.icon.animation.add('icon', [0]);
 		button.icon.animation.play('icon', true);
 		add(button);
 		buttons.push(button);
 
-		var button = new MenuButton(buttonsX + 100, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(curSelectedMod - 1), 54, 54); //Move up
+		var button = new MenuButton(buttonsX + 100, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(curSelectedMod - 1), 54, 54);
 		button.icon.animation.add('icon', [1]);
 		button.icon.animation.play('icon', true);
 		add(button);
 		buttons.push(button);
 
-		var button = new MenuButton(buttonsX + 200, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(curSelectedMod + 1), 54, 54); //Move down
+		var button = new MenuButton(buttonsX + 200, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() moveModToPosition(curSelectedMod + 1), 54, 54);
 		button.icon.animation.add('icon', [2]);
 		button.icon.animation.play('icon', true);
 		add(button);
@@ -263,7 +280,7 @@ class ModsMenuState extends ScriptState
 				button.enabled = false;
 		}
 
-		settingsButton = new MenuButton(buttonsX + 300, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() //Settings
+		settingsButton = new MenuButton(buttonsX + 300, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function()
 		{
 			var curMod:ModItem = modsGroup.members[curSelectedMod];
 			if(curMod != null && curMod.settings != null && curMod.settings.length > 0)
@@ -284,25 +301,24 @@ class ModsMenuState extends ScriptState
 		if(modsGroup.members[curSelectedMod].settings == null || modsGroup.members[curSelectedMod].settings.length < 1)
 			settingsButton.enabled = false;
 
-		var button = new MenuButton(buttonsX + 400, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function() //On/Off
+		var button = new MenuButton(buttonsX + 400, buttonsY, 80, 80, Paths.image('modsMenuButtons'), function()
 		{
 			var curMod:ModItem = modsGroup.members[curSelectedMod];
 			var mod:String = curMod.folder;
-			if(modsList[curSelectedMod][1]) // Enabled
+			if(modsList[curSelectedMod][1])
 			{
 				modsList[curSelectedMod][1] = false;
 				curMod.icon.color = 0xFFFF6666;
 				curMod.text.color = FlxColor.GRAY;
 			}
-			else // Disabled
+			else
 			{
 				modsList[curSelectedMod][1] = true;
 				curMod.icon.color = FlxColor.WHITE;
 				curMod.text.color = FlxColor.WHITE;
 			}
 
-			if(curMod.mustRestart) waitingToRestart = true;
-			updateModDisplayData();
+				updateModDisplayData();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 		}, 54, 54);
 		button.icon.animation.add('icon', [4]);
@@ -319,14 +335,28 @@ class ModsMenuState extends ScriptState
 			for (btn in buttons) btn.enabled = false;
 			button.focusChangeCallback = null;
 		}
-		
+
 		add(modsGroup);
-		changeSelectedMod();
+						 
 		#if android
 		addVirtualPad(UP_DOWN, B);
 		#end
 
+		changeSelectedMod();
+		#if LUA_ALLOWED
+		initLuaScripts();
+		setOnLuas('controls', controls);
+		setOnLuas('state', this);
+		callOnLuas('onCreatePost', []);
+		#end
 		super.create();
+
+		// === Mod loading tip (v0.2.1+) — after super.create so Language is loaded ===
+		var loadingTip:FlxText = new FlxText(bgList.x + 10, bgList.y + bgList.height - 40, bgList.width - 20,
+			Language.get("Mod.loadingTip", "Since v0.2.1: Top mod here no longer affects game assets.\nSelect your active mod in Main Menu -> Mod Select."), 13);
+		loadingTip.setFormat(Paths.languageFont(), 13, 0xFFFFCC00, CENTER);
+		loadingTip.scrollFactor.set();
+		add(loadingTip);
 	}
 	
 	var nextAttempt:Float = 1;
@@ -337,183 +367,228 @@ class ModsMenuState extends ScriptState
 
 	var holdTime:Float = 0;
 	var colorTween:FlxTween;
-	var waitingToRestart:Bool = false;
+	var dragTarget:Int = -1;
 
-	override function update(elapsed:Float)
+	// ── 描述滑条 ──
+	var modDescScroll:Float = 0;
+	var modDescMaxScroll:Float = 0;
+
+override function update(elapsed:Float)
+{
+	#if LUA_ALLOWED
+	callOnLuas('onUpdate', [elapsed]);
+	#end
+	#if HSCRIPT_ALLOWED
+	callOnHscript('onUpdate', [elapsed]);
+	#end
+
+	if(controls.BACK)
 	{
-
-		if(controls.BACK)
-		{
-			if(colorTween != null) {
-				colorTween.cancel();
-			}
-			saveTxt();
-
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-			if(waitingToRestart)
-			{
-				TitleState.initialized = false;
-				TitleState.closedState = false;
-				FlxG.sound.music.fadeOut(0.3);
-				FlxG.camera.fade(FlxColor.BLACK, 0.5, false, FlxG.resetGame, false);
-			}
-			else MusicBeatState.switchState(new MainMenuState());
-
-			persistentUpdate = false;
-			FlxG.autoPause = ClientPrefs.data.autoPause;
-			FlxG.mouse.visible = false;
-			return;
+		if(colorTween != null) {
+			colorTween.cancel();
 		}
+		saveTxt();
 
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		MusicBeatState.switchState(new MainMenuState());
 
-		if(controls.UI_DOWN_R || controls.UI_UP_R) holdTime = 0;
+		persistentUpdate = false;
+		FlxG.autoPause = ClientPrefs.data.autoPause;
+		FlxG.mouse.visible = false;
+		return;
+	}
 
-		if(modsList.length > 0)
+	if(controls.UI_DOWN_R || controls.UI_UP_R) holdTime = 0;
+
+	if(modsList.length > 0)
+	{
+		var lastMode = hoveringOnMods;
+		if(modsList.length > 1)
 		{
-			if(holdingMod)
+			// Mouse pressed → detect click on mod items
+			if(FlxG.mouse.justPressed)
 			{
-				holdingMod = false;
-				holdingElapsed = 0;
-				updateItemPositions();
+				hoveringOnMods = false;
+				for (i in centerMod-2...centerMod+3)
+				{
+					var mod = modsGroup.members[i];
+					if(mod == null || !mod.visible) continue;
+
+					if(FlxG.mouse.overlaps(mod))
+					{
+						hoveringOnMods = true;
+						mouseOffsets.x = FlxG.mouse.x - mod.x;
+						mouseOffsets.y = FlxG.mouse.y - mod.y;
+						
+						if(curSelectedMod != i)
+						{
+							curSelectedMod = i;
+							changeSelectedMod(0);
+						}
+						gottaClickAgain = false;
+						break;
+					}
+				}
 			}
 
-			var lastMode = hoveringOnMods;
-			if(modsList.length > 1)
+			// Scroll wheel → scroll mod list (仅在鼠标不在描述区域时)
+			var scrollDir:Int = 0;
+			var makesSound:Bool = false;
+			if (FlxG.mouse.wheel > 0 && !FlxG.mouse.overlaps(bgDescription))
 			{
-				if(FlxG.mouse.justPressed)
+				scrollDir = -1;
+				makesSound = true;
+			}
+			else if (FlxG.mouse.wheel < 0 && !FlxG.mouse.overlaps(bgDescription))
+			{
+				scrollDir = 1;
+				makesSound = true;
+			}
+
+			if (scrollDir != 0)
+			{
+				if (!hoveringOnMods) hoveringOnMods = true;
+				var shiftMult:Int = (FlxG.keys.pressed.SHIFT) ? 4 : 1;
+				changeSelectedMod(scrollDir * shiftMult, makesSound);
+			}
+
+			if(hoveringOnMods)
+			{
+				var shiftMult:Int = (FlxG.keys.pressed.SHIFT) ? 4 : 1;
+				if(controls.UI_DOWN_P)
+					changeSelectedMod(shiftMult);
+				else if(controls.UI_UP_P)
+					changeSelectedMod(-shiftMult);
+				else if(FlxG.mouse.wheel != 0)
+					changeSelectedMod(-FlxG.mouse.wheel * shiftMult, true);
+				else if(FlxG.keys.justPressed.HOME)
+					changeSelectedMod(-999);
+				else if(FlxG.keys.justPressed.END)
+					changeSelectedMod(999);
+				else if(controls.UI_UP || controls.UI_DOWN)
 				{
-					for (i in centerMod-2...centerMod+3)
-					{
-						var mod = modsGroup.members[i];
-						if(mod != null && mod.visible && FlxG.mouse.overlaps(mod))
-						{
-							hoveringOnMods = true;
-							mouseOffsets.x = FlxG.mouse.x - mod.x;
-							mouseOffsets.y = FlxG.mouse.y - mod.y;
-							curSelectedMod = i;
-							changeSelectedMod();
-							break;
-						}
-					}
-					hoveringOnMods = true;
-					gottaClickAgain = false;
+					var lastHoldTime:Float = holdTime;
+					holdTime += elapsed;
+					if(holdTime > 0.5 && Math.floor(lastHoldTime * 8) != Math.floor(holdTime * 8)) 
+						changeSelectedMod(shiftMult * (controls.UI_UP ? -1 : 1));
 				}
-
-				if(hoveringOnMods)
+				else if(FlxG.mouse.pressed)
 				{
-					var shiftMult:Int = (FlxG.keys.pressed.SHIFT) ? 4 : 1;
-					if(controls.UI_DOWN_P)
-						changeSelectedMod(shiftMult);
-					else if(controls.UI_UP_P)
-						changeSelectedMod(-shiftMult);
-					else if(FlxG.mouse.wheel != 0)
-						changeSelectedMod(-FlxG.mouse.wheel * shiftMult, true);
-					else if(FlxG.keys.justPressed.HOME)
-						changeSelectedMod(-999);
-					else if(FlxG.keys.justPressed.END)
-						changeSelectedMod(999);
-					else if(controls.UI_UP || controls.UI_DOWN)
+					var curMod:ModItem = modsGroup.members[curSelectedMod];
+					if(curMod != null && FlxG.mouse.overlaps(curMod))
 					{
-						var lastHoldTime:Float = holdTime;
-						holdTime += elapsed;
-						if(holdTime > 0.5 && Math.floor(lastHoldTime * 8) != Math.floor(holdTime * 8)) changeSelectedMod(shiftMult * (controls.UI_UP ? -1 : 1));
-					}
-					else if(FlxG.mouse.pressed && !gottaClickAgain)
-					{
-						var curMod:ModItem = modsGroup.members[curSelectedMod];
-						if(curMod != null)
+						if(!holdingMod && FlxG.mouse.justMoved)
 						{
-							if(!holdingMod && FlxG.mouse.justMoved && FlxG.mouse.overlaps(curMod)) holdingMod = true;
+							holdingMod = true;
+							gottaClickAgain = true;
+						}
 
-							if(holdingMod)
+						if(holdingMod)
+						{
+							var newY = FlxG.mouse.y - mouseOffsets.y;
+							var minY = bgList.y + 5;
+							var maxY = bgList.y + bgList.height - curMod.height - 5;
+							newY = Math.max(minY, Math.min(maxY, newY));
+							
+							curMod.x = FlxG.mouse.x - mouseOffsets.x;
+							curMod.y = newY;
+							
+							var itemHeight:Float = 86;
+							var relativeY:Float = (curMod.y + curMod.height / 2) - bgList.y - 5;
+							var targetIndex:Int = Math.floor(relativeY / itemHeight) + centerMod - 2;
+							targetIndex = Std.int(Math.max(0, Math.min(modsList.length - 1, targetIndex)));
+							
+							if(targetIndex != curSelectedMod)
 							{
-								var moved:Bool = false;
-								for (i in centerMod-2...centerMod+3)
-								{
-									var mod = modsGroup.members[i];
-									if(mod != null && mod.visible && FlxG.mouse.overlaps(mod) && curSelectedMod != i)
-									{
-										moveModToPosition(i);
-										moved = true;
-										break;
-									}
-								}
-								
-								if(!moved)
-								{
-									var factor:Float = -1;
-									if(FlxG.mouse.y < bgList.y)
-										factor = Math.abs(Math.max(0.2, Math.min(0.5, 0.5 - (bgList.y - FlxG.mouse.y) / 100)));
-									else if(FlxG.mouse.y > bgList.y + bgList.height)
-										factor = Math.abs(Math.max(0.2, Math.min(0.5, 0.5 - (FlxG.mouse.y - bgList.y - bgList.height) / 100)));
-	
-									if(factor >= 0)
-									{
-										holdingElapsed += elapsed;
-										if(holdingElapsed >= factor)
-										{
-											holdingElapsed = 0;
-											var newPos = curSelectedMod;
-											if(FlxG.mouse.y < bgList.y) newPos--;
-											else newPos++;
-											moveModToPosition(Std.int(Math.max(0, Math.min(modsGroup.length - 1, newPos))));
-										}
-									}
-								}
-								curMod.x = FlxG.mouse.x - mouseOffsets.x;
-								curMod.y = FlxG.mouse.y - mouseOffsets.y;
+								moveModToPosition(targetIndex);
+								mouseOffsets.y = FlxG.mouse.y - modsGroup.members[curSelectedMod].y;
 							}
 						}
 					}
-					else if(FlxG.mouse.justReleased && holdingMod)
-					{
-						holdingMod = false;
-						holdingElapsed = 0;
-						updateItemPositions();
-					}
+				}
+				else if(FlxG.mouse.justReleased && holdingMod)
+				{
+					holdingMod = false;
+					holdingElapsed = 0;
+					updateItemPositions();
+					gottaClickAgain = true;
 				}
 			}
+		}
+
+		// ── 描述文字滑条 ──
+		if (modDescMaxScroll > 0)
+		{
+			// 鼠标在描述区域时滚轮滚动
+			if (FlxG.mouse.overlaps(bgDescription))
+			{
+				if (FlxG.mouse.wheel != 0)
+				{
+					modDescScroll -= FlxG.mouse.wheel * 40;
+					modDescScroll = Math.max(0, Math.min(modDescScroll, modDescMaxScroll));
+				}
+			}
+			// 键盘上下键
+			if (FlxG.keys.justPressed.UP)
+			{
+				modDescScroll -= 40;
+				modDescScroll = Math.max(0, modDescScroll);
+			}
+			else if (FlxG.keys.justPressed.DOWN)
+			{
+				modDescScroll += 40;
+				modDescScroll = Math.min(modDescScroll, modDescMaxScroll);
+			}
+
+			// 移动文字 sprite，底部的按钮层自然遮盖溢出部分
+			modDesc.y = bgDescription.y + 15 - modDescScroll;
 		}
 		else
 		{
-			noModsSine += 180 * elapsed;
-			noModsTxt.alpha = 1 - Math.sin((Math.PI * noModsSine) / 180);
-			
-			// Keep refreshing mods list every 2 seconds until you add a mod on the folder
-			nextAttempt -= elapsed;
-			if(nextAttempt < 0)
-			{
-				nextAttempt = 2;
-				Paths.getModDirectories();
-				modsList = [];
-				if(FileSystem.exists("modsList.txt")){
-					for (folder in Paths.getModDirectories())
+			modDesc.y = bgDescription.y + 15;
+		}
+	}
+	else
+	{
+		noModsSine += 180 * elapsed;
+		noModsTxt.alpha = 1 - Math.sin((Math.PI * noModsSine) / 180);
+		
+		nextAttempt -= elapsed;
+		if(nextAttempt < 0)
+		{
+			nextAttempt = 2;
+			Paths.getModDirectories();
+			modsList = [];
+			if(FileSystem.exists("modsList.txt")){
+				for (folder in Paths.getModDirectories())
+				{
+					if(!Paths.ignoreModFolders.contains(folder))
 					{
-						if(!Paths.ignoreModFolders.contains(folder))
-						{
-							var found = false;
-							for (mod in modsList) {
-								if (mod[0] == folder) {
-									found = true;
-									break;
-								}
+						var found = false;
+						for (mod in modsList) {
+							if (mod[0] == folder) {
+								found = true;
+								break;
 							}
-							if (!found) {
-								modsList.push([folder, true]);
-							}
+						}
+						if (!found) {
+							modsList.push([folder, true]);
 						}
 					}
 				}
-				if(modsList.length > 0)
-				{
-					trace('mod(s) found! reloading');
-					reload();
-				}
+			}
+			if(modsList.length > 0)
+			{
+				TraceManager.info('trace.modsMenu.foundReloading', 'mod(s) found! reloading');
+				reload();
 			}
 		}
-		super.update(elapsed);
 	}
-
+	#if LUA_ALLOWED
+	callOnLuas('onUpdatePost', [elapsed]);
+	#end
+	super.update(elapsed);
+}
 	function changeSelectedMod(add:Int = 0, isMouseWheel:Bool = false)
 	{
 		var max = modsList.length - 1;
@@ -536,14 +611,14 @@ class ModsMenuState extends ScriptState
 		
 		if(!isMouseWheel && limited && Math.abs(add) == 1)
 		{
-			if(add < 0) // pressed up on first mod
+			if(add < 0)
 			{
 				curSelectedMod = lastSelected;
 				hoveringOnMods = false;
 				curSelectedButton = -1;
 				return;
 			}
-			else // pressed down on last mod
+			else
 			{
 				curSelectedMod = lastSelected;
 				hoveringOnMods = false;
@@ -586,18 +661,51 @@ class ModsMenuState extends ScriptState
 		}
 
 		modName.text = curMod.name;
-		modName.setScale(0.8, 0.8);
+		modName.scale.set(0.8, 0.8);
 		modName.x = icon.x + 165;
 		modName.y = modNameInitialY - (modName.height / 2);
 		
 		modRestartText.visible = curMod.mustRestart;
-		modDesc.text = curMod.desc;
-		if (ClientPrefs.data.language != 'English' && curMod.langdescription != null) {
-			modDesc.text = curMod.langdescription;
+
+		// ── Build description text ──
+		var descLines:Array<String> = [];
+
+		// Use localised description if available
+		if (ClientPrefs.data.language != 'English' && curMod.langdescription != null)
+			descLines.push(curMod.langdescription);
+		else
+			descLines.push(curMod.desc);
+
+		// Author & version
+		var metaInfo:String = "";
+		if (curMod.author.length > 0) metaInfo += Language.get("Mod.author", "Author: ") + curMod.author;
+		if (curMod.modVersion.length > 0) {
+			if (metaInfo.length > 0) metaInfo += "  |  ";
+			metaInfo += Language.get("Mod.version", "Version: ") + curMod.modVersion;
 		}
+		if (metaInfo.length > 0) descLines.push("\n" + metaInfo);
+
+		// Download link hint
+		if (curMod.downloadLink.length > 0) {
+			descLines.push("\n" + Language.get("Mod.downloadHint", "Download: ") + curMod.downloadLink);
+		}
+
+		// API version incompatibility warning
+		if (curMod.incompatibleReason != null) {
+			descLines.push("\n" + Language.get("Mod.incompatible", "⚠ INCOMPATIBLE: ") + curMod.incompatibleReason);
+		}
+
 		if (curMod.mustRestart) {
-			modDesc.text += "\n" + Language.get("Mod.restart", "(This Mod will restart the game!)");
+			descLines.push("\n" + Language.get("Mod.restart", "(This Mod will restart the game!)"));
 		}
+
+		modDesc.text = descLines.join("");
+
+		// ── 更新描述滑条范围 ──
+		var visibleH:Float = bgDescription.height - 115;
+		modDescMaxScroll = Math.max(0, modDesc.height - visibleH);
+		modDescScroll = 0;
+		modDesc.y = bgDescription.y + 15;
 
 		settingsButton.enabled = (curMod.settings != null && curMod.settings.length > 0);
 	}
@@ -616,40 +724,72 @@ class ModsMenuState extends ScriptState
 
 			mod.visible = (i >= minVisible && i <= maxVisible);
 			mod.x = bgList.x + 5;
-			mod.y = bgList.y + (86 * (i - centerMod + 2)) + 5;
-			
+			if (!holdingMod || i != curSelectedMod)
+			{
+				mod.y = bgList.y + (86 * (i - centerMod + 2)) + 5;
+			}
 			mod.alpha = 0.6;
 			if(i == curSelectedMod) mod.alpha = 1;
 			mod.selectBg.visible = (i == curSelectedMod);
 		}
 	}
 
-	function moveModToPosition(position:Int)
+function moveModToPosition(position:Int)
+{
+	if (position >= modsList.length) position = 0;
+	else if (position < 0) position = modsList.length - 1;
+	if (position == curSelectedMod) return;
+
+	var movedMod = modsList.splice(curSelectedMod, 1)[0];
+	var movedItem = modsGroup.members.splice(curSelectedMod, 1)[0];
+
+	modsList.insert(position, movedMod);
+	modsGroup.members.insert(position, movedItem);
+
+	curSelectedMod = position;
+
+	if (!holdingMod)
 	{
-		if(position >= modsList.length) position = 0;
-		else if(position < 0) position = modsList.length-1;
-
-		if(position == curSelectedMod) return;
-
-		var doRestart:Bool = modsList[curSelectedMod][0].mustRestart || modsList[position][0].mustRestart;
-		
-		var temp = modsList[curSelectedMod];
-		modsList[curSelectedMod] = modsList[position];
-		modsList[position] = temp;
-		
-		var tempMeta = modsGroup.members[curSelectedMod];
-		modsGroup.members[curSelectedMod] = modsGroup.members[position];
-		modsGroup.members[position] = tempMeta;
-		
-		curSelectedMod = position;
 		updateModDisplayData();
 		updateItemPositions();
-		
-		if(doRestart) {
-			waitingToRestart = true;
-		}
-		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
 	}
+	else
+	{
+		if (Math.abs(centerMod - curSelectedMod) > 2)
+		{
+			if (centerMod < curSelectedMod) centerMod = curSelectedMod - 2;
+			else centerMod = curSelectedMod + 2;
+		}
+		var curMod = modsGroup.members[curSelectedMod];
+		if (curMod != null)
+		{
+			if (colorTween != null)
+			{
+				colorTween.cancel();
+				colorTween.destroy();
+			}
+			colorTween = FlxTween.color(bg, 0.5, bg.color, curMod.bgColor);
+			icon.loadGraphic(curMod.icon.graphic);
+			icon.setGraphicSize(150, 150);
+			icon.updateHitbox();
+			modName.text = curMod.name;
+			modName.scale.set(0.8, 0.8);
+			modName.isMenuItem = false;
+			modName.x = icon.x + 165;
+			modName.y = modNameInitialY - (modName.height / 2);
+			modRestartText.visible = curMod.mustRestart;
+			modDesc.text = curMod.desc;
+			if (ClientPrefs.data.language != 'English' && curMod.langdescription != null)
+				modDesc.text = curMod.langdescription;
+			if (curMod.mustRestart)
+				modDesc.text += "\n" + Language.get("Mod.restart", "(This Mod will restart the game!)");
+			settingsButton.enabled = (curMod.settings != null && curMod.settings.length > 0);
+		}
+		updateItemPositions();
+	}
+
+	FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
+}
 
 	function reload()
 	{
@@ -690,7 +830,6 @@ class ModItem extends FlxSpriteGroup
 	public var text:FlxText;
 	public var totalFrames:Int = 0;
 
-	// options
 	public var name:String = 'Unknown Mod';
 	public var desc:String = 'No description provided.';
 	public var langdescription:String = null;
@@ -700,57 +839,49 @@ class ModItem extends FlxSpriteGroup
 	public var mustRestart:Bool = false;
 	public var settings:Array<Dynamic> = null;
 
+	// ── Extended metadata (from ModConfig) ──
+	public var author:String = "";
+	public var modVersion:String = "";
+	public var downloadLink:String = "";
+	public var apiVersion:Int = 0;
+	public var incompatibleReason:String = null;
+
 	public function new(folder:String)
 	{
 		super();
 
 		this.folder = folder;
 		this.name = folder;
-		var path = Paths.mods(folder + '/pack.json');
-		if(FileSystem.exists(path)) {
-			try {
-				var rawJson:String = File.getContent(path);
-				if(rawJson != null && rawJson.length > 0) {
-					var stuff:Dynamic = Json.parse(rawJson);
-					
-						var name:String = Reflect.getProperty(stuff, "name");
-						if(name != null && name.length > 0)
-						{
-							this.name = name;
-						}
-						if(name == 'Name')
-						{
-							this.name = folder;
-						}
-					
-					if(Reflect.hasField(stuff, "description")) this.desc = Reflect.field(stuff, "description");
-					if(Language.get("Mod.description") != null && Reflect.hasField(stuff, Language.get("Mod.description"))) this.langdescription = Reflect.field(stuff, Language.get("Mod.description"));
-					if(Reflect.hasField(stuff, "restart")) this.mustRestart = Reflect.field(stuff, "restart");
-					
-					if(Reflect.hasField(stuff, "color")) {
-						var colors:Array<Int> = Reflect.field(stuff, "color");
-						if(colors != null && colors.length >= 3) {
-							this.bgColor = FlxColor.fromRGB(colors[0], colors[1], colors[2]);
-						}
-					}
-				}
-			} catch (e:Dynamic) {
-				trace('Error loading mod metadata: $e');
-			}
+
+		// ── Load metadata via ModConfig (pack.json) ──
+		var cfg:ModConfig = ModConfig.load(folder);
+		if (cfg != null)
+		{
+			if (cfg.name.length > 0 && cfg.name != "Name") this.name = cfg.name;
+			if (cfg.description.length > 0 && cfg.description != "Description") this.desc = cfg.description;
+			this.author = cfg.author;
+			this.modVersion = cfg.version;
+			this.downloadLink = cfg.downloadLink;
+			this.apiVersion = cfg.apiVersion;
+			this.mustRestart = cfg.restartRequired;
+
+			if (cfg.color.length >= 3)
+				this.bgColor = FlxColor.fromRGB(cfg.color[0], cfg.color[1], cfg.color[2]);
+
+			// ── API version compatibility ──
+			if (!ModConfig.isCompatible(cfg))
+				this.incompatibleReason = ModConfig.incompatibilityReason(cfg);
 		}
 
-		path = Paths.mods('$folder/data/settings.json');
-		if(FileSystem.exists(path))
-		{
-			var data:String = File.getContent(path);
-			try
-			{
-				settings = tjson.TJSON.parse(data);
-			}
-			catch(e:Dynamic)
-			{
-				trace('Error loading mod settings: $e');
-			}
+		// ── Localised description from raw pack.json (language‑specific fields) ──
+		var rawPackPath = Paths.mods(folder + '/pack.json');
+		if(FileSystem.exists(rawPackPath)) {
+			try {
+				var rawJson = haxe.Json.parse(File.getContent(rawPackPath));
+				var langDescKey = Language.get("Mod.description");
+				if(langDescKey != null && Reflect.hasField(rawJson, langDescKey))
+					this.langdescription = Reflect.field(rawJson, langDescKey);
+			} catch(e:Dynamic) {}
 		}
 
 		selectBg = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
@@ -763,12 +894,29 @@ class ModItem extends FlxSpriteGroup
 		add(icon);
 
 		text = new FlxText(95, 38, 230, "", 16);
+
+		// ── Icon (needs `icon` to be created first) ──
+		var iconPath = Paths.mods('${folder}/pack.png');
+		if(FileSystem.exists(iconPath)) {
+			var bmp = BitmapData.fromFile(iconPath);
+			icon.loadGraphic(bmp, true, 150, 150);
+			totalFrames = Math.floor(bmp.width / 150) * Math.floor(bmp.height / 150);
+		} else {
+			icon.loadGraphic(Paths.image('unknownMod'), true, 150, 150);
+		}
+
+		// ── Settings ──
+		var settingsPath = Paths.mods('$folder/data/settings.json');
+		if(FileSystem.exists(settingsPath))
+		{
+			try { settings = tjson.TJSON.parse(File.getContent(settingsPath)); }
+			catch(e:Dynamic) { TraceManager.error('trace.modsMenu.settingsError', 'Error loading mod settings: {}', [e]); }
+		}
 		text.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		text.borderSize = 2;
 		text.y -= Std.int(text.height / 2);
 		add(text);
 
-		// Load mod icon
 		var iconPath = Paths.mods('${folder}/pack.png');
 		if(FileSystem.exists(iconPath)) {
 			var bmp = BitmapData.fromFile(iconPath);
@@ -789,8 +937,8 @@ class ModItem extends FlxSpriteGroup
 class MenuButton extends FlxSpriteGroup
 {
 	public var bg:FlxSprite;
-	public var textOn:Alphabet;
-	public var textOff:Alphabet;
+	public var textOn:FlxTextMenuItem;
+	public var textOff:FlxTextMenuItem;
 	public var icon:FlxSprite;
 	public var onClick:Void->Void = null;
 	public var enabled(default, set):Bool = true;
@@ -800,26 +948,24 @@ class MenuButton extends FlxSpriteGroup
 	public function new(x:Float, y:Float, width:Int, height:Int, ?text:String = null, ?img:FlxGraphic = null, onClick:Void->Void = null, animWidth:Int = 0, animHeight:Int = 0)
 	{
 		super(x, y);
-		
 		bg = FlxSpriteUtil.drawRoundRect(new FlxSprite().makeGraphic(width, height, FlxColor.TRANSPARENT), 0, 0, width, height, 15, 15, FlxColor.WHITE);
 		bg.color = FlxColor.BLACK;
 		add(bg);
 
 		if(text != null)
 		{
-			textOn = new Alphabet(0, 0, "", false);
-			textOn.setScale(0.6);
-			textOn.text = text;
+			textOn = new FlxTextMenuItem(0, 0, text, 48);
+			textOn.scale.set(0.6, 0.6);
 			textOn.alpha = 0.6;
 			textOn.visible = false;
+			textOn.isMenuItem = false;
 			centerOnBg(textOn);
-			textOn.y -= 30;
 			add(textOn);
 			
-			textOff = new Alphabet(0, 0, "", true);
-			textOff.setScale(0.52);
-			textOff.text = text;
+			textOff = new FlxTextMenuItem(0, 0, text, 48);
+			textOff.scale.set(0.6, 0.6);
 			textOff.alpha = 0.6;
+			textOff.isMenuItem = false;
 			centerOnBg(textOff);
 			add(textOff);
 		}

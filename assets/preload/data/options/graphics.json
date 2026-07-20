@@ -1,0 +1,147 @@
+[
+	{
+		"nameKey": "option.lowQuality",
+		"defaultName": "Low Quality",
+		"descKey": "option.lowQuality.desc",
+		"defaultDesc": "If checked, disables some background details,\ndecreases loading times and improves performance.",
+		"variable": "lowQuality",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.globalAntialiasing",
+		"defaultName": "Anti-Aliasing",
+		"descKey": "option.globalAntialiasing.desc",
+		"defaultDesc": "If unchecked, disables anti-aliasing, increases performance\nat the cost of sharper visuals.",
+		"variable": "globalAntialiasing",
+		"type": "bool",
+		"defaultValue": true,
+		"showBoyfriend": true,
+		"onChange": "onChangeAntiAliasing"
+	},
+	{
+		"nameKey": "option.shaders",
+		"defaultName": "Shaders",
+		"descKey": "option.shaders.desc",
+		"defaultDesc": "If unchecked, disables shaders.\nIt's used for some visual effects, and also CPU intensive for weaker PCs.",
+		"variable": "shaders",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.cacheOnGPU",
+		"defaultName": "GPU Caching",
+		"descKey": "option.cacheOnGPU.desc",
+		"defaultDesc": "If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.",
+		"variable": "cacheOnGPU",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.separateUpdateDraw",
+		"defaultName": "Separate Update/Draw",
+		"descKey": "option.separateUpdateDraw.desc",
+		"defaultDesc": "Separates rendering from game logic so they can run at different speeds.\nGame logic stays at your set framerate while rendering can go higher.\nMay improve FPS on high-refresh monitors without breaking physics.",
+		"variable": "separateUpdateDraw",
+		"type": "bool",
+		"defaultValue": false,
+		"onChange": "onChangeSeparateUpdateDraw"
+	},
+	{
+		"nameKey": "option.framerate",
+		"defaultName": "Update Framerate",
+		"descKey": "option.framerate.desc",
+		"defaultDesc": "The framerate at which game logic (physics, animations, input) runs.",
+		"variable": "framerate",
+		"type": "int",
+		"defaultValue": 60,
+		"minValue": 30,
+		"maxValue": 360,
+		"displayFormat": "%v FPS",
+		"onChange": "onChangeFramerate"
+	},
+	{
+		"nameKey": "option.drawFramerate",
+		"defaultName": "Draw Framerate",
+		"descKey": "option.drawFramerate.desc",
+		"defaultDesc": "The framerate at which the game renders.\nCan be higher than Update Framerate when Separate Update/Draw is on\nfor smoother visuals on high-refresh monitors.",
+		"variable": "drawFramerate",
+		"type": "int",
+		"defaultValue": 60,
+		"minValue": 30,
+		"maxValue": 360,
+		"displayFormat": "%v FPS",
+		"onChange": "onChangeDrawFramerate"
+	},
+	{
+		"nameKey": "option.windowedmode",
+		"defaultName": "Windowed mode",
+		"descKey": "option.windowedmode.desc",
+		"defaultDesc": "Choose your window mode (Press ACCEPT to apply changes).",
+		"variable": "windowedmode",
+		"type": "string",
+		"defaultValue": "windowed",
+		"options": ["windowed", "fullscreen"],
+		"onChange": "onChangeWindowMode",
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.runInBackground",
+		"defaultName": "Run in Background",
+		"descKey": "option.runInBackground.desc",
+		"defaultDesc": "If checked, the game will continue running even when minimized or unfocused.\nOverrides Auto Pause setting.",
+		"variable": "runInBackground",
+		"type": "bool",
+		"defaultValue": false,
+		"onChange": "onChangeRunInBackground",
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.backgroundDim",
+		"defaultName": "Background Dim",
+		"descKey": "option.backgroundDim.desc",
+		"defaultDesc": "If checked, the game will reduce volume when unfocused.\nOnly works when Run in Background is enabled.",
+		"variable": "backgroundDim",
+		"type": "bool",
+		"defaultValue": false,
+		"onChange": "onChangeBackgroundDim",
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.memoryOptimization",
+		"defaultName": "Memory Optimization",
+		"descKey": "option.memoryOptimization.desc",
+		"defaultDesc": "Enables automatic memory management: periodic garbage collection, cache cleanup, and memory pressure detection.\nRecommended for devices with limited RAM.",
+		"variable": "memoryOptimization",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.texturePooling",
+		"defaultName": "GPU Texture Pooling",
+		"descKey": "option.texturePooling.desc",
+		"defaultDesc": "Enables GPU texture reuse to reduce video memory fragmentation and allocation overhead.\nRecommended for systems with a dedicated graphics processor.",
+		"variable": "texturePooling",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.renderQualityLevel",
+		"defaultName": "Render Quality",
+		"descKey": "option.renderQualityLevel.desc",
+		"defaultDesc": "Adjusts the balance between rendering quality and performance.\nLow: Reduced particles, no anti-aliasing, higher frame rate.\nMedium: Standard effects and anti-aliasing.\nHigh: Full visual effects and anti-aliasing.",
+		"variable": "renderQualityLevel",
+		"type": "string",
+		"defaultValue": "High",
+		"options": ["Low", "Medium", "High"]
+	},
+	{
+		"nameKey": "option.mobileAggressiveOptimization",
+		"defaultName": "Mobile Aggressive Optimization",
+		"descKey": "option.mobileAggressiveOptimization.desc",
+		"defaultDesc": "Trade visual quality for maximum memory savings.\nReduces texture cache size, allows graphics to auto-free,\nand runs garbage collection more frequently.\nRecommended for low-memory devices.",
+		"variable": "mobileAggressiveOptimization",
+		"type": "bool",
+		"defaultValue": false
+	}
+]

@@ -1,0 +1,14 @@
+{
+    "Scroll Type": "歌曲流速类型",
+    "Scroll Speed": "歌曲流速",
+    "Playback Rate": "回放速率",
+    "Health Gain Multiplier": "回血倍率",
+    "Health Loss Multiplier": "掉血倍率",
+    "Instakill on Miss": "漏键即死",
+    "Practice Mode": "练习模式",
+    "Botplay": "机器人演示",
+    "multiplicative": "乘法型",
+    "constant": "固定值",
+    "Play as Opponent": "游玩对手谱面",
+    "Reverse the goodNoteHit and opponentNoteHit script functions": "反转goodNoteHit和opponentNoteHit\n脚本函数"
+}
