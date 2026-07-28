@@ -9,7 +9,7 @@ import haxe.io.BytesOutput;
 import mohong.TraceManager;
 
 /**
- * Backup utility for MohongEngine game data.
+ * Backup utility for FNF-SeiunEngine game data.
  * Provides encryption, packaging, and extraction of backup files (.SEB).
  */
 class BackupUtil
@@ -36,7 +36,7 @@ class BackupUtil
 		// 1. Save version info
 		backup.version = 1;
 		backup.timestamp = Date.now().toString();
-		backup.engine = "MohongEngine";
+		backup.engine = "FNF-SeiunEngine";
 
 		// 2. Read Highscore data (scores, ratings, stats)
 		backup.highscoreData = readHighscoreFromSave();

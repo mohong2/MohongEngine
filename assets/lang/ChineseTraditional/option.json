@@ -214,8 +214,6 @@
     "option.texturePooling.desc": "啟用 GPU 紋理復用機制，以減少顯示記憶體碎片化與重複分配開銷。\n建議配備獨立顯示卡的系統開啟此選項。",
     "option.renderQualityLevel": "渲染品質",
     "option.renderQualityLevel.desc": "調整渲染品質與效能之間的平衡。\n低：減少粒子效果、關閉抗鋸齒，提高幀率。\n中：標準特效與抗鋸齒。\n高：完整視覺特效與抗鋸齒。",
-    "option.mobileAggressiveOptimization": "手機激進最佳化模式",
-    "option.mobileAggressiveOptimization.desc": "犧牲視覺效果換取最大記憶體節省。\n縮小紋理快取上限、允許未使用的圖形自動釋放、\n並更頻繁地執行垃圾回收。\n建議低記憶體裝置開啟。",
 
     "memoryMonitor.pressure": "偵測到記憶體壓力：{mem}MB / {threshold}MB — 正在清理快取。",
     "memoryMonitor.critical": "偵測到嚴重記憶體壓力：{mem}MB / {threshold}MB — 已觸發緊急清理。",

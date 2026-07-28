@@ -221,7 +221,7 @@ class PlayState extends MusicBeatState
 	var songPercent:Float = 0;
 
 	public var timeBarBG:AttachedSprite; //草你妈的LUA
-	public var timeBar:FlxBar;
+	public var timeBar:Dynamic;
 
 
 	public var keyboardDisplay:KeyboardDisplay;
@@ -436,7 +436,7 @@ class PlayState extends MusicBeatState
 			case 'school':   new SchoolStage(this);
 			case 'schoolEvil': new SchoolEvilStage(this);
 			case 'tank':     new TankStage(this);
-			default:         new BaseStage(this);
+			default:         new StageBackdrop(this, stage);
 		}
 	}
 
@@ -934,21 +934,29 @@ class PlayState extends MusicBeatState
 		else
 			add(timeBarBG);
 
-		timeBar = new FlxBar(timeBarBG.x + 4, timeBarBG.y + 4, LEFT_TO_RIGHT, Std.int(timeBarBG.width - 8), Std.int(timeBarBG.height - 8), this,
-			'songPercent', 0, 1);
-		timeBar.scrollFactor.set();
-		timeBar.createFilledBar(0xFF000000, 0xFFFFFFFF);
-		timeBar.numDivisions = 800; //How much lag this causes?? Should i tone it down to idk, 400 or 200?
-		timeBar.alpha = 0;
-		timeBar.visible = showTime;
+		// 兼容模式使用 0.7.3 Bar 类，非兼容模式使用原始 FlxBar
 		if (ClientPrefs.data.compatibility_mode) {
+			var compatTimeBar:objects.Bar = new objects.Bar(0, timeTxt.y + (timeTxt.height / 4), 'timeBar', function() return songPercent, 0, 1);
+			compatTimeBar.scrollFactor.set();
+			compatTimeBar.screenCenter(X);
+			compatTimeBar.alpha = 0;
+			compatTimeBar.visible = showTime;
+			timeBar = compatTimeBar;
+			timeBarBG.visible = false; // Bar 自带背景
 			uiGroup.add(timeBar);
 			uiGroup.add(timeTxt);
 		} else {
+			timeBar = new FlxBar(timeBarBG.x + 4, timeBarBG.y + 4, LEFT_TO_RIGHT, Std.int(timeBarBG.width - 8), Std.int(timeBarBG.height - 8), this,
+				'songPercent', 0, 1);
+			timeBar.scrollFactor.set();
+			timeBar.createFilledBar(0xFF000000, 0xFFFFFFFF);
+			timeBar.numDivisions = 800; //How much lag this causes?? Should i tone it down to idk, 400 or 200?
+			timeBar.alpha = 0;
+			timeBar.visible = showTime;
 			add(timeBar);
 			add(timeTxt);
+			timeBarBG.sprTracker = timeBar;
 		}
-		timeBarBG.sprTracker = timeBar;
 
 		strumLineNotes = new FlxTypedGroup<StrumNote>();
 		if (ClientPrefs.data.compatibility_mode) {
@@ -1142,7 +1150,7 @@ class PlayState extends MusicBeatState
 			scoreTxt.cameras = [camHUD];
 			botplayTxt.cameras = [camHUD];
 			replayTxt.cameras = [camHUD];
-			timeBar.cameras = [camHUD];
+			Reflect.setProperty(timeBar, "cameras", [camHUD]);
 			timeBarBG.cameras = [camHUD];
 			timeTxt.cameras = [camHUD];
 		}
@@ -5612,6 +5620,6 @@ if (!cpuControlled) {
 	}
 	#end
 
-public var curLight:Int = -1;
-        public var curLightEvent:Int = -1;
-	}
+	public var curLight:Int = -1;
+	public var curLightEvent:Int = -1;
+}

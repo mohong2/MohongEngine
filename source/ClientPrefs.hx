@@ -131,15 +131,13 @@ import sys.io.Process;
 	// Android storage type (empty = auto-detect)
 	public var storageType:String = "";
 
-	// MohongEngine — Memory optimization flags
+	// FNF-SeiunEngine — Memory optimization flags
 	/** Whether automatic memory management is enabled (periodic GC, cache cleanup, pressure detection). */
 	public var memoryOptimization:Bool = true;
 	/** Whether GPU texture pooling is enabled (reduces VRAM fragmentation). */
 	public var texturePooling:Bool = true;
 	/** Render quality level: 0 = Low, 1 = Medium, 2 = High. */
 	public var renderQualityLevel:String = "High";
-	/** Mobile aggressive optimization: lower cache limits, auto-clean sounds, allow graphics to free when unused. */
-	public var mobileAggressiveOptimization:Bool = false;
 }
 
 class ClientPrefs {
@@ -224,7 +222,6 @@ class ClientPrefs {
 	public static var memoryOptimization(get, never):Bool;
 	public static var texturePooling(get, never):Bool;
 	public static var renderQualityLevel(get, never):String;
-	public static var mobileAggressiveOptimization(get, never):Bool;
 	static inline function get_arrowRGB() return data.arrowRGB;
 	static inline function get_arrowRGBPixel() return data.arrowRGBPixel;
 	static inline function get_noteSkin() return data.noteSkin;
@@ -304,7 +301,6 @@ class ClientPrefs {
 	static inline function get_memoryOptimization() return data.memoryOptimization;
 	static inline function get_texturePooling() return data.texturePooling;
 	static inline function get_renderQualityLevel() return data.renderQualityLevel;
-	static inline function get_mobileAggressiveOptimization() return data.mobileAggressiveOptimization;
 
 	public static var keyBinds:Map<String, Array<FlxKey>> = [
 		//Key Bind, Name for ControlsSubState
@@ -443,7 +439,7 @@ class ClientPrefs {
 		if (FlxG.game != null)
 			FlxG.game.drawWrapper = null;
 
-		// Apply MohongEngine optimization flags
+		// Apply FNF-SeiunEngine optimization flags
 		MemoryMonitor.monitoringEnabled = data.memoryOptimization;
 		GPUTextureManager.managementEnabled = data.texturePooling;
 		RenderOptimizer.optimizationEnabled = data.memoryOptimization;
@@ -462,14 +458,6 @@ class ClientPrefs {
 			MemoryMonitor.garbageCollectionInterval = 20.0;
 		}
 		#end
-
-		// Mobile aggressive optimization: trade visuals for max memory savings
-		if (data.mobileAggressiveOptimization) {
-			Paths.maxCachedAssets = 150;
-			Paths.allowGraphicAutoFree = true;
-			MemoryMonitor.garbageCollectionInterval = 15.0;
-			MemoryMonitor.garbageCollectOnStateSwitch = true;
-		}
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;

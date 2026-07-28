@@ -178,9 +178,9 @@ class TitleState extends MusicBeatState
 		if(ClientPrefs.data.checkForUpdates && !closedState) {
 			TraceManager.info('trace.title.checkUpdate', 'checking for update');
 			#if desktop
-			var http = new haxe.Http("https://raw.githubusercontent.com/mohong2/MohongEngine/main/gitVersion.txt");
+			var http = new haxe.Http("https://raw.githubusercontent.com/mohong2/FNF-SeiunEngine/main/gitVersion.txt");
 			#else
-			var http = new haxe.Http("https://github.com/mohong2/MohongEngine/blob/main/gitVersionAndroid.txt");
+			var http = new haxe.Http("https://github.com/mohong2/FNF-SeiunEngine/blob/main/gitVersionAndroid.txt");
 			#end
 			http.onData = function (data:String)
 			{

@@ -173,7 +173,7 @@ class Main extends Sprite
 				dateNow = dateNow.replace(":", "'");
 				path = "./crash/" + "MohonghEngine_" + dateNow + ".txt";
 
-				var fullMsg:String = stack + "\nUncaught Error: " + msg + "\nPlease report this error to the GitHub page: https://github.com/mohong2/MohongEngine\n\n> Crash Handler written by: sqirra-rng ";
+				var fullMsg:String = stack + "\nUncaught Error: " + msg + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
 				if (!sys.FileSystem.exists("./crash/"))
 					sys.FileSystem.createDirectory("./crash/");
@@ -190,7 +190,7 @@ class Main extends Sprite
 
 				// Show a native dialog first
 				var dialogTitle:String = Language.get("CrashCatcher.dialog.title", "Game Crashed!");
-				var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/MohongEngine/issues");
+				var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/FNF-SeiunEngine/issues");
 				var dialogMsg:String = Language.get("CrashCatcher.dialog.message",
 					"The game has encountered an error and needs to recover.\n\nError: {error}\n\nCrash dump saved to: {path}\n\nPlease report this on GitHub:\n{url}\n\nClick OK to enter recovery screen.");
 				dialogMsg = dialogMsg.replace("{error}", msg);
@@ -374,7 +374,7 @@ class Main extends Sprite
 			}
 		}
 
-		var fullMsg:String = stackLines + "\nUncaught Error: " + e.error + "\nPlease report this error to the GitHub page: https://github.com/mohong2/MohongEngine\n\n> Crash Handler written by: sqirra-rng ";
+		var fullMsg:String = stackLines + "\nUncaught Error: " + e.error + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
 		if (!FileSystem.exists("./crash/"))
 			FileSystem.createDirectory("./crash/");
@@ -392,7 +392,7 @@ class Main extends Sprite
 
 		// Show a native dialog first to notify the user before entering recovery UI
 		var dialogTitle:String = Language.get("CrashCatcher.dialog.title", "Game Crashed!");
-		var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/MohongEngine/issues");
+		var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/FNF-SeiunEngine/issues");
 		var dialogMsg:String = Language.get("CrashCatcher.dialog.message",
 			"The game has encountered an error and needs to recover.\n\nError: {error}\n\nCrash dump saved to: {path}\n\nPlease report this on GitHub:\n{url}\n\nClick OK to enter recovery screen.");
 		dialogMsg = dialogMsg.replace("{error}", Std.string(e.error));

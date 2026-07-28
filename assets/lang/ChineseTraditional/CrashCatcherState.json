@@ -15,7 +15,7 @@
     "CrashCatcher.saveCancelling": "[取消]",
     "CrashCatcher.savedDone": "已儲存！",
     "CrashCatcher.reportHint": "請將此錯誤回報給開發者（GitHub），否則這個問題可能永遠不會被修復！",
-    "CrashCatcher.reportURL": "https://github.com/mohong2/MohongEngine/issues",
+    "CrashCatcher.reportURL": "https://github.com/mohong2/FNF-SeiunEngine/issues",
     "CrashCatcher.instructions": "Enter / 點擊: 選擇  |  方向鍵: 切換按鈕  |  滾輪: 滾動堆疊  |  ESC: 返回選單",
     "CrashCatcher.instructionsSaved": "報告已儲存！Enter: 返回選單  |  ESC: 返回選單",
     "CrashCatcher.egg3": "你可能應該回報一下這個...",

@@ -98,7 +98,7 @@ class CrashCatcherState extends MusicBeatState
 	// ================ Open GitHub URL ================
 	function openGitHubUrl()
 	{
-		var url:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/MohongEngine/issues");
+		var url:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/FNF-SeiunEngine/issues");
 		CoolUtil.browserLoad(url);
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
@@ -181,7 +181,7 @@ class CrashCatcherState extends MusicBeatState
 		add(titleUnderline);
 
 		// -- GitHub report hint (always shown, below buttons area) --
-		var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/MohongEngine/issues");
+		var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/FNF-SeiunEngine/issues");
 		reportHintTxt = new FlxText(30, 0, FlxG.width - 60,
 			Language.get("CrashCatcher.reportHint",
 				"Please report this error to the developer on GitHub, otherwise it may never be fixed!"), 12);
@@ -707,7 +707,7 @@ class CrashCatcherState extends MusicBeatState
 			if (!FileSystem.exists("./crash/"))
 				FileSystem.createDirectory("./crash/");
 
-			var report:String = "=== MohongEngine Crash Report ===\n";
+			var report:String = "=== FNF-SeiunEngine Crash Report ===\n";
 			report += "Date: " + Date.now().toString() + "\n";
 			report += "Crash Count: " + crashCount + "\n\n";
 			report += "Error:\n" + lastCrashMessage + "\n\n";

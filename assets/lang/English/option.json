@@ -222,8 +222,6 @@
     "option.texturePooling.desc": "Enables GPU texture reuse to reduce video memory fragmentation and allocation overhead.\nRecommended for systems with a dedicated graphics processor.",
     "option.renderQualityLevel": "Render Quality",
     "option.renderQualityLevel.desc": "Adjusts the balance between rendering quality and performance.\nLow: Reduced particles, no anti-aliasing, higher frame rate.\nMedium: Standard effects and anti-aliasing.\nHigh: Full visual effects and anti-aliasing.",
-    "option.mobileAggressiveOptimization": "Mobile Aggressive Optimization",
-    "option.mobileAggressiveOptimization.desc": "Trade visual quality for maximum memory savings.\nReduces texture cache size, allows graphics to auto-free,\nand runs garbage collection more frequently.\nRecommended for low-memory devices.",
 
     "memoryMonitor.pressure": "Memory pressure detected: {mem}MB / {threshold}MB — clearing caches.",
     "memoryMonitor.critical": "Critical memory pressure: {mem}MB / {threshold}MB — emergency cleanup triggered.",

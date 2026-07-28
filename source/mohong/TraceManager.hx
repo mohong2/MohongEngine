@@ -19,7 +19,7 @@ import mohong.TraceEntry;
 typedef TraceListener = TraceEntry -> Void;
 
 /**
- * MohongEngine Trace Manager
+ * FNF-SeiunEngine Trace Manager
  * 
  * 统一的 Trace 管理系统：
  * - 拦截所有 haxe.Log.trace 调用

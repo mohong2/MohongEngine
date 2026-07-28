@@ -15,7 +15,7 @@
     "CrashCatcher.saveCancelling": "[CANCEL]",
     "CrashCatcher.savedDone": "Saved!",
     "CrashCatcher.reportHint": "Please report this error to the developer on GitHub, otherwise it may never be fixed!",
-    "CrashCatcher.reportURL": "https://github.com/mohong2/MohongEngine/issues",
+    "CrashCatcher.reportURL": "https://github.com/mohong2/FNF-SeiunEngine/issues",
     "CrashCatcher.instructions": "ENTER / CLICK: Select  |  ARROWS: Switch button  |  SCROLL: Stack trace  |  ESC: Return to menu",
     "CrashCatcher.instructionsSaved": "Report saved! ENTER: Return to menu  |  ESC: Return to menu",
     "CrashCatcher.egg3": "You might want to report this...",

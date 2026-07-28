@@ -134,14 +134,5 @@
 		"type": "string",
 		"defaultValue": "High",
 		"options": ["Low", "Medium", "High"]
-	},
-	{
-		"nameKey": "option.mobileAggressiveOptimization",
-		"defaultName": "Mobile Aggressive Optimization",
-		"descKey": "option.mobileAggressiveOptimization.desc",
-		"defaultDesc": "Trade visual quality for maximum memory savings.\nReduces texture cache size, allows graphics to auto-free,\nand runs garbage collection more frequently.\nRecommended for low-memory devices.",
-		"variable": "mobileAggressiveOptimization",
-		"type": "bool",
-		"defaultValue": false
 	}
 ]

@@ -42,7 +42,7 @@ class OutdatedState extends MusicBeatState
 		if(!leftState) {
 			if (controls.ACCEPT) {
 				leftState = true;
-				CoolUtil.browserLoad("https://github.com/mohong2/MohongEngine");
+				CoolUtil.browserLoad("https://github.com/mohong2/FNF-SeiunEngine");
 			}
 			else if(controls.BACK) {
 				leftState = true;
