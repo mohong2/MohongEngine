@@ -36,6 +36,13 @@ class Main {
 			}
 		}
 
+		// 兜底：git 库的空版本依赖会把 hxcpp/lime 拉成最新版，这里重新钉回 hmm.json 声明的版本
+		for (data in libs) {
+			if ((data.type == "install" || data.type == "haxelib") && data.version != null && data.version != "") {
+				Sys.command('haxelib --quiet set ${data.name} ${data.version}');
+			}
+		}
+
 		// after the loop, we can leave
 		Sys.exit(0);
 	}
