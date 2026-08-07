@@ -42,8 +42,11 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          echo "GH_PAT length: ${#GH_PAT}"
           if [ -n "$GH_PAT" ]; then
-            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
             echo 'git auth configured (GH_PAT found)'
             git ls-remote https://github.com/mohong2/flixel.git HEAD && echo 'private repo access OK'
           else
@@ -89,8 +92,10 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          if ($env:GH_PAT) {
-            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GH_PAT"))
+          $GH_PAT = $env:GH_PAT -replace "[\r\n]", ""
+          Write-Output "GH_PAT length: $($GH_PAT.Length)"
+          if ($GH_PAT) {
+            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("x-access-token:$GH_PAT"))
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $b64"
             Write-Output 'git auth configured (GH_PAT found)'
             git ls-remote https://github.com/mohong2/flixel.git HEAD
@@ -145,8 +150,11 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          echo "GH_PAT length: ${#GH_PAT}"
           if [ -n "$GH_PAT" ]; then
-            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
             echo 'git auth configured (GH_PAT found)'
             git ls-remote https://github.com/mohong2/flixel.git HEAD && echo 'private repo access OK'
           else
@@ -215,8 +223,11 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          echo "GH_PAT length: ${#GH_PAT}"
           if [ -n "$GH_PAT" ]; then
-            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
             echo 'git auth configured (GH_PAT found)'
             git ls-remote https://github.com/mohong2/flixel.git HEAD && echo 'private repo access OK'
           else
@@ -264,8 +275,11 @@ jobs:
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          echo "GH_PAT length: ${#GH_PAT}"
           if [ -n "$GH_PAT" ]; then
-            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
             echo 'git auth configured (GH_PAT found)'
             git ls-remote https://github.com/mohong2/flixel.git HEAD && echo 'private repo access OK'
           else
