@@ -108,7 +108,8 @@ jobs:
 
       - name: Read app version
         run: |
-          $v = ([xml](Get-Content Project.xml)).project.app.version
+          $xml = Get-Content -Raw Project.xml
+          $v = [regex]::Match($xml, '<app[^>]*version="([0-9][0-9.]*)"').Groups[1].Value
           "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
 
       - name: Compile

@@ -27,10 +27,16 @@ class Main {
 					var version:String = data.version == null ? "" : data.version;
 					// CI 下 --never：已装版本保持不变，避免交互询问卡住
 					var extraArgs:String = Sys.getEnv("GITHUB_ACTIONS") == null ? "" : " --never";
-					Sys.command('haxelib --quiet install ${data.name} ${version}${extraArgs}');
+					if (Sys.command('haxelib --quiet install ${data.name} ${version}${extraArgs}') != 0) {
+						Sys.println('[SEIUN ENGINE SETUP]: Failed to install ${data.name}');
+						Sys.exit(1);
+					}
 				case "git": // for libraries that contain git repositories
 					var ref:String = data.ref == null ? "" : data.ref;
-					Sys.command('haxelib --quiet git ${data.name} ${data.url} ${data.ref}');
+					if (Sys.command('haxelib --quiet git ${data.name} ${data.url} ${data.ref}') != 0) {
+						Sys.println('[SEIUN ENGINE SETUP]: Failed to install ${data.name} from ${data.url}');
+						Sys.exit(1);
+					}
 				default: // and finally, throw an error if the library has no type
 					Sys.println('[SEIUN ENGINE SETUP]: Unable to resolve library of type "${data.type}" for library "${data.name}"');
 			}
