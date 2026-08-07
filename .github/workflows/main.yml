@@ -168,7 +168,10 @@ jobs:
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
-          "$SDKMANAGER" "platforms;android-30" "build-tools;30.0.3" "platform-tools"
+          "$SDKMANAGER" "platforms;android-30" "build-tools;30.0.3" "platform-tools" "ndk;21.4.7075529"
+          echo "ANDROID_SDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> "$GITHUB_ENV"
+          echo "ANDROID_SETUP=true" >> "$GITHUB_ENV"
 
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
@@ -179,6 +182,10 @@ jobs:
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
+
+      - name: Configure Android SDK
+        run: |
+          printf '%s\n%s\n%s\n' "$ANDROID_SDK" "$ANDROID_NDK_ROOT" "$JAVA_HOME" | haxelib run lime setup android
 
       - name: Init discord_rpc submodules
         run: |
