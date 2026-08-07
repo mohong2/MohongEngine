@@ -1,5 +1,5 @@
 {
-  "_comment": "flixel / extension-androidtools / hxvlc / linc_luajit 均为 SeiunEngine 的私有 fork（mohong2 名下）。先推送这 4 个仓库到 GitHub，再运行 install.bat；CI 里需要配置 GH_PAT secret（fine-grained PAT，只读这些仓库即可），workflow 会自动用它给 git 加鉴权",
+  "_comment": "flixel/extension-androidtools/hxvlc/linc_luajit 为 mohong2 私有 fork，需 GH_PAT",
   "dependencies": [
     {
       "name": "lime",

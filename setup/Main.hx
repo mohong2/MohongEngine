@@ -12,10 +12,7 @@ typedef Library = {
 
 class Main {
 	public static function main():Void {
-		// 本地开发：创建项目内 .haxelib，让依赖落在项目目录（已被 .gitignore 排除）。
-		// CI（GitHub Actions）：不要创建——haxelib 4.x 会把“当前目录里的 .haxelib 文件夹”
-		// 当作仓库（优先级高于 HAXELIB_PATH 和 haxelib setup），
-		// 而 CI 里依赖必须统一装到 haxelib setup 指定的 ~/haxelib（缓存、后续步骤都依赖它）。
+		// 本地创建项目内 .haxelib；CI 不创建（避免劫持 ~/haxelib 仓库）
 		if (!FileSystem.exists(".haxelib") && Sys.getEnv("GITHUB_ACTIONS") == null)
 			FileSystem.createDirectory(".haxelib");
 
@@ -28,7 +25,7 @@ class Main {
 			switch (data.type) {
 				case "install", "haxelib": // for libraries only available in the haxe package manager
 					var version:String = data.version == null ? "" : data.version;
-					// CI 下加 --never：版本已装就保持不变，避免“Set hxcpp to version ...”交互询问卡住流水线
+					// CI 下 --never：已装版本保持不变，避免交互询问卡住
 					var extraArgs:String = Sys.getEnv("GITHUB_ACTIONS") == null ? "" : " --never";
 					Sys.command('haxelib --quiet install ${data.name} ${version}${extraArgs}');
 				case "git": // for libraries that contain git repositories

@@ -1,25 +1,7 @@
 name: Build
 
-# ============================================================================
-# SeiunEngine 构建流（私有仓库友好）
-#
-# 触发时机：
-#   - push 到 main
-#   - 针对 main 的 pull_request
-#   - 手动触发（Actions 页面 -> Run workflow）
-#
-# 私有仓库注意事项：
-#   - 仓库本身是私有时，Actions 照常工作（Free 套餐每月 2000 分钟）。
-#   - checkout 当前仓库不需要任何配置（自动使用 GITHUB_TOKEN）。
-#   - hmm.json 里的 flixel / extension-androidtools / hxvlc / linc_luajit
-#     指向 mohong2 名下的 4 个私有 fork，因此需要在仓库
-#     Settings -> Secrets and variables -> Actions 里配置 GH_PAT
-#     （fine-grained PAT，只读这 4 个仓库即可），下面的
-#     “Authenticate git for private haxelib deps”步骤会自动生效。
-#   - macOS runner 按 10 倍额度计费，默认只在手动触发时构建 mac / iOS。
-#   - Android 每次 push / PR 都会构建（签名用的 key.keystore 已在仓库内，
-#     密码在 Project.xml 里；正式对外发布前建议迁到 Actions secret）。
-# ============================================================================
+# Actions 已按仓库策略钉死到完整 commit SHA。
+# hmm.json 指向 mohong2 名下的私有 fork，需在仓库 secrets 里配置 GH_PAT（只读）。
 
 on:
   push:
@@ -43,14 +25,11 @@ jobs:
     name: Build Linux
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
-          # 按 hmm.json 的内容哈希缓存 haxelib 仓库，命中后跳过几百 MB 下载
           cache-dependency-path: hmm.json
 
       - name: Install system dependencies
@@ -59,7 +38,7 @@ jobs:
           sudo apt-get install -y libvlc-dev libvlccore-dev libpulse0 zenity \
             libgl1-mesa-dev libglu1-mesa-dev libx11-dev
 
-      - name: Authenticate git for private haxelib deps (optional)
+      - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
@@ -67,26 +46,25 @@ jobs:
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
           fi
 
-      - name: Install haxelib dependencies (hmm.json)
+      - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
           haxelib fixrepo
 
-      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+      - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
           git submodule update --init --recursive
 
-      - name: Read app version from Project.xml
+      - name: Read app version
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
       - name: Compile
         run: haxelib run lime build linux --app-version="$APP_VERSION-${{ github.run_id }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-linux
           path: export/release/linux/bin
@@ -97,16 +75,14 @@ jobs:
     name: Build Windows
     runs-on: windows-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
-      - name: Authenticate git for private haxelib deps (optional)
+      - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
@@ -115,18 +91,18 @@ jobs:
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $b64"
           }
 
-      - name: Install haxelib dependencies (hmm.json)
+      - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
           haxelib fixrepo
 
-      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+      - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
           git submodule update --init --recursive
 
-      - name: Read app version from Project.xml
+      - name: Read app version
         run: |
           $v = ([xml](Get-Content Project.xml)).project.app.version
           "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
@@ -134,8 +110,7 @@ jobs:
       - name: Compile
         run: haxelib run lime build windows --app-version="$env:APP_VERSION-${{ github.run_id }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-windows
           path: export/release/windows/bin
@@ -146,22 +121,19 @@ jobs:
     name: Build Android
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup Java 11 (AGP 4.1.3 / Gradle 6.7.1 需要 JDK 11)
-        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
-          java-version: "11"
+          java-version: "17" # sdkmanager 需要 JDK 17
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
-      - name: Authenticate git for private haxelib deps (optional)
+      - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
@@ -169,24 +141,29 @@ jobs:
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
           fi
 
-      - name: Install Android SDK components (platform-30 / build-tools 30.0.3)
+      - name: Install Android SDK components
         run: |
           SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
           yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
           "$SDKMANAGER" "platforms;android-30" "build-tools;30.0.3" "platform-tools"
 
-      - name: Install haxelib dependencies (hmm.json)
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "11" # gradle 构建（AGP 4.1.3 / Gradle 6.7.1）需要 JDK 11
+
+      - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
           haxelib fixrepo
 
-      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+      - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
           git submodule update --init --recursive
 
-      - name: Apply engine Android template patches (同 setup/patch-lime-android-templates.bat)
+      - name: Apply Android template patches
         run: |
           LT="$HOME/haxelib/lime/8,0,1/templates/android/template"
           cp templates/android/template/gradle.properties "$LT/gradle.properties"
@@ -196,15 +173,14 @@ jobs:
           cp templates/android/java/org/haxe/extension/SeiunOverlay.java "$LT/app/src/main/java/org/haxe/extension/SeiunOverlay.java"
           cp templates/android/template/app/src/main/res/drawable/seiun_ic_keyboard.xml "$LT/app/src/main/res/drawable/seiun_ic_keyboard.xml"
 
-      - name: Read app version from Project.xml
+      - name: Read app version
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
-      - name: Compile Android APK
+      - name: Compile Android
         run: haxelib run lime build android --app-version="$APP_VERSION-${{ github.run_id }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-android
           path: export/release/android/bin
@@ -213,24 +189,18 @@ jobs:
 
   buildMac:
     name: Build macOS
-    # linc_luajit 自带的 macOS 预编译库是 x86_64 架构，
-    # 因此必须用 Intel 版 runner；arm64 runner 链接会报架构不匹配。
-    # macos-15-intel 是官方标签，可用到 2027 年 8 月（之后 Actions 不再提供 x86_64）。
-    # macOS runner 按 10 倍额度计费，默认只在“手动触发”时构建；
-    # 想每次 push 都构建，删掉下面这一行 if 即可。
+    # linc_luajit 预编译库仅 x86_64，须用 Intel runner；macOS 10x 计费，仅手动触发
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15-intel
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
-      - name: Authenticate git for private haxelib deps (optional)
+      - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
@@ -238,26 +208,25 @@ jobs:
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
           fi
 
-      - name: Install haxelib dependencies (hmm.json)
+      - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
           haxelib fixrepo
 
-      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+      - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
           git submodule update --init --recursive
 
-      - name: Read app version from Project.xml
+      - name: Read app version
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
       - name: Compile
         run: haxelib run lime build mac --app-version="$APP_VERSION-${{ github.run_id }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-mac
           path: export/release/mac/bin
@@ -266,22 +235,18 @@ jobs:
 
   buildIOS:
     name: Build iOS (simulator)
-    # 真机 .ipa 需要 Apple 开发者证书 + provisioning profile（要配进 Actions secret），
-    # 这里默认先出“不需要签名”的模拟器 .app 来验证编译链路。
-    # macOS runner 按 10 倍额度计费，默认只在手动触发时构建。
+    # 模拟器构建无需签名；真机 .ipa 需 Apple 证书（另行配置 secret）
     if: github.event_name == 'workflow_dispatch'
     runs-on: macos-15-intel
     steps:
-      - name: Checkout
-        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
-      - name: Setup Haxe
-        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
-      - name: Authenticate git for private haxelib deps (optional)
+      - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
         run: |
@@ -289,31 +254,30 @@ jobs:
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
           fi
 
-      - name: Install haxelib dependencies (hmm.json)
+      - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
           haxelib fixrepo
 
-      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+      - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
           git submodule update --init --recursive
 
-      - name: Apply engine iOS template patches (同 setup/patch-lime-ios-templates.bat)
+      - name: Apply iOS template patches
         run: |
           LT="$HOME/haxelib/lime/8,0,1/templates/ios/template"
           cp "templates/ios/template/{{app.file}}/{{app.file}}-Info.plist" "$LT/{{app.file}}/{{app.file}}-Info.plist"
 
-      - name: Read app version from Project.xml
+      - name: Read app version
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
-      - name: Compile iOS simulator app
+      - name: Compile iOS (simulator)
         run: haxelib run lime build ios -simulator --app-version="$APP_VERSION-${{ github.run_id }}"
 
-      - name: Upload artifact
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-ios-simulator
           path: export/release/ios/bin
