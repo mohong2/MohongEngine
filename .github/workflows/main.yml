@@ -44,10 +44,10 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2.1.0
+        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           # 按 hmm.json 的内容哈希缓存 haxelib 仓库，命中后跳过几百 MB 下载
@@ -86,7 +86,7 @@ jobs:
         run: haxelib run lime build linux --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-linux
           path: export/release/linux/bin
@@ -98,10 +98,10 @@ jobs:
     runs-on: windows-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2.1.0
+        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
@@ -135,7 +135,7 @@ jobs:
         run: haxelib run lime build windows --app-version="$env:APP_VERSION-${{ github.run_id }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-windows
           path: export/release/windows/bin
@@ -147,16 +147,16 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Java 11 (AGP 4.1.3 / Gradle 6.7.1 需要 JDK 11)
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
         with:
           distribution: temurin
           java-version: "11"
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2.1.0
+        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
@@ -204,7 +204,7 @@ jobs:
         run: haxelib run lime build android --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-android
           path: export/release/android/bin
@@ -222,10 +222,10 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2.1.0
+        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
@@ -257,7 +257,7 @@ jobs:
         run: haxelib run lime build mac --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-mac
           path: export/release/mac/bin
@@ -273,10 +273,10 @@ jobs:
     runs-on: macos-15-intel
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
       - name: Setup Haxe
-        uses: krdlab/setup-haxe@v2.1.0
+        uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
@@ -313,7 +313,7 @@ jobs:
         run: haxelib run lime build ios -simulator --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - name: Upload artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-ios-simulator
           path: export/release/ios/bin
