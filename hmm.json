@@ -1,5 +1,5 @@
 {
-  "_comment": "hxvlc 使用 haxelib 官方 2.2.5；SeiunEngine 的 Haxe 4.2.5 兼容补丁与视频泄漏防护已放到 source/hxvlc/ 覆盖。若以后改用私有 fork，请把这一项改回：{ \"name\": \"hxvlc\", \"type\": \"git\", \"url\": \"https://github.com/<你的用户名>/hxvlc-local.git\", \"ref\": \"master\" }，并在 GitHub Actions 里配置 GH_PAT secret（见 docs/github-actions-private-repos.md）",
+  "_comment": "flixel / extension-androidtools / hxvlc / linc_luajit 均为 SeiunEngine 的私有 fork（mohong2 名下）。先推送这 4 个仓库到 GitHub，再运行 install.bat；CI 里需要配置 GH_PAT secret（fine-grained PAT，只读这些仓库即可），workflow 会自动用它给 git 加鉴权",
   "dependencies": [
     {
       "name": "lime",
@@ -13,8 +13,9 @@
     },
     {
       "name": "flixel",
-      "type": "haxelib",
-      "version": "4.11.0"
+      "type": "git",
+      "url": "https://github.com/mohong2/flixel.git",
+      "ref": "master"
     },
     {
       "name": "flixel-addons",
@@ -42,9 +43,16 @@
       "version": "1.1.3"
     },
     {
+      "name": "extension-androidtools",
+      "type": "git",
+      "url": "https://github.com/mohong2/extension-androidtools.git",
+      "ref": "master"
+    },
+    {
       "name": "hxvlc",
-      "type": "haxelib",
-      "version": "2.2.5"
+      "type": "git",
+      "url": "https://github.com/mohong2/hxvlc.git",
+      "ref": "master"
     },
     {
       "name": "tjson",
@@ -54,8 +62,8 @@
     {
       "name": "linc_luajit",
       "type": "git",
-      "ref": "master",
-      "url": "https://github.com/superpowers04/linc_luajit"
+      "url": "https://github.com/mohong2/linc_luajit-rewriten.git",
+      "ref": "master"
     },
     {
       "name": "discord_rpc",

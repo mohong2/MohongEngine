@@ -11,12 +11,11 @@ name: Build
 # 私有仓库注意事项：
 #   - 仓库本身是私有时，Actions 照常工作（Free 套餐每月 2000 分钟）。
 #   - checkout 当前仓库不需要任何配置（自动使用 GITHUB_TOKEN）。
-#   - 如果 hmm.json 里的某个依赖指向“另一个私有仓库”
-#     （例如把 hxvlc-local 推到 GitHub 私有仓库后改 url），
-#     需要在仓库 Settings -> Secrets and variables -> Actions 里配置
-#     GH_PAT（fine-grained PAT，只读目标仓库即可），下面的
+#   - hmm.json 里的 flixel / extension-androidtools / hxvlc / linc_luajit
+#     指向 mohong2 名下的 4 个私有 fork，因此需要在仓库
+#     Settings -> Secrets and variables -> Actions 里配置 GH_PAT
+#     （fine-grained PAT，只读这 4 个仓库即可），下面的
 #     “Authenticate git for private haxelib deps”步骤会自动生效。
-#     详见 docs/github-actions-private-repos.md。
 #   - macOS runner 按 10 倍额度计费，默认只在手动触发时构建 mac。
 # ============================================================================
 
