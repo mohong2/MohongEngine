@@ -1,5 +1,6 @@
-package states;
+﻿package states;
 
+import backend.seiun.ui.*;
 import substates.ResetScoreSubState;
 import substates.GameplayChangersSubstate;
 import substates.ScoreHistorySubstate;
@@ -7,6 +8,8 @@ import substates.ModSelectSubstate;
 
 import flixel.ui.FlxBar;
 import flixel.effects.FlxFlicker;
+import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.FlxCamera;
 #if cpp
 import Discord.DiscordClient;
 #end
@@ -16,6 +19,7 @@ import flixel.addons.display.FlxGridOverlay;
 import flixel.addons.transition.FlxTransitionableState;
 import lime.utils.Assets;
 import flixel.system.FlxSound;
+import flixel.util.FlxTimer;
 import openfl.utils.Assets as OpenFlAssets;
 import WeekData;
 import mohong.TraceManager;
@@ -26,7 +30,7 @@ import sys.FileSystem;
 
 using StringTools;
 
-class FreeplayState extends MusicBeatState
+class FreeplayState extends SeiunMenuState
 {
 	public static var instance:FreeplayState = null;
 	public var songs:Array<SongMetadata> = [];
@@ -39,6 +43,12 @@ class FreeplayState extends MusicBeatState
 	public var confirmTween:FlxTween;
 	public var canInput:Bool = true; 
 	public var previewBG:FlxSprite;
+	public var previewGlow:FlxSprite;
+	public var previewLabel:FlxText;
+	public var previewEq:FlxTypedGroup<FlxSprite>;
+	public var previewEqBars:Array<FlxSprite> = [];
+	public var previewGroup:FlxTypedGroup<FlxSprite>;
+	public var previewExiting:Bool = false;
 	public var wasVisible:Map<FlxSprite, Bool> = new Map(); 
 	public var playbackRate:Float = 1.0;
 	public var selector:FlxText;
@@ -66,6 +76,21 @@ class FreeplayState extends MusicBeatState
 	private var curPlaying:Bool = false;
 	private var holdTime:Float = 0;
 	private var instPlaying:Int = -1;
+
+	// === Seiun menu animation layers ===
+	var particleGroup:FlxTypedGroup<FlxSprite>;
+	var auroraGlowA:FlxSprite;
+	var auroraGlowB:FlxSprite;
+	var selGlow:FlxSprite;
+	var selCursor:Alphabet;
+	var scaleKick:Float = 0;
+	var ambientTimer:Float = 0;
+	var autoPreviewNext:Bool = false;
+	var autoMusicActive:Bool = false;
+	var holdingNav:Bool = false;
+	var holdStartSelected:Int = -1;
+	var autoMusicSong:String = '';
+	var autoMusicTimer:FlxTimer = null;
 
 	// 新增：错误提示相关变量
 	public var missingTextBG:FlxSprite;
@@ -156,30 +181,95 @@ class FreeplayState extends MusicBeatState
 		add(bg);
 		bg.screenCenter();
 
+		if (MenuFX.enabled())
+		{
+			// ── Seiun aurora: drifting additive glows tinted by the song color ──
+			auroraGlowA = MenuFX.makeGlow(900, 0xFFFD719B, 0.3);
+			auroraGlowA.blend = ADD;
+			auroraGlowA.scrollFactor.set(0, 0);
+			auroraGlowA.screenCenter();
+			add(auroraGlowA);
+
+			auroraGlowB = MenuFX.makeGlow(740, 0xFF8A5CFF, 0.24);
+			auroraGlowB.blend = ADD;
+			auroraGlowB.scrollFactor.set(0, 0);
+			auroraGlowB.screenCenter();
+			add(auroraGlowB);
+		}
+
 		grpSongs = new FlxTypedGroup<Alphabet>();
 		add(grpSongs);
 
+		if (MenuFX.enabled())
+		{
+			// Glow + cursor that follow the selected song
+			selGlow = MenuFX.makeGlow(300, 0xFFFFFFFF, 0.5);
+			selGlow.scale.set(1.5, 0.8);
+			selGlow.updateHitbox();
+			selGlow.blend = ADD;
+			selGlow.visible = false;
+			add(selGlow);
+
+			selCursor = new Alphabet(0, 0, '>', true);
+			selCursor.visible = false;
+			add(selCursor);
+		}
+
+		previewGroup = new FlxTypedGroup<FlxSprite>();
+
 		previewBG = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
-		previewBG.alpha = 0.7;
-		previewBG.visible = false;
-		add(previewBG);
-		
-		previewSongTxt = new FlxText(0, 50, FlxG.width, "", 32);
-		previewSongTxt.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, CENTER);
+		previewBG.alpha = 0;
+		previewGroup.add(previewBG);
+
+		// ── Seiun preview cosmetics: glow, "now playing" label, equalizer ──
+		previewGlow = MenuFX.makeGlow(760, 0xFFFD719B, 0.5);
+		previewGlow.blend = ADD;
+		previewGlow.scrollFactor.set();
+		previewGlow.screenCenter();
+		previewGlow.alpha = 0;
+		previewGroup.add(previewGlow);
+
+		previewLabel = new FlxText(0, 0, FlxG.width, "NOW PLAYING", 22);
+		previewLabel.setFormat(Paths.languageFont(), 22, 0xFFFFD6F4, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		previewLabel.borderSize = 2;
+		previewLabel.scrollFactor.set();
+		previewLabel.alpha = 0;
+		previewGroup.add(previewLabel);
+
+		previewEq = new FlxTypedGroup<FlxSprite>();
+		for (i in 0...7)
+		{
+			var bar:FlxSprite = new FlxSprite(0, 0).makeGraphic(12, 72, FlxColor.WHITE);
+			bar.antialiasing = false;
+			bar.scrollFactor.set();
+			bar.visible = false;
+			previewEq.add(bar);
+			previewEqBars.push(bar);
+		}
+
+		previewSongTxt = new FlxText(0, 0, FlxG.width, "", 44);
+		previewSongTxt.setFormat(Paths.languageFont(), 44, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		previewSongTxt.borderSize = 3;
 		previewSongTxt.scrollFactor.set();
-		previewSongTxt.visible = false;
-		add(previewSongTxt);
-		
-		previewTimeTxt = new FlxText(0, 100, FlxG.width, "", 24);
-		previewTimeTxt.setFormat(Paths.languageFont(), 24, FlxColor.WHITE, CENTER);
+		previewSongTxt.alpha = 0;
+		previewGroup.add(previewSongTxt);
+
+		previewTimeTxt = new FlxText(0, 0, FlxG.width, "", 22);
+		previewTimeTxt.setFormat(Paths.languageFont(), 22, 0xFFFFE9F5, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		previewTimeTxt.borderSize = 2;
 		previewTimeTxt.scrollFactor.set();
-		previewTimeTxt.visible = false;
-		add(previewTimeTxt);
-		
-		progressBar = new FlxBar(50, 140, LEFT_TO_RIGHT, FlxG.width - 100, 15, null, "", 0, 100, true);
-		progressBar.createFilledBar(0xFF444444, FlxColor.WHITE);
-		progressBar.visible = false;
-		add(progressBar);
+		previewTimeTxt.alpha = 0;
+		previewGroup.add(previewTimeTxt);
+
+		progressBar = new FlxBar(0, 0, LEFT_TO_RIGHT, Std.int(FlxG.width * 0.55), 18, null, "", 0, 100, true);
+		progressBar.createFilledBar(0xFF1E1B2E, 0xFFFD719B);
+		progressBar.scrollFactor.set();
+		progressBar.alpha = 0;
+		previewGroup.add(progressBar);
+
+		previewGroup.visible = false;
+		add(previewGroup);
+		add(previewEq);
 
 		// === Create mod filter header bar ===
 		createModFilterUI();
@@ -204,8 +294,7 @@ class FreeplayState extends MusicBeatState
 		bg.loadGraphic(Paths.image('menuDesat'));
 		bg.screenCenter();
 		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
-		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
+		MenuFX.ensureMenuMusic(1);
 
 		scoreText = new FlxText(FlxG.width * 0.7, 5, 0, "", 32);
 		scoreText.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, RIGHT);
@@ -237,6 +326,7 @@ class FreeplayState extends MusicBeatState
 			bg.color = initSong.color;
 			intendedColor = bg.color;
 		}
+		MenuFX.accentColor = bg.color;
 
 
 		if(lastDifficultyName == '')
@@ -248,6 +338,40 @@ class FreeplayState extends MusicBeatState
 		
 		changeSelection();
 		changeDiff();
+
+		// ── Entry animation: songs cascade in with a stagger ──
+		if (MenuFX.enabled())
+		{
+			particleGroup = new FlxTypedGroup<FlxSprite>();
+			add(particleGroup);
+		}
+		for (i in 0...grpSongs.length)
+		{
+			var it = grpSongs.members[i];
+			var icon = iconArray[i];
+			var targetAlpha:Float = (i == curSelected) ? 1 : 0.6;
+			// Stagger by distance from the selected song so the song the player
+			// last chose (even at the bottom of the list) appears immediately.
+			var delay:Float = Math.min(Math.abs(i - curSelected) * 0.035, 0.4);
+			it.alpha = 0;
+			icon.alpha = 0;
+			FlxTween.tween(it, {alpha: targetAlpha}, 0.3, {startDelay: delay, ease: FlxEase.sineOut});
+			var baseScale:Float = (i == curSelected) ? 1.2 : 0.85;
+			FlxTween.cancelTweensOf(icon.scale);
+			icon.scale.set(baseScale * 0.5, baseScale * 0.5);
+			FlxTween.tween(icon.scale, {x: baseScale, y: baseScale}, 0.4, {startDelay: delay, ease: FlxEase.backOut});
+			FlxTween.tween(icon, {alpha: targetAlpha}, 0.3, {startDelay: delay, ease: FlxEase.sineOut});
+		}
+
+		#if PRELOAD_ALL
+		// Auto-play the selected song's BGM after the menu settles in
+		if (ClientPrefs.data.freeplayAutoPreview)
+			new FlxTimer().start(1.1, function(tmr:FlxTimer)
+			{
+				if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && !paused && canInput)
+					startAutoMusic();
+			});
+		#end
 
 		var swag:Alphabet = new Alphabet(1, 0, "swag");
 
@@ -277,7 +401,7 @@ class FreeplayState extends MusicBeatState
 		var leText:String = Language.get("FreeplayState.leText", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 
-		#if android
+		#if TOUCH_CONTROLS
 		var leText:String = Language.get("FreeplayState.leText.android", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 		#end
@@ -286,7 +410,7 @@ class FreeplayState extends MusicBeatState
 		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
 		var size:Int = 18;
 
-		#if android
+		#if TOUCH_CONTROLS
 		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL.android", "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 		#end
@@ -296,7 +420,7 @@ class FreeplayState extends MusicBeatState
 		text.setFormat(Paths.languageFont(), size, FlxColor.WHITE, RIGHT);
 		text.scrollFactor.set();
 		add(text);
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
@@ -318,7 +442,7 @@ class FreeplayState extends MusicBeatState
 		changeSelection(0, false);
 		persistentUpdate = true;
 		canInput = true;
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
@@ -390,7 +514,7 @@ class FreeplayState extends MusicBeatState
 
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 50, 0,
-			#if android
+			#if TOUCH_CONTROLS
 			Language.get('Mod.hint.android', '[G] Switch Mod'),
 			#else
 			Language.get('Mod.hint', '[TAB] Switch Mod'),
@@ -468,14 +592,20 @@ class FreeplayState extends MusicBeatState
 		bg.screenCenter();
 		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 
-		// Reload menu music: will pick up mod's freakyMenu.ogg if it exists
-		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
-
 		// Rebuild song list with the new mod's songs
 		rebuildFilteredSongs();
 		changeSelection(0, false);
 		changeDiff();
+
+		#if PRELOAD_ALL
+		// Reload music: auto BGM follows the new selection, otherwise menu music
+		if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && !paused)
+			scheduleAutoMusic(0.1);
+		else
+			MenuFX.playMenuMusic(1);
+		#else
+		MenuFX.playMenuMusic(1);
+		#end
 
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 	}
@@ -602,6 +732,63 @@ class FreeplayState extends MusicBeatState
 			FlxG.sound.music.volume += 0.5 * FlxG.elapsed;
 		}
 
+		// ── Seiun menu animations ──
+		scaleKick *= Math.exp(-elapsed * 9);
+		if (scaleKick < 0.001) scaleKick = 0;
+
+		if (auroraGlowA != null)
+		{
+			var t:Float = MenuFX.time;
+			var baseCol:Int = bg.color;
+			auroraGlowA.x = FlxG.width * 0.42 + Math.sin(t * 0.35) * 150 - auroraGlowA.width * 0.5;
+			auroraGlowA.y = FlxG.height * 0.42 + Math.cos(t * 0.28) * 75 - auroraGlowA.height * 0.5;
+			auroraGlowA.alpha = 0.26 + Math.sin(t * 0.5) * 0.08;
+			auroraGlowA.color = MenuFX.mixColor(0xFFFD719B, baseCol, 0.55);
+
+			auroraGlowB.x = FlxG.width * 0.76 + Math.sin(t * 0.23 + 2.1) * 125 - auroraGlowB.width * 0.5;
+			auroraGlowB.y = FlxG.height * 0.66 + Math.cos(t * 0.31 + 1.2) * 65 - auroraGlowB.height * 0.5;
+			auroraGlowB.alpha = 0.2 + Math.sin(t * 0.42 + 1.0) * 0.07;
+			auroraGlowB.color = MenuFX.mixColor(0xFF8A5CFF, baseCol, 0.45);
+		}
+
+		if (curSelected >= 0 && curSelected < grpSongs.length)
+		{
+			var sel:Alphabet = grpSongs.members[curSelected];
+			var kickScale:Float = 1 + scaleKick * 0.35;
+			sel.scale.set(1.2 * kickScale, 1.2 * kickScale);
+
+			if (selGlow != null)
+			{
+				selGlow.visible = !playingMusic;
+				selGlow.x = sel.x + sel.width * 0.5 - selGlow.width * selGlow.scale.x * 0.5;
+				selGlow.y = sel.y + sel.height * 0.5 - selGlow.height * selGlow.scale.y * 0.5;
+				selGlow.color = bg.color;
+			}
+			if (selCursor != null)
+			{
+				selCursor.visible = !playingMusic;
+				selCursor.x = sel.x - selCursor.width - 14;
+				selCursor.y = sel.y + sel.height * 0.5 - selCursor.height * 0.5 + MenuFX.bob(6, 3.2, 0);
+			}
+		}
+		else
+		{
+			if (selGlow != null) selGlow.visible = false;
+			if (selCursor != null) selCursor.visible = false;
+		}
+
+		// Ambient sparkles drifting in the background
+		ambientTimer += elapsed;
+		if (ambientTimer > 0.16)
+		{
+			ambientTimer = 0;
+			MenuFX.ambientSparkle(particleGroup,
+				FlxG.random.float(0, FlxG.width),
+				FlxG.random.float(FlxG.height * 0.15, FlxG.height * 0.85),
+				FlxColor.fromRGB(255, 240, 220),
+				FlxG.random.float(3, 6));
+		}
+
 		lerpScore = Math.floor(FlxMath.lerp(lerpScore, intendedScore, CoolUtil.boundTo(elapsed * 24, 0, 1)));
 		lerpRating = FlxMath.lerp(lerpRating, intendedRating, CoolUtil.boundTo(elapsed * 12, 0, 1));
 
@@ -624,20 +811,20 @@ class FreeplayState extends MusicBeatState
 		var upP = controls.UI_UP_P;
 		var downP = controls.UI_DOWN_P;
 		var accepted = controls.ACCEPT;
-		var space = #if android virtualPad.buttonX.justPressed  || #end	FlxG.keys.justPressed.SPACE;
-		var ctrl = #if android virtualPad.buttonC.justPressed   || #end FlxG.keys.justPressed.CONTROL;
-		var history = #if android virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.H;
+		var space = #if TOUCH_CONTROLS virtualPad.buttonX.justPressed  || #end	FlxG.keys.justPressed.SPACE;
+		var ctrl = #if TOUCH_CONTROLS virtualPad.buttonC.justPressed   || #end FlxG.keys.justPressed.CONTROL;
+		var history = #if TOUCH_CONTROLS virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.H;
 		// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
 		if (!playingMusic)
 		{
 			if (FlxG.keys.justPressed.TAB
-				#if android || virtualPad.buttonEx.justPressed #end)
+				#if TOUCH_CONTROLS || virtualPad.buttonEx.justPressed #end)
 			{
 				openModSelect();
 				return;
 			}
 		}
-		#if !android
+		#if !TOUCH_CONTROLS
 		var newMouseOverlapIndex = -1;
 		for (i in 0...grpSongs.length) {
 			var song = grpSongs.members[i];
@@ -664,6 +851,7 @@ class FreeplayState extends MusicBeatState
 		
 		if (FlxG.mouse.justPressed && mouseOverlapIndex >= 0 && mouseOverlapIndex != curSelected && !playingMusic) {
 			curSelected = mouseOverlapIndex;
+			autoPreviewNext = true;
 			changeSelection();
 			changeDiff();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
@@ -676,17 +864,23 @@ class FreeplayState extends MusicBeatState
 		}
 
 		var shiftMult:Int = 1;
-		if(#if android virtualPad.buttonZ.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
+		if(#if TOUCH_CONTROLS virtualPad.buttonZ.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 		if (!playingMusic){
 		if(filteredSongIndices.length > 1)
 		{
 			if (upP)
 			{
+				holdingNav = true;
+				holdStartSelected = curSelected;
+				autoPreviewNext = true;
 				changeSelection(-shiftMult);
 				holdTime = 0;
 			}
 			if (downP)
 			{
+				holdingNav = true;
+				holdStartSelected = curSelected;
+				autoPreviewNext = true;
 				changeSelection(shiftMult);
 				holdTime = 0;
 			}
@@ -703,10 +897,21 @@ class FreeplayState extends MusicBeatState
 					changeDiff();
 				}
 			}
+			else if (holdingNav)
+			{
+				// Key released: settle the auto BGM on the final selected song
+				holdingNav = false;
+				#if PRELOAD_ALL
+				if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && !paused
+					&& curSelected != holdStartSelected)
+					scheduleAutoMusic(0.2);
+				#end
+			}
 
 			if(FlxG.mouse.wheel != 0)
 			{
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.2);
+				autoPreviewNext = true;
 				changeSelection(-shiftMult * FlxG.mouse.wheel, false);
 				changeDiff();
 				}
@@ -731,7 +936,21 @@ class FreeplayState extends MusicBeatState
 				colorTween.cancel();
 			}
 			FlxG.sound.play(Paths.sound('cancelMenu'));
-			MusicBeatState.switchState(new MainMenuState());
+			canInput = false;
+			stopAutoMusic();
+			// Smooth exit: songs fly out, then a short fade into the main menu
+			for (i in 0...grpSongs.length)
+			{
+				var it:Alphabet = grpSongs.members[i];
+				var icon:HealthIcon = iconArray[i];
+				var delay:Float = (grpSongs.length - 1 - i) * 0.025;
+				FlxTween.tween(it, {alpha: 0, x: it.x - 260}, 0.28, {startDelay: delay, ease: FlxEase.quadIn});
+				FlxTween.tween(icon, {alpha: 0}, 0.28, {startDelay: delay, ease: FlxEase.quadIn});
+			}
+			new FlxTimer().start(0.42, function(tmr:FlxTimer)
+			{
+				MenuFX.menuSwitch(new MainMenuState());
+			});
 			}
 		}
 		if (space && canInput)
@@ -757,6 +976,27 @@ class FreeplayState extends MusicBeatState
     	{
         curTime = FlxG.sound.music.time;
         updatePreviewTexts();
+
+		// ── Animated preview cosmetics: glow pulse + equalizer bars ──
+		if (!previewExiting && previewGlow != null)
+		{
+			previewGlow.color = bg.color;
+			previewGlow.alpha = 0.34 + Math.sin(MenuFX.time * 3) * 0.09;
+		}
+		if (!previewExiting && previewLabel != null)
+			previewLabel.alpha = 0.7 + Math.sin(MenuFX.time * 4) * 0.3;
+		var eqBaseY:Float = FlxG.height * 0.6;
+		if (!previewExiting)
+		{
+			for (i in 0...previewEqBars.length)
+			{
+				var bar:FlxSprite = previewEqBars[i];
+				var s:Float = 0.22 + 0.78 * Math.abs(Math.sin(MenuFX.time * (2.1 + i * 0.24) + i * 1.15));
+				bar.scale.y = s;
+				bar.y = eqBaseY - bar.height * s;
+				bar.color = bg.color;
+			}
+		}
         
         if (controls.UI_LEFT_P)
         {
@@ -780,7 +1020,7 @@ class FreeplayState extends MusicBeatState
     }
 	    if (playingMusic)
    		 {
-			if (FlxG.keys.justPressed.UP #if android || virtualPad.buttonUp.justPressed #end)
+			if (FlxG.keys.justPressed.UP #if TOUCH_CONTROLS || virtualPad.buttonUp.justPressed #end)
 			{
 				playbackRate += 0.05;
 				if (playbackRate > 3.0) playbackRate = 3.0;
@@ -788,7 +1028,7 @@ class FreeplayState extends MusicBeatState
 				updatePreviewTexts();
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
 			}
-			else if (FlxG.keys.justPressed.DOWN	#if android || virtualPad.buttonDown.justPressed #end)
+			else if (FlxG.keys.justPressed.DOWN	#if TOUCH_CONTROLS || virtualPad.buttonDown.justPressed #end)
 			{
 				playbackRate -= 0.05;
 				if (playbackRate < 0.25) playbackRate = 0.25;
@@ -893,6 +1133,10 @@ class FreeplayState extends MusicBeatState
 			canInput = false;
 			persistentUpdate = false;
 			FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
+			MenuFX.screenFlash(FlxG.camera, 0xFFFFFFFF, 0.45, 0.55);
+			MenuFX.punchZoom(0.06);
+			var sel:Alphabet = grpSongs.members[curSelected];
+			MenuFX.burstParticles(particleGroup, sel.x + sel.width * 0.5, sel.y + sel.height * 0.5, curSongData.color, 26, 380);
 			
 			TraceManager.info('trace.freeplay.currentWeek', 'CURRENT WEEK: {}', [WeekData.getWeekFileName()]);
 				if(colorTween != null) {
@@ -902,7 +1146,7 @@ class FreeplayState extends MusicBeatState
 			missingText.visible = false;
 			missingTextBG.visible = false;
 
-			#if android
+			#if TOUCH_CONTROLS
 			// 在切换状态前移除虚拟手柄，防止按键状态残留到 PlayState
 			removeVirtualPad();
 			#end
@@ -912,26 +1156,33 @@ class FreeplayState extends MusicBeatState
 			LoadingState.loadAndSwitchState(new editors.NewChartingState());
 			else
 				LoadingState.loadAndSwitchState(new editors.ChartingState());
+				FlxG.sound.music.volume = 0;
+				destroyFreeplayVocals();
 			}else{
-				LoadingState.loadAndSwitchState(new PlayState());
-			}
-
-			FlxG.sound.music.volume = 0;
-								
-			destroyFreeplayVocals();
-
-			for (i in 0...grpSongs.length) {
-				if(i != curSelected) {
-					FlxTween.tween(grpSongs.members[i], {
-						alpha: 0,
-						x: grpSongs.members[i].x + 200
-					}, 0.8, {ease: FlxEase.quadOut});
+				// Simple, safe exit: selected song pops, others fade, then a
+				// normal transition takes us into PlayState. No camera
+				// zoom/scroll tricks that could leak into gameplay.
+				FlxTween.tween(sel.scale, {x: 1.45, y: 1.45}, 0.25, {ease: FlxEase.quadOut});
+				FlxTween.tween(icon.scale, {x: 1.45, y: 1.45}, 0.25, {ease: FlxEase.quadOut});
+				MenuFX.shockwaveRing(particleGroup, sel.x + sel.width * 0.5, sel.y + sel.height * 0.5, curSongData.color, 240, 8);
+				for (i in 0...grpSongs.length)
+				{
+					if (i == curSelected) continue;
+					FlxTween.tween(grpSongs.members[i], {alpha: 0, x: grpSongs.members[i].x + 220}, 0.3, {ease: FlxEase.quadIn});
+					if (i < iconArray.length)
+						FlxTween.tween(iconArray[i], {alpha: 0}, 0.3, {ease: FlxEase.quadIn});
 				}
+				stopAutoMusic();
+				destroyFreeplayVocals();
+				FlxG.sound.music.volume = 0;
+				new FlxTimer().start(0.3, function(tmr:FlxTimer)
+				{
+					LoadingState.loadAndSwitchState(new PlayState());
+				});
 			}
-
 			trace(poop);
 		}
-		else if(#if android virtualPad.buttonY.justPressed ||#end controls.RESET)
+		else if(#if TOUCH_CONTROLS virtualPad.buttonY.justPressed ||#end controls.RESET)
 		{
 			persistentUpdate = false;
 			var resetSong = getCurrentSong();
@@ -997,7 +1248,10 @@ class FreeplayState extends MusicBeatState
 
 		var curSong = getCurrentSong();
 		if(curSong == null) return;
-			
+
+		// Carry the song color into the shared menu palette (cross-state continuity)
+		MenuFX.accentColor = curSong.color;
+
 		var newColor:Int = curSong.color;
 		if(newColor != intendedColor) {
 			if(colorTween != null) {
@@ -1018,17 +1272,19 @@ class FreeplayState extends MusicBeatState
 		for (i in 0...grpSongs.length) {
         var item = grpSongs.members[i];
         var icon = iconArray[i];
-		var targetScale = (i == curSelected) ? 1.2 : 0.85;
         FlxTween.cancelTweensOf(item.scale);
         FlxTween.cancelTweensOf(icon.scale);
-        
-        FlxTween.tween(item.scale, {x: targetScale, y: targetScale}, 0.25, {
-            ease: FlxEase.quadOut
-        });
-        
-        FlxTween.tween(icon.scale, {x: targetScale, y: targetScale}, 0.25, {
-            ease: FlxEase.quadOut
-        });
+		if (i == curSelected)
+		{
+			// Selected song scale is modulated per-frame in update() for the beat kick
+			item.scale.set(1.2, 1.2);
+			FlxTween.tween(icon.scale, {x: 1.2, y: 1.2}, 0.2, {ease: FlxEase.backOut});
+		}
+		else
+		{
+			FlxTween.tween(item.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
+			FlxTween.tween(icon.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
+		}
     }
 
 
@@ -1125,6 +1381,29 @@ class FreeplayState extends MusicBeatState
 		{
 			curDifficulty = newPos;
 		}
+
+		// ── Seiun selection juice ──
+		if (curSelected >= 0 && curSelected < grpSongs.length)
+		{
+			var sel:Alphabet = grpSongs.members[curSelected];
+			var icon:HealthIcon = iconArray[curSelected];
+			MenuFX.pulse(icon, 0.12, 0.18);
+			MenuFX.punchZoom(0.018);
+			MenuFX.burstParticles(particleGroup, sel.x + sel.width * 0.5, sel.y + sel.height * 0.5, curSong.color, 10, 190);
+			if (selGlow != null) MenuFX.pulse(selGlow, 0.25, 0.25);
+		}
+
+		// Auto BGM follows the selected song (no preview UI, no vocals)
+		#if PRELOAD_ALL
+		if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && !paused)
+		{
+			if (autoPreviewNext || !autoMusicActive)
+				scheduleAutoMusic();
+		}
+		autoPreviewNext = false;
+		#else
+		autoPreviewNext = false;
+		#end
 	}
 
 	public function positionHighscore() {
@@ -1135,9 +1414,100 @@ class FreeplayState extends MusicBeatState
 		diffText.x = Std.int(scoreBG.x + (scoreBG.width / 2));
 		diffText.x -= diffText.width / 2;
 	}
+
+	/** Arrange the preview UI elements (called when a preview starts). */
+	function layoutPreviewUI():Void
+	{
+		previewSongTxt.screenCenter(X);
+		previewSongTxt.y = FlxG.height * 0.3;
+		previewTimeTxt.screenCenter(X);
+		previewTimeTxt.y = FlxG.height * 0.44;
+		progressBar.x = (FlxG.width - progressBar.width) * 0.5;
+		progressBar.y = FlxG.height * 0.49;
+		previewLabel.screenCenter(X);
+		previewLabel.y = FlxG.height * 0.24;
+		previewGlow.screenCenter();
+		for (i in 0...previewEqBars.length)
+		{
+			var bar:FlxSprite = previewEqBars[i];
+			bar.x = FlxG.width * 0.5 + (i - 3) * 34 - bar.width * 0.5;
+			bar.scale.y = 0.25;
+		}
+	}
+
+	/** Smooth staggered entrance for the preview UI. */
+	function showPreviewUI():Void
+	{
+		previewGroup.visible = true;
+		layoutPreviewUI();
+
+		// Backdrop fades in first
+		previewBG.alpha = 0;
+		FlxTween.tween(previewBG, {alpha: 0.62}, 0.3, {ease: FlxEase.sineOut});
+		previewGlow.alpha = 0;
+		FlxTween.tween(previewGlow, {alpha: 0.5}, 0.4, {ease: FlxEase.sineOut});
+
+		// Foreground elements slide up with a stagger
+		var order:Array<FlxSprite> = [previewLabel, previewSongTxt, previewTimeTxt, progressBar];
+		for (i in 0...order.length)
+		{
+			var member:FlxSprite = order[i];
+			if (member == null) continue;
+			FlxTween.cancelTweensOf(member);
+			member.alpha = 0;
+			member.y += 26;
+			FlxTween.tween(member, {alpha: 1, y: member.y - 26}, 0.35, {
+				startDelay: 0.08 + i * 0.06,
+				ease: FlxEase.sineOut
+			});
+		}
+		for (i in 0...previewEqBars.length)
+		{
+			var bar:FlxSprite = previewEqBars[i];
+			bar.visible = true;
+			bar.alpha = 0;
+			FlxTween.tween(bar, {alpha: 1}, 0.3, {startDelay: 0.2 + i * 0.04, ease: FlxEase.sineOut});
+		}
+	}
+
+	/** Smooth fade-out for the preview UI, then calls onComplete. */
+	function hidePreviewUI(onComplete:Void->Void):Void
+	{
+		previewExiting = true;
+		FlxTween.tween(previewBG, {alpha: 0}, 0.25, {ease: FlxEase.quadIn});
+		FlxTween.tween(previewGlow, {alpha: 0}, 0.25, {ease: FlxEase.quadIn});
+		for (bar in previewEqBars)
+			FlxTween.tween(bar, {alpha: 0}, 0.2, {ease: FlxEase.quadIn});
+
+		var order:Array<FlxSprite> = [previewLabel, previewSongTxt, previewTimeTxt, progressBar];
+		var done:Int = 0;
+		for (member in order)
+		{
+			if (member == null) { done++; continue; }
+			FlxTween.tween(member, {alpha: 0, y: member.y + 18}, 0.22, {
+				ease: FlxEase.quadIn,
+				onComplete: function(twn:FlxTween)
+				{
+					done++;
+					if (done >= order.length)
+					{
+						if (!previewExiting) return; // a new preview already started
+						previewGroup.visible = false;
+						previewExiting = false;
+						if (onComplete != null) onComplete();
+					}
+				}
+			});
+		}
+	}
 	
 	public function startPreview()
 	{
+		autoMusicActive = false;
+		previewExiting = false;
+		FlxTween.cancelTweensOf(previewBG);
+		FlxTween.cancelTweensOf(previewGlow);
+		for (bar in previewEqBars) FlxTween.cancelTweensOf(bar);
 		#if PRELOAD_ALL
 		destroyFreeplayVocals();
 		FlxG.sound.music.volume = 0;
@@ -1156,6 +1526,7 @@ class FreeplayState extends MusicBeatState
 			vocals = new FlxSound();
 
 		FlxG.sound.list.add(vocals);
+		MenuFX.markMenuMusicStopped();
 		FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0.7);
 		vocals.play();
 		vocals.persist = true;
@@ -1172,11 +1543,8 @@ class FreeplayState extends MusicBeatState
 		
 		hideNonPreviewElements();
 		
-		previewBG.visible = true;
-		previewSongTxt.visible = true;
-		previewTimeTxt.visible = true;
-		progressBar.visible = true;
-		updatePreviewTexts(); 
+		showPreviewUI();
+		updatePreviewTexts();
 	}
 
 	public function stopPreview()
@@ -1188,18 +1556,70 @@ class FreeplayState extends MusicBeatState
 		FlxG.sound.music.stop();
 		FlxG.sound.music.volume = 0;
 		instPlaying = -1;
-		
-		previewBG.visible = false;
-		previewSongTxt.visible = false;
-		previewTimeTxt.visible = false;
-		progressBar.visible = false;
-		
-		restoreNonPreviewElements();
-		
-		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-		FlxTween.tween(FlxG.sound.music, {volume: 1}, 1);
+
+		hidePreviewUI(function()
+		{
+			restoreNonPreviewElements();
+			MenuFX.playMenuMusic(1);
+
+			#if PRELOAD_ALL
+			// Auto BGM resumes after a manual preview is closed (if enabled)
+			if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && canInput)
+				scheduleAutoMusic(0.3);
+			#end
+		});
 	}
 
+	/** Play the selected song's instrumental quietly as background music (no preview UI, no vocals). */
+	public function startAutoMusic()
+	{
+		#if PRELOAD_ALL
+		var autoSong = getCurrentSong();
+		if (autoSong == null) return;
+		var songKey:String = autoSong.folder + ':' + autoSong.songName;
+		if (autoMusicActive && autoMusicSong == songKey) return; // already playing this song
+
+		destroyFreeplayVocals();
+		MenuFX.markMenuMusicStopped();
+
+		var prevModDir:String = Paths.currentModDirectory;
+		Paths.currentModDirectory = autoSong.folder;
+		FlxG.sound.music.stop();
+		FlxG.sound.music.volume = 0;
+		FlxG.sound.playMusic(Paths.inst(autoSong.songName), 0.55);
+		Paths.currentModDirectory = prevModDir;
+
+		autoMusicActive = true;
+		autoMusicSong = songKey;
+		#end
+	}
+
+	/** Debounced auto BGM switch: waits for the player to settle on a song. */
+	public function scheduleAutoMusic(delay:Float = 0.45):Void
+	{
+		#if PRELOAD_ALL
+		if (autoMusicTimer != null)
+		{
+			autoMusicTimer.cancel();
+			autoMusicTimer = null;
+		}
+		autoMusicTimer = new FlxTimer().start(delay, function(tmr:FlxTimer)
+		{
+			autoMusicTimer = null;
+			if (ClientPrefs.data.freeplayAutoPreview && !playingMusic && !paused && canInput)
+				startAutoMusic();
+		});
+		#end
+	}
+
+	/** Stop the background auto BGM (restores nothing; menu music is handled by callers). */
+	public function stopAutoMusic()
+	{
+		if (!autoMusicActive) return;
+		autoMusicActive = false;
+		FlxG.sound.music.stop();
+		FlxG.sound.music.volume = 0;
+	}
 
 	public function setPlaybackRate()
 	{
@@ -1214,8 +1634,7 @@ class FreeplayState extends MusicBeatState
 			paused = true;
 			FlxG.sound.music.pause();
 			if (vocals != null) vocals.pause();
-			var pSong = getCurrentSong();
-			previewSongTxt.text = 'PLAYING: ' + (pSong != null ? pSong.songName : '?') + ' (PAUSED)';
+			updatePreviewTexts();
 		}
 	}
 
@@ -1226,8 +1645,7 @@ class FreeplayState extends MusicBeatState
 			paused = false;
 			FlxG.sound.music.resume();
 			if (vocals != null) vocals.resume();
-			var pSong = getCurrentSong();
-			previewSongTxt.text = 'PLAYING: ' + (pSong != null ? pSong.songName : '?');
+			updatePreviewTexts();
 		}
 	}
 
@@ -1262,13 +1680,20 @@ class FreeplayState extends MusicBeatState
 			progressBar.value = progress;
 		}
 
-		var rateText = ' (' + playbackRate + 'x)';
+		var rateText:String = (playbackRate != 1) ? '  (' + playbackRate + 'x)' : '';
 		var pSong = getCurrentSong();
 		var pName:String = (pSong != null) ? pSong.songName : '?';
+		previewSongTxt.text = pName;
 		if (paused)
-			previewSongTxt.text = 'PLAYING: ' + pName + rateText + ' (PAUSED)';
+		{
+			previewLabel.text = Language.get("FreeplayState.paused", "PAUSED");
+			previewTimeTxt.text = timeStr + '  (PAUSED)';
+		}
 		else
-			previewSongTxt.text = 'PLAYING: ' + pName + rateText;
+		{
+			previewLabel.text = Language.get("FreeplayState.nowPlaying", "NOW PLAYING");
+			previewTimeTxt.text = timeStr + rateText;
+		}
 	}
 	
 	public function formatTime(seconds:Float):String
@@ -1283,17 +1708,15 @@ class FreeplayState extends MusicBeatState
 		wasVisible = new Map();
 		
 		for (i in 0...grpSongs.length) {
-			if (i != curSelected) {
-				wasVisible.set(grpSongs.members[i], grpSongs.members[i].visible);
-				grpSongs.members[i].visible = false;
-			}
+			// Hide every song (including the selected one) so the preview UI
+			// never overlaps the list.
+			wasVisible.set(grpSongs.members[i], grpSongs.members[i].visible);
+			grpSongs.members[i].visible = false;
 		}
 		
 		for (i in 0...iconArray.length) {
-			if (i != curSelected) {
-				wasVisible.set(iconArray[i], iconArray[i].visible);
-				iconArray[i].visible = false;
-			}
+			wasVisible.set(iconArray[i], iconArray[i].visible);
+			iconArray[i].visible = false;
 		}
 		
 		wasVisible.set(scoreBG, scoreBG.visible);
@@ -1308,26 +1731,50 @@ class FreeplayState extends MusicBeatState
 	public function restoreNonPreviewElements()
 	{
 		for (i in 0...grpSongs.length) {
-			if (i != curSelected) {
-				if (wasVisible.exists(grpSongs.members[i])) {
-					grpSongs.members[i].visible = wasVisible.get(grpSongs.members[i]);
-				}
+			if (wasVisible.exists(grpSongs.members[i])) {
+				grpSongs.members[i].visible = wasVisible.get(grpSongs.members[i]);
 			}
 		}
 		
 		for (i in 0...iconArray.length) {
-			if (i != curSelected) {
-				if (wasVisible.exists(iconArray[i])) {
-					iconArray[i].visible = wasVisible.get(iconArray[i]);
-				}
+			if (wasVisible.exists(iconArray[i])) {
+				iconArray[i].visible = wasVisible.get(iconArray[i]);
 			}
 		}
 		if (wasVisible.exists(scoreBG)) scoreBG.visible = wasVisible.get(scoreBG);
 		if (wasVisible.exists(scoreText)) scoreText.visible = wasVisible.get(scoreText);
 		if (wasVisible.exists(diffText)) diffText.visible = wasVisible.get(diffText);
 	}
+
+	override function onMenuBeat(beat:Int):Void
+	{
+		if (playingMusic || paused || grpSongs == null || grpSongs.length == 0
+			|| curSelected < 0 || curSelected >= grpSongs.length)
+			return;
+
+		scaleKick = 0.22;
+		if (curSelected < iconArray.length)
+			MenuFX.pulse(iconArray[curSelected], 0.1, 0.16);
+		if (selCursor != null)
+			MenuFX.pulse(selCursor, 0.22, 0.14);
+		if (selGlow != null)
+		{
+			FlxTween.cancelTweensOf(selGlow, ['alpha']);
+			selGlow.alpha = 0.95;
+			FlxTween.tween(selGlow, {alpha: 0.5}, 0.4, {ease: FlxEase.sineOut});
+		}
+		MenuFX.punchZoom(0.012);
+	}
+
 	override function destroy()
     {
+		if (particleGroup != null)
+			for (p in particleGroup) FlxTween.cancelTweensOf(p);
+		if (autoMusicTimer != null)
+		{
+			autoMusicTimer.cancel();
+			autoMusicTimer = null;
+		}
 		instance = null;
         super.destroy();
     }

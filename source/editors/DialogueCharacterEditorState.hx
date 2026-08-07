@@ -183,7 +183,7 @@ class DialogueCharacterEditorState extends MusicBeatState implements PsychUIEven
 		addEditorBox();
 		FlxG.mouse.visible = true;
 		updateCharTypeBox();
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(DIALOGUE_PORTRAIT_EDITOR, DIALOGUE_PORTRAIT_EDITOR);
 		addPadCamera();
 		#end

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HScript · Quickstart — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="hq.badge">HScript</div>
+  <h1 data-i18n="hq.title">HScript Quickstart</h1>
+  <p class="sub" data-i18n="hq.sub">Haxe-syntax scripting.</p>
+
+  <h2 data-i18n="hq.h_files">Files &amp; locations</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="hq.col_loc">Location</th><th data-i18n="hq.col_when">When</th></tr></thead>
+      <tbody>
+        <tr><td><code>hscripts/</code> (mod root)</td><td data-i18n="hq.loc_all">All states.</td></tr>
+        <tr><td><code>hscripts/&lt;StateName&gt;/</code></td><td data-i18n="hq.loc_state">Per-state.</td></tr>
+        <tr><td><code>hscripts/substates/&lt;Name&gt;/</code></td><td data-i18n="hq.loc_sub">Substates.</td></tr>
+        <tr><td><code>data/states/&lt;StateName&gt;.hx</code></td><td data-i18n="hq.loc_data">Standalone.</td></tr>
+        <tr><td><code>scripts/*.hx</code></td><td data-i18n="hq.loc_ps">PlayState.</td></tr>
+        <tr><td>mod root <code>Main.hx</code> / <code>boot.hx</code></td><td data-i18n="hq.loc_boot">Boot.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p data-i18n="hq.ext">Extensions:</p> <p><code>.hx</code> <code>.hscript</code> <code>.hsc</code> <code>.hxs</code></p>
+
+  <h2 data-i18n="hq.h_simple">Simplest script</h2>
+<pre><code><span class="cm">// hscripts/PlayState/hello.hx</span>
+<span class="kw">function</span> onCreatePost() {
+    <span class="kw">var</span> txt = <span class="kw">new</span> FlxText(<span class="nu">0</span>, <span class="nu">0</span>, <span class="nu">0</span>, <span class="st">"Hello Seiun!"</span>, <span class="nu">32</span>);
+    txt.screenCenter();
+    add(txt);   <span class="cm">// shorthand for FlxG.state.add(txt)</span>
+}</code></pre>
+
+  <h2 data-i18n="hq.h_hook">Hook model</h2>
+<pre><code><span class="kw">function</span> onCreate() <span class="kw">function</span> onCreatePost()
+<span class="kw">function</span> onUpdate(elapsed) <span class="kw">function</span> onBeatHit()
+<span class="kw">function</span> onStartCountdown()      { <span class="kw">return</span> Function_StopHScript; }
+<span class="kw">function</span> goodNoteHit(note)       { }   <span class="cm">// note is passed as an object</span></code></pre>
+  <div class="note" data-i18n="hq.note_hook">HScript return flags control flow.</div>
+
+  <h2 data-i18n="hq.h_game">Accessing the game</h2>
+<pre><code><span class="kw">function</span> onCreatePost() {
+    game.visible = <span class="kw">true</span>;        <span class="cm">// game = PlayState.instance</span>
+    boyfriend; dad; gf;         <span class="cm">// resolved dynamically at runtime</span>
+    songName; curBpm; difficulty;
+}</code></pre>
+  <div class="note" data-i18n="hq.note_resolve">Objects resolve at runtime.</div>
+
+  <h2 data-i18n="hq.h_obj">Manipulating objects</h2>
+<pre><code>boyfriend.scale.set(<span class="nu">2</span>, <span class="nu">2</span>);
+FlxTween.tween(boyfriend, {x: boyfriend.x + <span class="nu">100</span>}, <span class="nu">1</span>, {ease: FlxEase.backOut});</code></pre>
+
+  <h2 data-i18n="hq.h_short">Shorthand functions</h2>
+<pre><code>add(obj); insert(pos, obj); remove(obj);
+setModWindowIcon(); setOldFPS(<span class="kw">true</span>); setOldPause(<span class="kw">true</span>);
+importScript(<span class="st">'other/script'</span>);
+runLuaCode([[print(<span class="st">'hi'</span>)]]);   <span class="cm">// LUA_ALLOWED only</span></code></pre>
+
+  <h2 data-i18n="hq.h_dbg">Debugging</h2>
+<pre><code>trace(<span class="st">'some log'</span>);   <span class="cm">// captured by the Trace console</span></code></pre>
+
+  <div class="note" data-i18n="hq.note_oncreate">Operate on objects in onCreatePost.</div>
+
+  <div class="btns">
+    <a class="btn ghost" href="lua-globals.html" data-i18n="module.lg.title">← Globals</a>
+    <a class="btn primary" href="hscript-environment.html" data-i18n="module.he.title">Next: Environment</a>
+  </div>
+</div>
+</body>
+</html>

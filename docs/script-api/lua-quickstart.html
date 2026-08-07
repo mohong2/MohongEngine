@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lua · Quickstart — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="lq.badge">Lua</div>
+  <h1 data-i18n="lq.title">Lua Quickstart</h1>
+  <p class="sub" data-i18n="lq.sub">First script, file layout, lifecycle.</p>
+
+  <h2 data-i18n="lq.h_files">Where to put files</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="lq.col_loc">Location</th><th data-i18n="lq.col_when">When</th></tr></thead>
+      <tbody>
+        <tr><td><code>mods/&lt;mod&gt;/scripts/*.lua</code></td><td data-i18n="lq.loc_scripts">Every PlayState entry.</td></tr>
+        <tr><td><code>custom_events/</code></td><td data-i18n="lq.loc_events">With custom events.</td></tr>
+        <tr><td><code>addLuaScript()</code></td><td data-i18n="lq.loc_dynamic">Dynamic load.</td></tr>
+        <tr><td><code>stages/&lt;curStage&gt;.lua</code></td><td data-i18n="lq.loc_stage">Stage script.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 data-i18n="lq.h_simple">Simplest script</h2>
+<pre><code><span class="kw">function</span> onCreate()
+    makeLuaText(<span class="st">'hello'</span>, <span class="st">'Hello, Seiun Engine!'</span>, <span class="nu">500</span>, <span class="nu">0</span>, <span class="nu">0</span>)
+    addLuaText(<span class="st">'hello'</span>)
+<span class="kw">end</span></code></pre>
+
+  <h2 data-i18n="lq.h_life">Lifecycle</h2>
+<pre><code><span class="kw">onCreate</span>()      <span class="cm">-- state create: some objects not created yet</span>
+<span class="kw">onCreatePost</span>()  <span class="cm">-- create finished: safe to touch most objects</span>
+<span class="kw">onUpdate</span>(elapsed) <span class="cm">-- every frame</span>
+<span class="kw">onDestroy</span>()    <span class="cm">-- script end</span></code></pre>
+  <div class="note" data-i18n="lq.note_read">Read song data in onCreatePost.</div>
+
+  <h2 data-i18n="lq.h_ret">Return values in hooks</h2>
+  <p data-i18n="lq.note_ret">Some hooks return flags to control flow:</p>
+<pre><code><span class="kw">function</span> onStartCountdown()
+    <span class="kw">return</span> Function_Stop <span class="cm">-- block countdown; call startCountdown() to resume</span>
+<span class="kw">end</span></code></pre>
+
+  <h2 data-i18n="lq.h_props">Reading / writing properties</h2>
+<pre><code><span class="kw">local</span> h = getProperty(<span class="st">'health'</span>)
+setProperty(<span class="st">'health'</span>, <span class="nu">0.5</span>)
+setPropertyFromClass(<span class="st">'Conductor'</span>, <span class="st">'bpm'</span>, <span class="nu">150</span>)</code></pre>
+  <p data-i18n="lq.note_dot">Dot paths supported.</p>
+
+  <h2 data-i18n="lq.h_obj">Creating objects</h2>
+<pre><code>makeLuaSprite(<span class="st">'s'</span>, <span class="st">'folder/image'</span>, <span class="nu">100</span>, <span class="nu">200</span>)
+addLuaSprite(<span class="st">'s'</span>, <span class="kw">false</span>)
+makeAnimatedLuaSprite(<span class="st">'a'</span>, <span class="st">'folder/atlas'</span>, <span class="nu">0</span>, <span class="nu">0</span>)
+addAnimationByPrefix(<span class="st">'a'</span>, <span class="st">'idle'</span>, <span class="st">'IDLE_'</span>, <span class="nu">24</span>, <span class="kw">true</span>)
+playAnim(<span class="st">'a'</span>, <span class="st">'idle'</span>, <span class="kw">true</span>)</code></pre>
+
+  <h2 data-i18n="lq.h_tween">Tweens &amp; timers</h2>
+<pre><code>doTweenX(<span class="st">'t'</span>, <span class="st">'s'</span>, <span class="nu">500</span>, <span class="nu">1</span>, <span class="st">'backOut'</span>)
+runTimer(<span class="st">'wait'</span>, <span class="nu">1</span>, <span class="nu">1</span>)</code></pre>
+
+  <h2 data-i18n="lq.h_cross">Cross-script communication</h2>
+<pre><code>addLuaScript(<span class="st">'anotherScript'</span>)
+callScript(<span class="st">'anotherScript'</span>, <span class="st">'myFunction'</span>, {arg1, arg2})
+setOnScripts(<span class="st">'g'</span>, <span class="nu">42</span>)   <span class="cm">-- SEIUN: all scripts</span></code></pre>
+
+  <h2 data-i18n="lq.h_haxe">Running Haxe code</h2>
+<pre><code>runHaxeCode([[ game.health = 1; ]])</code></pre>
+
+  <h2 data-i18n="lq.h_dbg">Debugging</h2>
+<pre><code>debugPrint(<span class="st">'Hello'</span>, <span class="st">'FF0000'</span>)
+trace(<span class="st">'some log'</span>)</code></pre>
+
+  <div class="btns">
+    <a class="btn ghost" href="index.html" data-i18n="home">Home</a>
+    <a class="btn primary" href="lua-hooks.html" data-i18n="module.lh.title">Next: Lua Hooks</a>
+  </div>
+</div>
+</body>
+</html>

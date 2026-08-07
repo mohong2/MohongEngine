@@ -21,6 +21,15 @@ import flixel.math.FlxMath;
 class PauseSubState extends MusicBeatSubstate
 {
 	public static var entries:ScoreEntry;
+
+	// === Pause UI transparency (soft-coded) ===
+	// 值越低越透明，玩家越能看到游戏实际情况；调高则遮罩更实、文字更清楚。
+	// Lower = more see-through so players can see the actual gameplay.
+	public static var BG_ALPHA:Float = 0.38;        // 全屏黑底遮罩 / full-screen dark backdrop
+	public static var OVERLAY_ALPHA:Float = 0.85;   // 亚克力调色层整体 / acrylic tint layer overall
+	public static var OVERLAY_TINT:Float = 0.40;    // 亚克力调色层的颜色不透明度 / acrylic tint color opacity
+	public static var CARD_ALPHA:Float = 0.6;       // 玻璃卡片填充 / glass card fill
+
 	var menuItems:Array<String> = [];
 	var menuItemsOG:Array<String> = ['Resume', 'Restart Song', 'Change Difficulty', 'Options', 'Exit to menu'];
 	var difficultyChoices:Array<String> = [];
@@ -87,7 +96,7 @@ class PauseSubState extends MusicBeatSubstate
 			menuItemsOG.insert(5 + num, 'Toggle Botplay');
 		}
 		
-		#if android 
+		#if TOUCH_CONTROLS 
 		menuItemsOG.insert(2, 'Chart Editor');
 		#end
 		
@@ -105,7 +114,7 @@ class PauseSubState extends MusicBeatSubstate
 		add(bg);
 
 		// Dark acrylic overlay
-		acrylicOverlay = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.fromRGBFloat(0.04, 0.06, 0.14, 0.78));
+		acrylicOverlay = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.fromRGBFloat(0.04, 0.06, 0.14, OVERLAY_TINT));
 		acrylicOverlay.alpha = 0;
 		acrylicOverlay.scrollFactor.set();
 		add(acrylicOverlay);
@@ -152,7 +161,7 @@ class PauseSubState extends MusicBeatSubstate
 		songNameText.scrollFactor.set();
 		slideGroup.add(songNameText);
 
-		var difficultyText = new FlxText(contentX, songNameText.y + 42, contentW, CoolUtil.difficultyString(), 22);
+		var difficultyText = new FlxText(contentX, songNameText.y + 42, contentW, PlayState.displayDifficultyString(), 22);
 		difficultyText.setFormat(Paths.languageFont(), 22, FlxColor.fromRGB(160, 180, 220), CENTER);
 		difficultyText.scrollFactor.set();
 		slideGroup.add(difficultyText);
@@ -288,21 +297,21 @@ class PauseSubState extends MusicBeatSubstate
 		slideGroup.alpha = 0;
 		slideGroup.scale.set(0.92, 0.92);
 
-		FlxTween.tween(bg, {alpha: 0.6}, 0.5, {ease: FlxEase.sineOut});
-		FlxTween.tween(acrylicOverlay, {alpha: 1}, 0.5, {ease: FlxEase.sineOut});
+		FlxTween.tween(bg, {alpha: BG_ALPHA}, 0.5, {ease: FlxEase.sineOut});
+		FlxTween.tween(acrylicOverlay, {alpha: OVERLAY_ALPHA}, 0.5, {ease: FlxEase.sineOut});
 		FlxTween.tween(slideGroup, {y: 0}, 0.55, {ease: FlxEase.circOut});
 		FlxTween.tween(slideGroup, {alpha: 1}, 0.4, {ease: FlxEase.sineOut});
 		FlxTween.tween(slideGroup.scale, {x: 1, y: 1}, 0.55, {ease: FlxEase.circOut});
 
 		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
 		
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, A);
 		addPadCamera();
 		#end
 	}
 
-	#if android
+	#if TOUCH_CONTROLS
 	var _padLeftRight:Bool = false;
 
 	function updateVirtualPadForSelection():Void
@@ -353,7 +362,7 @@ class PauseSubState extends MusicBeatSubstate
 		// Check if cursor overlaps any menu item and auto-select it
 		var mouseActive:Bool = false;
 		var mouseClicked:Bool = false;
-		#if !android
+		#if !TOUCH_CONTROLS
 		mouseActive = (FlxG.mouse != null);
 		mouseClicked = FlxG.mouse.justPressed;
 		#else
@@ -459,7 +468,7 @@ class PauseSubState extends MusicBeatSubstate
 			case "Leave Charting Mode":
 				restartSong();
 				PlayState.chartingMode = false;
-			#if android
+			#if TOUCH_CONTROLS
 			case 'Chart Editor':
 				PlayState.instance.openChartEditor();
 			#end
@@ -530,7 +539,7 @@ class PauseSubState extends MusicBeatSubstate
 		var cam:FlxCamera = (cameras != null && cameras.length > 0) ? cameras[0] : FlxG.camera;
 
 		// Get cursor position in the substate camera's world space
-		#if android
+		#if TOUCH_CONTROLS
 		if (FlxG.touches.list.length == 0) return -1;
 		var touch = FlxG.touches.list[0];
 		var point = touch.getWorldPosition(cam);
@@ -573,7 +582,7 @@ class PauseSubState extends MusicBeatSubstate
 		var card = new FlxSprite(x, y).makeGraphic(w, h, FlxColor.TRANSPARENT);
 		// Deep dark semi-transparent fill (acrylic look)
 		FlxSpriteUtil.drawRoundRect(card, 0, 0, w, h, radius, radius,
-			FlxColor.fromRGBFloat(0.06, 0.09, 0.18, 0.78),
+			FlxColor.fromRGBFloat(0.06, 0.09, 0.18, CARD_ALPHA),
 			{thickness: 0, color: FlxColor.TRANSPARENT}
 		);
 		return card;
@@ -602,7 +611,7 @@ class PauseSubState extends MusicBeatSubstate
 		// Get cursor position in the substate's own camera space,
 		// so PlayState's camGame scroll/zoom doesn't offset the perspective effect.
 		var cam:FlxCamera = (cameras != null && cameras.length > 0) ? cameras[0] : FlxG.camera;
-		#if !android
+		#if !TOUCH_CONTROLS
 		var point = (FlxG.mouse != null) ? FlxG.mouse.getWorldPosition(cam) : null;
 		#else
 		var point = (FlxG.touches.list.length > 0) ? FlxG.touches.list[0].getWorldPosition(cam) : null;
@@ -745,7 +754,7 @@ class PauseSubState extends MusicBeatSubstate
 			idx++;
 		}
 
-		#if android
+		#if TOUCH_CONTROLS
 		updateVirtualPadForSelection();
 		#end
 	}
@@ -826,7 +835,7 @@ class PauseSubState extends MusicBeatSubstate
 			selectionIndicator.alpha = 0;
 		}
 
-		#if android
+		#if TOUCH_CONTROLS
 		updateVirtualPadForSelection();
 		#end
 	}

@@ -151,14 +151,27 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 
 		refreshList();
 
-		FlxTween.tween(titleTxt, {alpha: 1}, 0.4, {ease: FlxEase.quartOut});
+		// -- Modern jelly entrance --
+		titleTxt.scale.set(0.82, 0.82);
+		FlxTween.tween(titleTxt, {alpha: 1}, 0.35, {ease: FlxEase.sineOut});
+		FlxTween.tween(titleTxt.scale, {x: 1, y: 1}, 0.6, {ease: FlxEase.backOut});
+
 		FlxTween.tween(subtitleTxt, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.1});
 		FlxTween.tween(titleUnderline.scale, {x: 1}, 0.5, {ease: FlxEase.quartOut, startDelay: 0.2});
-		FlxTween.tween(dateListBG, {alpha: 0.6}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.15});
-		FlxTween.tween(detailBG, {alpha: 0.6}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.2});
-		FlxTween.tween(graphBG, {alpha: 0.6}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.25});
+
+		jellyPopIn(dateListBG, 0.15);
+		jellyPopIn(detailBG, 0.2);
+		jellyPopIn(graphBG, 0.25);
+
 		FlxTween.tween(graphNote, {alpha: 1}, 0.5, {ease: FlxEase.quartOut, startDelay: 0.35});
 		FlxTween.tween(instructionsTxt, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.3});
+	}
+
+	/** Jelly pop-in for panels (spring scale + fade). */
+	function jellyPopIn(spr:FlxSprite, delay:Float):Void
+	{
+		spr.scale.set(0.85, 0.85);
+		FlxTween.tween(spr.scale, {x: 1, y: 1}, 0.5, {ease: FlxEase.backOut, startDelay: delay});
 	}
 
 	function createRoundedPanel(x:Float, y:Float, width:Int, height:Int, color:FlxColor):FlxSprite
@@ -320,7 +333,9 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		for (i in 0...dateListGroup.members.length)
 		{
 			var item = dateListGroup.members[i];
-			FlxTween.tween(item, {alpha: 1}, 0.3, {startDelay: i * 0.03, ease: FlxEase.quartOut});
+			item.alpha = 0;
+			item.x -= 8;
+			FlxTween.tween(item, {x: item.x + 8, alpha: 1}, 0.28, {startDelay: i * 0.04, ease: FlxEase.sineOut});
 		}
 	}
 
@@ -394,66 +409,171 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		var startY:Float = 148;
 		var lineH:Float = 22;
 
-		function addLine(x:Float, lineNum:Int, label:String, value:String, color:FlxColor, ?valueSize:Int = 17):FlxText
-		{
-			var labelTxt = new FlxText(x, startY + lineNum * lineH, 140, label + ":", 17);
-			labelTxt.setFormat(Paths.languageFont(), 17, FlxColor.fromRGB(140, 150, 160), LEFT);
-			labelTxt.scrollFactor.set();
-			labelTxt.alpha = 0;
-			detailGroup.add(labelTxt);
-
-			var valTxt = new FlxText(x + 120, startY + lineNum * lineH, 280, value, valueSize);
-			valTxt.setFormat(Paths.languageFont(), valueSize, color, LEFT);
-			valTxt.scrollFactor.set();
-			valTxt.alpha = 0;
-			detailGroup.add(valTxt);
-
-			FlxTween.tween(labelTxt, {alpha: 1}, 0.2, {startDelay: lineNum * 0.03});
-			FlxTween.tween(valTxt, {alpha: 1}, 0.2, {startDelay: lineNum * 0.03});
-			return valTxt;
-		}
-
-		// -- Left column --
-		var ln:Int = 0;
-		addLine(col1X, ln++, Language.get("ScoreHistorySubstate.date", "Date"), e.date, FlxColor.WHITE);
-
 		targetScore = e.score;
 		targetAccuracy = (e.ratingPercent >= 0) ? e.ratingPercent * 100 : 0;
-
 		if (lastSelected != curSelected)
 		{
 			displayedScore = 0;
 			displayedAccuracy = 0;
 		}
 
-		scoreText = addLine(col1X, ln++, Language.get("ScoreHistorySubstate.score", "Score"), Std.string(displayedScore), FlxColor.fromRGB(255, 215, 0), 20);
-		accuracyText = addLine(col1X, ln++, Language.get("ScoreHistorySubstate.accuracy", "Accuracy"), Highscore.floorDecimal(displayedAccuracy, 2) + '%', FlxColor.WHITE, 18);
-		addLine(col1X, ln++, Language.get("ScoreHistorySubstate.rating", "Grade"), e.ratingName, getGradeColor(e.ratingName));
-		addLine(col1X, ln++, Language.get("ScoreHistorySubstate.songRating", "Song Rating"), e.ratingFC, FlxColor.WHITE);
-		addLine(col1X, ln++, Language.get("ScoreHistorySubstate.maxCombo", "Max Combo"), Std.string(e.maxCombo), FlxColor.WHITE);
+		// ---- Collect label/value pairs per column first (so we can measure label widths) ----
+		var rows1:Array<{label:String, value:String, color:FlxColor, size:Int}> = [];
+		var rows2:Array<{label:String, value:String, color:FlxColor, size:Int}> = [];
+
+		function mk(label:String, value:String, color:FlxColor, ?size:Int = 17):{label:String, value:String, color:FlxColor, size:Int}
+		{
+			return {label: label, value: value, color: color, size: size};
+		}
+
+		// -- Left column --
+		rows1.push(mk(Language.get("ScoreHistorySubstate.date", "Date"), e.date, FlxColor.WHITE));
+		rows1.push(mk(Language.get("ScoreHistorySubstate.score", "Score"), Std.string(displayedScore), FlxColor.fromRGB(255, 215, 0), 20));
+		rows1.push(mk(Language.get("ScoreHistorySubstate.accuracy", "Accuracy"), Highscore.floorDecimal(displayedAccuracy, 2) + '%', FlxColor.WHITE, 18));
+		rows1.push(mk(Language.get("ScoreHistorySubstate.rating", "Grade"), e.ratingName, getGradeColor(e.ratingName)));
+		rows1.push(mk(Language.get("ScoreHistorySubstate.songRating", "Song Rating"), e.ratingFC, FlxColor.WHITE));
+		rows1.push(mk(Language.get("ScoreHistorySubstate.maxCombo", "Max Combo"), Std.string(e.maxCombo), FlxColor.WHITE));
 
 		var hasReplay = Allscore.hasReplayData(e);
-		addLine(col1X, ln++, Language.get("ScoreHistorySubstate.replayData", "Replay"),
+		rows1.push(mk(Language.get("ScoreHistorySubstate.replayData", "Replay"),
 			hasReplay ? Language.get("ScoreHistorySubstate.replayDataYes", "Available") : Language.get("ScoreHistorySubstate.replayDataNo", "Not Available"),
-			hasReplay ? FlxColor.GREEN : FlxColor.RED);
+			hasReplay ? FlxColor.GREEN : FlxColor.RED));
 
 		// -- Right column --
-		ln = 0;
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.sicks", "Sicks"), Std.string(e.sicks), FlxColor.fromRGB(0, 255, 255));
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.goods", "Goods"), Std.string(e.goods), FlxColor.WHITE);
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.bads", "Bads"), Std.string(e.bads), FlxColor.GRAY);
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.shits", "Shits"), Std.string(e.shits), FlxColor.GRAY);
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.misses", "Misses"), Std.string(e.misses), FlxColor.fromRGB(255, 100, 100));
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.songSpeed", "Song Speed"), Std.string(e.songSpeed), FlxColor.fromRGB(200, 200, 200));
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.playbackRate", "Playback Rate"), Std.string(e.playbackRate), FlxColor.fromRGB(200, 200, 200));
-		addLine(col2X, ln++, Language.get("ScoreHistorySubstate.songSpeedType", "Speed Type"), e.songSpeedType, FlxColor.fromRGB(200, 200, 200));
+		if (e.marvelouses != null)
+			rows2.push(mk(Language.get("ScoreHistorySubstate.marvelouses", "Marvelouses"), Std.string(e.marvelouses), FlxColor.fromRGB(255, 215, 0)));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.sicks", "Sicks"), Std.string(e.sicks), FlxColor.fromRGB(0, 255, 255)));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.goods", "Goods"), Std.string(e.goods), FlxColor.WHITE));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.bads", "Bads"), Std.string(e.bads), FlxColor.GRAY));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.shits", "Shits"), Std.string(e.shits), FlxColor.GRAY));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.misses", "Misses"), Std.string(e.misses), FlxColor.fromRGB(255, 100, 100)));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.songSpeed", "Song Speed"), Std.string(e.songSpeed), FlxColor.fromRGB(200, 200, 200)));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.playbackRate", "Playback Rate"), Std.string(e.playbackRate), FlxColor.fromRGB(200, 200, 200)));
+		rows2.push(mk(Language.get("ScoreHistorySubstate.songSpeedType", "Speed Type"), e.songSpeedType, FlxColor.fromRGB(200, 200, 200)));
 
-		// Judgment windows from replay data
 		if (e.details != null && e.details.length >= 24)
 		{
-			var judgeStr = Std.string(e.details[20]) + " / " + Std.string(e.details[21])
+			// LeatherEngine 移植: 判定类型 (预设名或 Custom), 老记录从窗口反查
+			var judgeType:String = (e.details.length > 26 && e.details[26] != null)
+				? Std.string(e.details[26])
+				: '';
+			var judgeStr = "";
+			// LeatherEngine 移植: 有 judgementTimings (details[24]) 时优先展示 4 档窗口
+			if (e.details.length > 24 && e.details[24] != null)
+			{
+				var timings:Array<Dynamic> = e.details[24];
+				if (timings != null && timings.length >= 4)
+				{
+					if (judgeType.length == 0)
+						judgeType = backend.Ratings.presetNameForTimings([
+							Std.parseInt(timings[0]), Std.parseInt(timings[1]),
+							Std.parseInt(timings[2]), Std.parseInt(timings[3])
+						]);
+					judgeStr += Std.string(timings[0]) + " / ";
+				}
+			}
+			judgeStr += Std.string(e.details[20]) + " / " + Std.string(e.details[21])
 				+ " / " + Std.string(e.details[22]) + " / " + Std.string(e.details[23]) + "f";
-			addLine(col2X, ln++, Language.get("ScoreHistorySubstate.judgeWindows", "Judge Win S/G/B/SF"), judgeStr, FlxColor.fromRGB(180, 180, 200));
+			if (judgeType.length == 0)
+				judgeType = Language.get("ScoreHistorySubstate.custom", "Custom");
+			rows2.push(mk(Language.get("ScoreHistorySubstate.judgeWindows", "Judge Type / Win"), judgeType + " (" + judgeStr + ")", FlxColor.fromRGB(180, 180, 200)));
+		}
+
+		// ---- Measure widest label per column (capped so long labels never crush the value column) ----
+		var LABEL_CAP:Float = 200;
+		var col1LabelW:Float = 0;
+		for (r in rows1)
+		{
+			var p:FlxText = new FlxText(0, 0, 0, r.label + ":", 17);
+			p.setFormat(Paths.languageFont(), 17, FlxColor.WHITE, LEFT);
+			if (p.width > col1LabelW) col1LabelW = p.width;
+			p.destroy();
+		}
+		if (col1LabelW > LABEL_CAP) col1LabelW = LABEL_CAP;
+
+		var col2LabelW:Float = 0;
+		for (r in rows2)
+		{
+			var p:FlxText = new FlxText(0, 0, 0, r.label + ":", 17);
+			p.setFormat(Paths.languageFont(), 17, FlxColor.WHITE, LEFT);
+			if (p.width > col2LabelW) col2LabelW = p.width;
+			p.destroy();
+		}
+		if (col2LabelW > LABEL_CAP) col2LabelW = LABEL_CAP;
+
+		var col1ValX:Float = col1X + col1LabelW + 12;
+		var col2ValX:Float = col2X + col2LabelW + 12;
+		// Guarantee generous value room so long strings (judge windows, speed type) never clip/wrap
+		var col1ValW:Float = Math.max(180, Math.min(260, col2X - col1ValX - 24));
+		var col2ValW:Float = Math.max(220, Math.min(360, detailBG.x + detailBG.width - col2ValX - 16));
+
+		// ---- Render with spring entrance (long labels wrap to 2 lines so values stay readable) ----
+		var gi:Int = 0;
+		var y:Float = startY;
+		for (r in rows1)
+		{
+			var labelOver:Bool = false;
+			{
+				var p:FlxText = new FlxText(0, 0, 0, r.label + ":", 17);
+				p.setFormat(Paths.languageFont(), 17, FlxColor.WHITE, LEFT);
+				labelOver = p.width > col1LabelW;
+				p.destroy();
+			}
+			var lh:Float = labelOver ? lineH * 2 : lineH;
+
+			var labelTxt = new FlxText(col1X, y, col1LabelW + 4, r.label + ":", 17);
+			labelTxt.setFormat(Paths.languageFont(), 17, FlxColor.fromRGB(140, 150, 160), LEFT);
+			labelTxt.scrollFactor.set();
+			if (labelOver) labelTxt.textField.wordWrap = true;
+			labelTxt.alpha = 0;
+			detailGroup.add(labelTxt);
+
+			var valTxt = new FlxText(col1ValX, y, col1ValW, r.value, r.size);
+			valTxt.setFormat(Paths.languageFont(), r.size, r.color, LEFT);
+			valTxt.scrollFactor.set();
+			valTxt.alpha = 0;
+			detailGroup.add(valTxt);
+
+			FlxTween.tween(labelTxt, {alpha: 1}, 0.2, {startDelay: gi * 0.03});
+			FlxTween.tween(valTxt, {alpha: 1}, 0.2, {startDelay: gi * 0.03});
+
+			// Keep references for the live score/accuracy counters
+			if (gi == 1) scoreText = valTxt;
+			if (gi == 2) accuracyText = valTxt;
+			y += lh;
+			gi++;
+		}
+
+		gi = 0;
+		y = startY;
+		for (r in rows2)
+		{
+			var labelOver:Bool = false;
+			{
+				var p:FlxText = new FlxText(0, 0, 0, r.label + ":", 17);
+				p.setFormat(Paths.languageFont(), 17, FlxColor.WHITE, LEFT);
+				labelOver = p.width > col2LabelW;
+				p.destroy();
+			}
+			var lh:Float = labelOver ? lineH * 2 : lineH;
+
+			var labelTxt = new FlxText(col2X, y, col2LabelW + 4, r.label + ":", 17);
+			labelTxt.setFormat(Paths.languageFont(), 17, FlxColor.fromRGB(140, 150, 160), LEFT);
+			labelTxt.scrollFactor.set();
+			if (labelOver) labelTxt.textField.wordWrap = true;
+			labelTxt.alpha = 0;
+			detailGroup.add(labelTxt);
+
+			var valTxt = new FlxText(col2ValX, y, col2ValW, r.value, r.size);
+			valTxt.setFormat(Paths.languageFont(), r.size, r.color, LEFT);
+			valTxt.scrollFactor.set();
+			valTxt.alpha = 0;
+			detailGroup.add(valTxt);
+
+			FlxTween.tween(labelTxt, {alpha: 1}, 0.2, {startDelay: gi * 0.03});
+			FlxTween.tween(valTxt, {alpha: 1}, 0.2, {startDelay: gi * 0.03});
+			y += lh;
+			gi++;
 		}
 
 		updateGraph(e);
@@ -470,7 +590,22 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		var sickWindow = ClientPrefs.data.sickWindow;
 		var goodWindow = ClientPrefs.data.goodWindow;
 		var badWindow = ClientPrefs.data.badWindow;
+		var marvelousWindow = ClientPrefs.data.marvelousWindow;
+		var hasMarvelous = ClientPrefs.data.marvelousRatings;
 		var safeZoneOffset:Float = (ClientPrefs.data.safeFrames / 60) * 1000;
+
+		// LeatherEngine 移植: 优先使用该成绩记录实际使用的判定窗口 (details[24])
+		if (e.details != null && e.details.length > 24 && e.details[24] != null)
+		{
+			var recTimings:Array<Dynamic> = e.details[24];
+			if (recTimings != null && recTimings.length >= 4)
+			{
+				marvelousWindow = recTimings[0];
+				sickWindow = recTimings[1];
+				goodWindow = recTimings[2];
+				badWindow = recTimings[3];
+			}
+		}
 
 		var drawW:Float = 800;
 		var drawH:Float = 140;
@@ -492,7 +627,9 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 				var msAbs = Math.abs(noteMs[i]);
 				var color:Int;
 
-				if (msAbs <= sickWindow)
+				if (hasMarvelous && msAbs <= marvelousWindow)
+					color = 0xFFFFD700;
+				else if (msAbs <= sickWindow)
 					color = 0xFF00FFFF;
 				else if (msAbs <= goodWindow)
 					color = 0xFF00FF00;
@@ -524,6 +661,17 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			gfx.lineStyle(2, 0x7FFFFFFF);
 			gfx.moveTo(0, drawH * 0.5);
 			gfx.lineTo(drawW, drawH * 0.5);
+
+			// marvelous window lines (LeatherEngine 移植)
+			if (hasMarvelous && marvelousWindow <= sickWindow)
+			{
+				gfx.lineStyle(2, 0x7FFFD700);
+				var my = drawH * 0.5 + drawH * 0.5 * moveSize * (marvelousWindow / safeZoneOffset);
+				gfx.moveTo(0, my);
+				gfx.lineTo(drawW, my);
+				gfx.moveTo(0, drawH - my);
+				gfx.lineTo(drawW, drawH - my);
+			}
 
 			// sick window lines
 			gfx.lineStyle(2, 0x7F00FFFF);
@@ -605,7 +753,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		adjustScrollToSelected();
 
 		var targetY = listStartY + curSelected * itemHeight - scrollOffset + 2;
-		FlxTween.tween(selector, {y: targetY}, 0.2, {ease: FlxEase.quartOut});
+		FlxTween.tween(selector, {y: targetY}, 0.35, {ease: FlxEase.backOut});
 
 		updateDetails();
 		FlxG.sound.play(Paths.sound('scrollMenu'));

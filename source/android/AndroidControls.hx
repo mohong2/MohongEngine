@@ -5,6 +5,7 @@ package android;
  
 import flixel.util.FlxDestroyUtil;
 import flixel.util.FlxSignal;
+import flixel.util.FlxColor;
 import android.flixel.FlxButton;
 import android.flixel.FlxHitbox;
 import android.flixel.FlxVirtualPad;
@@ -25,22 +26,38 @@ class AndroidControls extends FlxSpriteGroup
 	{
 		super();
 
+		// 多k: 安卓端当前谱面非 4K 时只允许 FlxHitbox
+		var isMultiK:Bool = (PlayState.SONG != null && PlayState.SONG.mania != null && PlayState.SONG.mania != Note.defaultMania);
+
 		switch (AndroidControls.mode)
 		{
 			case 'Pad-Right':
-				virtualPad = new FlxVirtualPad(RIGHT_FULL, NONE, ClientPrefs.data.mobileCEx);
-				add(virtualPad);
+				if (isMultiK) createMultiKHitbox();
+				else { virtualPad = new FlxVirtualPad(RIGHT_FULL, NONE, ClientPrefs.data.mobileCEx); add(virtualPad); }
 			case 'Pad-Left':
-				virtualPad = new FlxVirtualPad(LEFT_FULL, NONE, ClientPrefs.data.mobileCEx);
-				add(virtualPad);
+				if (isMultiK) createMultiKHitbox();
+				else { virtualPad = new FlxVirtualPad(LEFT_FULL, NONE, ClientPrefs.data.mobileCEx); add(virtualPad); }
 			case 'Pad-Custom':
-				virtualPad = AndroidControls.customVirtualPad;
-				add(virtualPad);
+				if (isMultiK) createMultiKHitbox();
+				else { virtualPad = AndroidControls.customVirtualPad; add(virtualPad); }
 			case 'Hitbox':
-				hitbox = new FlxHitbox(4, Std.int(FlxG.width / 4), FlxG.height, [0xFF00FF, 0x00FFFF, 0x00FF00, 0xFF0000]);
-				add(hitbox);
+				createMultiKHitbox();
 			case 'Keyboard': // do nothing
 		}
+	}
+
+	/** 多k: 按当前 k 值生成 FlxHitbox, 色块对应各轨道 Note 颜色。 */
+	function createMultiKHitbox():Void
+	{
+		var ammo:Int = Note.ammo[PlayState.mania];
+		var colors:Array<FlxColor> = [];
+		for (lane in 0...ammo)
+		{
+			var c:Array<Int> = EKData.getLaneColor(PlayState.mania, lane);
+			colors.push(FlxColor.fromRGB(c[0], c[1], c[2]));
+		}
+		hitbox = new FlxHitbox(ammo, Std.int(FlxG.width / ammo), FlxG.height, colors);
+		add(hitbox);
 	}
 
 	override public function destroy():Void

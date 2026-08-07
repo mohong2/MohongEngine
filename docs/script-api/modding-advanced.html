@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Modding Advanced — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="ma.badge">Modding</div>
+  <h1 data-i18n="ma.title">Modding Advanced</h1>
+  <p class="sub" data-i18n="ma.sub">POLYMOD · pack.json · options.</p>
+
+  <h2 data-i18n="ma.h_layout">Folder layout</h2>
+<pre><code>MyMod/
+├── pack.json              <span class="cm"># metadata (required)</span>
+├── pack.png               <span class="cm"># icon</span>
+├── characters/            <span class="cm"># character JSON/images</span>
+├── custom_events/         <span class="cm"># custom events</span>
+├── custom_notetypes/      <span class="cm"># custom note types</span>
+├── hscripts/              <span class="cm"># HScript (root = all states, subdir = per-state)</span>
+│   ├── PlayState/  MainMenuState/  FreeplayState/ ...
+├── scripts/               <span class="cm"># Lua scripts</span>
+├── stages/                <span class="cm"># stage scripts</span>
+├── images/  music/  songs/  videos/  sounds/
+├── weeks/                 <span class="cm"># weeks</span>
+├── options/               <span class="cm"># custom option JSON</span>
+└── shaders/               <span class="cm"># shaders</span></code></pre>
+
+  <h2 data-i18n="ma.h_priority">Script priority</h2>
+<pre><code>current mod  →  global mods  →  mods/  →  assets/ (preload)</code></pre>
+
+  <h2 data-i18n="ma.h_pack">pack.json</h2>
+<pre><code>{
+  <span class="st">"name"</span>: <span class="st">"Name"</span>, <span class="st">"author"</span>: <span class="st">""</span>, <span class="st">"version"</span>: <span class="st">"1.0.0"</span>,
+  <span class="st">"zhdescription"</span>: <span class="st">"中文描述"</span>, <span class="st">"zhtdescription"</span>: <span class="st">"繁體中文描述"</span>,
+  <span class="st">"apiVersion"</span>: <span class="nu">1</span>,
+  <span class="st">"restart"</span>: <span class="kw">false</span>, <span class="st">"runsGlobally"</span>: <span class="kw">false</span>,
+  <span class="st">"dependencies"</span>: [],
+  <span class="st">"color"</span>: [<span class="nu">170</span>, <span class="nu">0</span>, <span class="nu">255</span>],
+  <span class="st">"useOldFPS"</span>: <span class="kw">false</span>,
+  <span class="st">"iconPath"</span>: <span class="st">"pack.png"</span>,
+  <span class="st">"windowTitle"</span>: <span class="st">""</span>,
+  <span class="st">"stateReplacements"</span>: {}, <span class="st">"substateReplacements"</span>: {},
+  <span class="st">"discordRPC"</span>: <span class="st">"..."</span>, <span class="st">"downloadLink"</span>: <span class="st">""</span>
+}</code></pre>
+
+  <h2 data-i18n="ma.h_options">Mod options</h2>
+<pre><code>mods/&lt;mod&gt;/options/&lt;CategoryID&gt;.json
+mods/&lt;mod&gt;/options/&lt;CategoryID&gt;.patch.json
+mods/&lt;mod&gt;/options/&lt;CategoryID&gt;/*.json
+mods/options/                        <span class="cm"># global</span></code></pre>
+  <ul>
+    <li data-i18n="ma.opt_store">Value storage.</li>
+    <li data-i18n="ma.opt_cat">Categories.</li>
+  </ul>
+
+  <h2 data-i18n="ma.h_compat">Compatibility</h2>
+  <ul>
+    <li data-i18n="ma.compat_api">apiVersion.</li>
+    <li data-i18n="ma.compat_check">Checks.</li>
+  </ul>
+
+  <h2 data-i18n="ma.h_switch">Mod switching (engine feature)</h2>
+  <ul>
+    <li data-i18n="ma.sw_menu">Main menu TAB.</li>
+    <li data-i18n="ma.sw_fp">FreePlay TAB.</li>
+    <li data-i18n="ma.sw_restart">Restart on switch.</li>
+    <li data-i18n="ma.sw_persist">Persistence.</li>
+  </ul>
+
+  <h2 data-i18n="ma.h_examples">Example mods</h2>
+  <p data-i18n="ma.examples">example_mods/ templates.</p>
+
+  <div class="note" data-i18n="ma.note_debug">Debug &amp; error-loop guard.</div>
+
+  <div class="btns">
+    <a class="btn ghost" href="hscript-interop.html" data-i18n="module.hi.title">← Interop</a>
+    <a class="btn primary" href="index.html" data-i18n="home">Home</a>
+  </div>
+</div>
+</body>
+</html>

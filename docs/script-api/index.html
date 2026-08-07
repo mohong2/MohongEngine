@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SeiunEngine · Script API Reference</title>
+<link rel="stylesheet" href="style.css">
+<script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="hero fade">
+    <div class="badge" data-i18n="index.badge">Mohong Engine</div>
+    <h1 data-i18n="index.title">Script API Reference</h1>
+    <p class="sub" data-i18n="index.sub">Lua + HScript modding reference.</p>
+  </div>
+
+  <div class="note"><span data-i18n="index.note1">Every function is source-verified and version-tagged.</span></div>
+  <div class="note warnbox"><b data-i18n="index.warn">Note on 1.0.x-only functions.</b></div>
+
+  <h2 data-i18n="index.legendTitle">Version tags</h2>
+  <div class="legend">
+    <p><span class="pill p063" data-i18n="tag.063">0.6.3+</span><span data-i18n="legend.063">0.6.3 base.</span></p>
+    <p><span class="pill p07" data-i18n="tag.07">0.7.x+</span><span data-i18n="legend.07">0.7.x back-ported.</span></p>
+    <p><span class="pill p1x" data-i18n="tag.1x">1.0.x only</span><span data-i18n="legend.1x">Only in Psych 1.0.4 — not here.</span></p>
+    <p><span class="pill pse" data-i18n="tag.seiun">SEIUN</span><span data-i18n="legend.seiun">Engine-specific addition.</span></p>
+    <p><span class="pill pdep" data-i18n="tag.dep">DEPRECATED</span><span data-i18n="legend.dep">Deprecated — use the new API.</span></p>
+  </div>
+
+  <h2 data-i18n="index.modules">Documentation modules</h2>
+  <div class="mgrid">
+    <div class="mcard"><h3 data-i18n="module.es.title">Engine States</h3><p data-i18n="module.es.desc">ModState, ModSubState, PlayState.</p><a href="engine-states.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.lq.title">Lua · Quickstart</h3><p data-i18n="module.lq.desc">First script, layout, lifecycle.</p><a href="lua-quickstart.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.lh.title">Lua · Hooks</h3><p data-i18n="module.lh.desc">All event callbacks.</p><a href="lua-hooks.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.f1.title">Lua · Functions I</h3><p data-i18n="module.f1.desc">Property, sprites, tweens, text, script mgmt.</p><a href="lua-functions-1.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.f2.title">Lua · Functions II</h3><p data-i18n="module.f2.desc">Judgment, input, audio, save, engine-new.</p><a href="lua-functions-2.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.lg.title">Lua · Globals</h3><p data-i18n="module.lg.desc">Song state &amp; settings variables.</p><a href="lua-globals.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.hq.title">HScript · Quickstart</h3><p data-i18n="module.hq.desc">Haxe-syntax scripting &amp; hooks.</p><a href="hscript-quickstart.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.he.title">HScript · Environment</h3><p data-i18n="module.he.desc">Globals, shorthand, input.</p><a href="hscript-environment.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.hi.title">HScript ↔ Lua Interop</h3><p data-i18n="module.hi.desc">LuaApi bridge.</p><a href="hscript-interop.html" data-i18n="open">Open →</a></div>
+    <div class="mcard"><h3 data-i18n="module.ma.title">Modding Advanced</h3><p data-i18n="module.ma.desc">Folder layout, pack.json, options.</p><a href="modding-advanced.html" data-i18n="open">Open →</a></div>
+  </div>
+
+  <h2 data-i18n="index.diff">Cross-version diff</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="index.col.function">Function</th><th>0.6.3</th><th>0.7.x</th><th>1.0.4</th><th data-i18n="index.col.seiun">SeiunEngine</th></tr></thead>
+      <tbody>
+        <tr><td class="fn">getProperty / setProperty</td><td class="diff-yes">✓</td><td class="diff-yes">✓</td><td class="diff-part">✓+</td><td data-i18n="index.diff.getset">0.6.3 style (allowMaps)</td></tr>
+        <tr><td class="fn">callMethod / createInstance / addInstance / instanceArg</td><td class="diff-no">✗</td><td class="diff-yes">✓</td><td class="diff-yes">✓</td><td><span class="pill p07" data-i18n="tag.07">0.7.x+</span></td></tr>
+        <tr><td class="fn">getModSetting</td><td class="diff-no">✗</td><td class="diff-yes">✓</td><td class="diff-yes">✓</td><td><span class="pill p07" data-i18n="tag.07">0.7.x+</span></td></tr>
+        <tr><td class="fn">loadLanguage / getLanguage / setOnScripts / getColorFromName</td><td class="diff-no">✗</td><td class="diff-no">✗</td><td class="diff-no">✗</td><td><span class="pill pse" data-i18n="tag.seiun">SEIUN</span></td></tr>
+        <tr><td class="fn">updateScoreText / addToGroup / loadMultipleFrames</td><td class="diff-no">✗</td><td class="diff-no">✗</td><td class="diff-yes">✓</td><td class="diff-no">✗</td></tr>
+        <tr><td class="fn">setCameraScroll / getCameraFollowX (8 fns)</td><td class="diff-no">✗</td><td class="diff-no">✗</td><td class="diff-yes">✓</td><td class="diff-no">✗</td></tr>
+        <tr><td class="fn">eraseSaveData</td><td class="diff-no">✗</td><td class="diff-yes">✓</td><td class="diff-yes">✓</td><td class="diff-no">✗</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <b data-i18n="module.f1.title">Templates:</b>
+    <a href="../TemplateScript.lua">TemplateScript.lua</a> (EN) · <a href="../zh_TemplateScript.lua">zh_TemplateScript.lua</a> (CN) · <code>docs/modTemplate.zip</code>
+    <br><a href="../../README.md" data-i18n="back.readme">Back to README →</a>
+  </div>
+
+  <div class="btns">
+    <a class="btn primary" href="lua-quickstart.html" data-i18n="start.lq">Start: Lua Quickstart</a>
+    <a class="btn ghost" href="hscript-quickstart.html" data-i18n="start.hq">Start: HScript Quickstart</a>
+  </div>
+</div>
+</body>
+</html>

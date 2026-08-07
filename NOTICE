@@ -1,0 +1,23 @@
+Seiun Engine (FNF-SeiunEngine)
+==============================
+
+Seiun Engine is a fork of Friday Night Funkin' - Psych Engine (0.6.3),
+distributed under the Apache License, Version 2.0 (see LICENSE).
+
+Psych Engine
+  Copyright (C) Shadow Mario, RiverOaken, Yoshubs and Psych Engine
+  contributors (https://github.com/ShadowMario/FNF-PsychEngine)
+
+Friday Night Funkin'
+  Copyright (C) ninjamuffin99, PhantomArcade, evilsk8r, kawaisprite
+  (https://github.com/FunkinCrew/Funkin)
+
+Codename Engine (design attribution, no source code included)
+  The mod-state scripting system and the pack.json mod API
+  (stateReplacements / substateReplacements, CNE chart format
+  import/export) are modeled after Codename Engine by the CodenameCrew
+  team (https://github.com/CodenameCrew/CodenameEngine).
+  This project is NOT a fork of Codename Engine and does not
+  distribute Codename Engine source code.
+
+See README.md / ZHREADME.md for the full credits list.

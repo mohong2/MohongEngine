@@ -357,7 +357,7 @@ class ModsMenuStateOld extends MusicBeatState
 		updatePosition();
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, B);
 		#end
 		#if LUA_ALLOWED
@@ -780,12 +780,18 @@ class ModMetadata
 		if(FileSystem.exists(path)) {
 			var rawJson:String = File.getContent(path);
 			if(rawJson != null && rawJson.length > 0) {
-				var stuff:Dynamic = Json.parse(rawJson);
+				var stuff:Dynamic = null;
+				try {
+					stuff = Json.parse(rawJson);
+				} catch(e) {
+					TraceManager.error('trace.modsMenuOld.invalidPackJson', 'Invalid pack.json in mod "{}" ({}): {}', [folder, path, e]);
+				}
+				if(stuff != null) {
 					//using reflects cuz for some odd reason my haxe hates the stuff.var shit
 					var colors:Array<Int> = Reflect.getProperty(stuff, "color");
 					var description:String = Reflect.getProperty(stuff, "description");
 					var name:String = Reflect.getProperty(stuff, "name");
-					var restart:Bool = Reflect.getProperty(stuff, "restart");
+					var restart:Dynamic = Reflect.getProperty(stuff, "restart");
 					var zhdescription:String = Reflect.getProperty(stuff, "zhdescription");
 
 				if(name != null && name.length > 0)
@@ -816,7 +822,8 @@ class ModMetadata
 					this.color = FlxColor.fromRGB(colors[0], colors[1], colors[2]);
 				}
 
-				this.restart = restart;
+				// pack.json may omit "restart"; guard against null before casting to Bool.
+				this.restart = (restart == true);
 				/*
 				if(stuff.name != null && stuff.name.length > 0)
 				{
@@ -830,6 +837,7 @@ class ModMetadata
 				{
 					this.color = FlxColor.fromRGB(stuff.color[0], stuff.color[1], stuff.color[2]);
 				}*/
+				}
 			}
 		}
 	}

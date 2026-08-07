@@ -19,6 +19,7 @@ import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import flixel.util.FlxColor;
 import openfl.Lib;
+import flash.media.Sound;
 import flixel.text.FlxText;
 import flixel.FlxSprite;
 import flixel.FlxBasic;
@@ -37,7 +38,7 @@ import states.LoadingState;
 import states.ModState;
 import substates.ModSubState;
 import mohong.TraceManager;
-#if (desktop && cpp && !android)
+#if (desktop && cpp && windows)
 import mohong.Windows;
 import mohong.TraceConsole;
 #end
@@ -89,7 +90,7 @@ class OptionsState extends MusicBeatState
 	var visibleBottom:Float = 720;
 	var catSelectorLeft:FlxText;
 	var catSelectorRight:FlxText;
-	#if android
+	#if TOUCH_CONTROLS
 	var catTipText:FlxText;
 	#end
 	var setGrpOptions:FlxTypedGroup<FlxTextMenuItem>;
@@ -141,7 +142,7 @@ class OptionsState extends MusicBeatState
 
 		ClientPrefs.saveSettings();
 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 
@@ -164,6 +165,13 @@ class OptionsState extends MusicBeatState
 			'onChangeFPSCounter'           => onChangeFPSCounter,
 			'onChangePauseMusic'           => onChangePauseMusic,
 			'onChangeGameplayHitsoundVolume' => onChangeGameplayHitsoundVolume,
+			'onChangeHitsound'             => onChangeHitsound,
+			'onChangeMarvelousRatings'     => onChangeMarvelousRatings,
+			'onChangeJudgementPreset'      => onChangeJudgementPreset,
+			'onChangeMarvelousWindow'      => onChangeMarvelousWindow,
+			'onChangeSickWindow'           => onChangeSickWindow,
+			'onChangeGoodWindow'           => onChangeGoodWindow,
+			'onChangeBadWindow'            => onChangeBadWindow,
 			'onChangeLanguage'             => onChangeLanguage,
 			'onChangeTraceConsole'         => onChangeTraceConsole,
 			'onChangeTraceConsoleLevel'    => onChangeTraceConsoleLevel,
@@ -224,7 +232,7 @@ class OptionsState extends MusicBeatState
 		add(catSelectorRight);
 		categorySprites.push(catSelectorRight);
 
-		#if android
+		#if TOUCH_CONTROLS
 		catTipText = new FlxText(10, FlxG.height - 24, 0,
 			Language.get("option.tipText", "Press C to customize your mobile controls"), 16);
 		catTipText.setFormat(Paths.optionsfont(), 16, FlxColor.WHITE, LEFT,
@@ -307,7 +315,7 @@ class OptionsState extends MusicBeatState
 		if (FlxG.mouse.wheel > 0)   changeCategorySelection(-1);
 		else if (FlxG.mouse.wheel < 0) changeCategorySelection(1);
 
-		#if !android
+		#if !TOUCH_CONTROLS
 		{
 			for (i in 0...catGrpOptions.length)
 			{
@@ -344,7 +352,7 @@ class OptionsState extends MusicBeatState
 				if (item == null || !item.visible) continue;
 
 				if (FlxG.mouse.overlaps(item, FlxG.camera)
-					#if android || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].overlaps(item)) #end)
+					#if TOUCH_CONTROLS || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].overlaps(item)) #end)
 				{
 					if (curSelected != i)
 					{
@@ -387,7 +395,7 @@ class OptionsState extends MusicBeatState
 			});
 		}
 
-		#if android
+		#if TOUCH_CONTROLS
 		if (virtualPad.buttonC.justPressed)
 		{
 			persistentUpdate = false;
@@ -409,7 +417,7 @@ class OptionsState extends MusicBeatState
 
 	function openSelectedCategory(id:String)
 	{
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		#end
 
@@ -631,7 +639,7 @@ class OptionsState extends MusicBeatState
 		changeSettingsSelection(0);
 		settingsReloadCheckboxes();
 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(LEFT_FULL, A_B_C);
 		addPadCamera();
 		#end
@@ -831,7 +839,7 @@ class OptionsState extends MusicBeatState
 				}
 			}
 
-			if (#if android virtualPad.buttonC.justPressed || #end controls.RESET)
+			if (#if TOUCH_CONTROLS virtualPad.buttonC.justPressed || #end controls.RESET)
 			{
 				for (i in 0...setOptionsArray.length)
 				{
@@ -850,7 +858,8 @@ class OptionsState extends MusicBeatState
 			}
 		}
 
-		if (setBoyfriend != null && setBoyfriend.animation.curAnim.finished)
+		if (setBoyfriend != null && setBoyfriend.animation != null
+			&& setBoyfriend.animation.curAnim != null && setBoyfriend.animation.curAnim.finished)
 			setBoyfriend.dance();
 
 		if (nextAccept > 0) nextAccept -= 1;
@@ -923,7 +932,8 @@ class OptionsState extends MusicBeatState
 		setBoyfriend = new Character(840, 170, 'bf', true);
 		setBoyfriend.setGraphicSize(Std.int(setBoyfriend.width * 0.75));
 		setBoyfriend.updateHitbox();
-		setBoyfriend.dance();
+		if (setBoyfriend.animation != null && setBoyfriend.animation.curAnim != null)
+			setBoyfriend.dance();
 		add(setBoyfriend);
 		setBoyfriend.visible = false;
 	}
@@ -1040,7 +1050,7 @@ class OptionsState extends MusicBeatState
 			transitioning = false;
 		}, 0.1);
 
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C);
 		#end
@@ -1080,7 +1090,7 @@ class OptionsState extends MusicBeatState
 			currentMode = MODE_CATEGORY;
 		}, 0.1);
 
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
@@ -1285,14 +1295,98 @@ class OptionsState extends MusicBeatState
 
 	function onChangeGameplayHitsoundVolume()
 	{
-		FlxG.sound.play(Paths.sound('hitsound'), ClientPrefs.data.hitsoundVolume);
+		onChangeHitsound();
+	}
+
+	// ── LeatherEngine 移植: 击打音效 / 判定手感 ──
+
+	function onChangeHitsound()
+	{
+		var hs:String = ClientPrefs.data.hitsound;
+		if (hs == null || hs.length == 0 || hs.toLowerCase() == 'none' || ClientPrefs.data.hitsoundVolume <= 0) return;
+
+		try
+		{
+			var loaded:Sound = Paths.sound('hitsounds/' + hs);
+			if (loaded != null)
+				FlxG.sound.play(loaded, ClientPrefs.data.hitsoundVolume);
+		}
+		catch (e:Dynamic)
+		{
+			// 自定义音效文件缺失时回退到默认 hitsound
+			try { FlxG.sound.play(Paths.sound('hitsound'), ClientPrefs.data.hitsoundVolume); } catch (_:Dynamic) {}
+		}
+	}
+
+	function onChangeMarvelousRatings()
+	{
+		// 只需要保存; ratingsData 会在下次进入 PlayState 时按此开关重建
+		ClientPrefs.saveSettings();
+	}
+
+	function onChangeJudgementPreset()
+	{
+		var preset:String = ClientPrefs.data.judgementPreset;
+		if (preset == null || preset.length == 0 || preset == 'Custom') return;
+
+		var timings:Array<Int> = backend.Ratings.returnPreset(preset);
+		if (timings == null || timings.length < 4) return;
+
+		ClientPrefs.data.judgementTimings = timings.copy();
+		backend.Ratings.syncWindows();
+
+		// 刷新所有选项显示 (窗口值会随预设改变)
+		if (setOptionsArray != null)
+			for (opt in setOptionsArray) settingsUpdateText(opt);
+
+		ClientPrefs.saveSettings();
+	}
+
+	function onChangeMarvelousWindow()
+	{
+		ClientPrefs.data.judgementTimings[0] = ClientPrefs.data.marvelousWindow;
+		backend.Ratings.syncWindows();
+		ClientPrefs.data.judgementPreset = 'Custom';
+		refreshJudgementPresetText();
+	}
+
+	function onChangeSickWindow()
+	{
+		ClientPrefs.data.judgementTimings[1] = ClientPrefs.data.sickWindow;
+		backend.Ratings.syncWindows();
+		ClientPrefs.data.judgementPreset = 'Custom';
+		refreshJudgementPresetText();
+	}
+
+	function onChangeGoodWindow()
+	{
+		ClientPrefs.data.judgementTimings[2] = ClientPrefs.data.goodWindow;
+		backend.Ratings.syncWindows();
+		ClientPrefs.data.judgementPreset = 'Custom';
+		refreshJudgementPresetText();
+	}
+
+	function onChangeBadWindow()
+	{
+		ClientPrefs.data.judgementTimings[3] = ClientPrefs.data.badWindow;
+		backend.Ratings.syncWindows();
+		ClientPrefs.data.judgementPreset = 'Custom';
+		refreshJudgementPresetText();
+	}
+
+	/** 刷新"判定预设"选项的显示文本 (改为 Custom 后立即更新) */
+	function refreshJudgementPresetText()
+	{
+		if (setOptionsArray == null) return;
+		for (opt in setOptionsArray)
+			if (opt.variable == 'judgementPreset') settingsUpdateText(opt);
 	}
 
 	// ── Extra ──
 
 	function onChangeLanguage()
 	{
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		#end
 		Language.load();
@@ -1302,7 +1396,7 @@ class OptionsState extends MusicBeatState
 
 	function onChangeTraceConsole()
 	{
-		#if (desktop && cpp && !android)
+		#if (desktop && cpp && windows)
 		mohong.TraceManager.enableConsoleOutput(false);
 		mohong.TraceConsole.stop();
 
@@ -1322,7 +1416,7 @@ class OptionsState extends MusicBeatState
 
 	function onChangeTraceConsoleLevel()
 	{
-		#if (desktop && cpp && !android)
+		#if (desktop && cpp && windows)
 		if (!mohong.Windows.hasConsole()) return;
 		var level:String = ClientPrefs.data.traceConsoleLevel;
 		if (level != null && level.length > 0)
@@ -1401,7 +1495,7 @@ class OptionsState extends MusicBeatState
 		}
 		changeCategorySelection(0, false);
 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 	}

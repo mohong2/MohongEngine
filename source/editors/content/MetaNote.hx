@@ -21,6 +21,12 @@ class MetaNote extends Note
         loadNoteGraphics();
     }
 
+    /** 编辑器当前格宽 (多k: 自适应格宽, 与 NewChartingState.GRID_SIZE 保持一致)。 */
+    static inline function gridSize():Int
+    {
+        return editors.NewChartingState.GRID_SIZE;
+    }
+
     /** Per-type texture cache keyed by "skin:pixel:S" where S=isSustain. */
     static var _texCache:Map<String, FlxFramesCollection> = new Map();
 
@@ -93,6 +99,21 @@ class MetaNote extends Note
                 centerOffsets();
                 centerOrigin();
             }
+            // 多k: 自定义皮肤 (非 NOTE_assets) 不应用调色 shader
+            if (skin == 'NOTE_assets')
+            {
+                if (colorSwap == null && noteData > -1 && noteType != 'Hurt Note')
+                {
+                    colorSwap = new ColorSwap();
+                    shader = colorSwap.shader;
+                }
+                applyLaneColor();
+            }
+            else if (colorSwap != null)
+            {
+                colorSwap = null;
+                shader = null;
+            }
         }
     }
 
@@ -100,21 +121,24 @@ class MetaNote extends Note
     {
         this.chartNoteData = v;
         this.songData[1] = v;
-        this.noteData = v % 4;
-        this.mustPress = (v < 4);
+        // 多k: 按该 Note 自身的 k 解释 (Change Mania 事件分段, 不跟随播放头 k)
+        var ammo:Int = Note.ammo[EKData.clampMania(this.mania)];
+        this.noteData = v % ammo;
+        this.mustPress = (v < ammo);
         
         if(!PlayState.isPixelStage)
             loadNoteAnims();
         else
             loadPixelNoteAnims();
 
-        animation.play(colArray[this.noteData % 4] + 'Scroll');
+        animation.play(colArray[baseTex()] + 'Scroll');
+        applyLaneColor();
         updateHitbox();
         
         if(width > height)
-            setGraphicSize(ChartingState.GRID_SIZE);
+            setGraphicSize(gridSize());
         else
-            setGraphicSize(0, ChartingState.GRID_SIZE);
+            setGraphicSize(0, gridSize());
         updateHitbox();
     }
 
@@ -138,7 +162,7 @@ class MetaNote extends Note
                 sustainSprite = new FlxSprite().makeGraphic(1, 1, FlxColor.WHITE);
                 sustainSprite.scrollFactor.x = 0;
             }
-            sustainSprite.setGraphicSize(8, Std.int(Math.max(ChartingState.GRID_SIZE/4, (Math.round((v * ChartingState.GRID_SIZE + ChartingState.GRID_SIZE) / stepCrochet) * zoom) - ChartingState.GRID_SIZE/2)));
+            sustainSprite.setGraphicSize(8, Std.int(Math.max(gridSize()/4, (Math.round((v * gridSize() + gridSize()) / stepCrochet) * zoom) - gridSize()/2)));
             sustainSprite.updateHitbox();
         }
     }
@@ -165,7 +189,7 @@ class MetaNote extends Note
         {
             if(!noteTypeTexts.exists(num))
             {
-                txt = new FlxText(0, 0, ChartingState.GRID_SIZE, (num > 0) ? Std.string(num) : '?', 16);
+                txt = new FlxText(0, 0, gridSize(), (num > 0) ? Std.string(num) : '?', 16);
                 txt.autoSize = false;
                 txt.alignment = CENTER;
                 txt.borderStyle = SHADOW;
@@ -216,7 +240,7 @@ class EventMetaNote extends MetaNote
         events = eventData[1];
         
         loadGraphic(Paths.image('eventArrow'));
-        setGraphicSize(ChartingState.GRID_SIZE);
+        setGraphicSize(editors.NewChartingState.EVENT_COLUMN_WIDTH);
         updateHitbox();
 
         eventText = new FlxText(0, 0, 400, '', 12);

@@ -134,5 +134,31 @@
 		"type": "string",
 		"defaultValue": "High",
 		"options": ["Low", "Medium", "High"]
+	},
+	{
+		"nameKey": "option.closeAnimStyle",
+		"defaultName": "Close Animation",
+		"descKey": "option.closeAnimStyle.desc",
+		"defaultDesc": "Play an animation before the window closes when you press Alt+F4 or click X.\nOff: close instantly.\nSqueeze: squish the window height first, then the width.\nZoom: shrink everything toward the center.\nDrop: shrink while falling down.\nSlide: shrink while sliding to the left.",
+		"variable": "closeAnimStyle",
+		"type": "string",
+		"defaultValue": "squeeze",
+		"options": ["off", "squeeze", "zoom", "drop", "slide"],
+		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.closeAnimSpeed",
+		"defaultName": "Close Animation Speed",
+		"descKey": "option.closeAnimSpeed.desc",
+		"defaultDesc": "How fast the close animation plays. 1.0x is the default speed; higher values play faster.",
+		"variable": "closeAnimSpeed",
+		"type": "float",
+		"defaultValue": 1.0,
+		"minValue": 0.5,
+		"maxValue": 3.0,
+		"changeValue": 0.25,
+		"decimals": 2,
+		"scrollSpeed": 0.8,
+		"platform": "desktop"
 	}
 ]

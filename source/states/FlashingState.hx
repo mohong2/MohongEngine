@@ -38,7 +38,7 @@ class FlashingState extends MusicBeatState
 		warnText.font = Paths.font("vcrcn.ttf"); 
 		warnText.screenCenter(Y);
 		add(warnText);
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(NONE, A_B);
 		#end
 }

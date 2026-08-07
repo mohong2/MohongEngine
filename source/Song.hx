@@ -29,8 +29,12 @@ typedef SwagSong =
 
 	@:optional var disableNoteRGB:Bool;
 
+	/** 多k: 谱面键数 (0 基: 3 = 4K, 8 = 9K)。旧 4K 谱面无此字段, 默认 3。 */
+	@:optional var mania:Null<Int>;
+
 	@:optional var arrowSkin:String;
 	@:optional var splashSkin:String;
+	@:optional var difficultyName:String; // original chart difficulty (osu Version / Malody meta.version)
 	public var validScore:Null<Bool>;
 }
 
@@ -50,6 +54,7 @@ class Song
 	public var gameOverLoop:String;
 	public var gameOverEnd:String;
 	public var disableNoteRGB:Bool = false;
+	public var mania:Null<Int> = 3;
 	public var speed:Float = 1;
 	public var stage:String;
 	public var player1:String = 'bf';
@@ -63,6 +68,9 @@ class Song
 
 	private static function onLoadJson(songJson:Dynamic) // Convert old charts to newest format
 	{
+		if (songJson.mania == null)
+			songJson.mania = Note.defaultMania;
+
 		if (songJson.gfVersion == null)
 		{
 			songJson.gfVersion = songJson.player3;
@@ -226,8 +234,20 @@ class Song
 						songJson.format = 'psych_v1_convert';
 						convert(songJson);
 						isNewVersion = true; // 数据已转换
-					}
+				}
 			}
+		}
+
+		if (songJson.mania == null)
+			songJson.mania = Note.defaultMania;
+
+		// Normalize a whitespace-only difficulty name (e.g. imported charts
+		// with an empty Version / meta.version) so it never leaks into exports.
+		if (songJson.difficultyName != null)
+		{
+			var dn:String = Std.string(songJson.difficultyName);
+			if (StringTools.trim(dn).length == 0)
+				Reflect.deleteField(songJson, 'difficultyName');
 		}
 
 		return songJson;

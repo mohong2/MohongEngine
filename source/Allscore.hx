@@ -2,8 +2,10 @@ package;
 
 import haxe.Json;
 import haxe.io.Bytes;
+#if sys
 import sys.io.File;
 import sys.FileSystem;
+#end
 import flixel.FlxG;
 import flixel.util.FlxSave;
 
@@ -19,35 +21,37 @@ class Allscore
 	{
 		entries = new Map();
 
+		#if sys
 		if (!FileSystem.exists(SCORE_DIR))
 		{
 			FileSystem.createDirectory(SCORE_DIR);
-			return;
 		}
-
-		var files = FileSystem.readDirectory(SCORE_DIR);
-		for (file in files)
+		else
 		{
-			if (!StringTools.endsWith(file, ".json")) continue;
-
-			#if sys
-			var filePath = SCORE_DIR + file;
-			try
+			var files = FileSystem.readDirectory(SCORE_DIR);
+			for (file in files)
 			{
-				var entry = readEntryFromJson(filePath);
-				if (entry != null)
+				if (!StringTools.endsWith(file, ".json")) continue;
+
+				var filePath = SCORE_DIR + file;
+				try
 				{
-					var key = Highscore.formatSong(entry.songName, entry.difficulty);
-					if (!entries.exists(key)) entries.set(key, []);
-					entries.get(key).push(entry);
+					var entry = readEntryFromJson(filePath);
+					if (entry != null)
+					{
+						var key = Highscore.formatSong(entry.songName, entry.difficulty);
+						if (!entries.exists(key)) entries.set(key, []);
+						entries.get(key).push(entry);
+					}
+				}
+				catch (e:Dynamic)
+				{
+					CoolUtil.traceMsg('trace.errScoreRead', 'Error reading score file {}: {}', [filePath, e]);
 				}
 			}
-			catch (e:Dynamic)
-			{
-				CoolUtil.traceMsg('trace.errScoreRead', 'Error reading score file {}: {}', [filePath, e]);
-			}
-			#end
 		}
+		#end
+
 		for (key => list in entries)
 		{
 			list.sort((a, b) -> Reflect.compare(b.date, a.date));
@@ -56,7 +60,7 @@ class Allscore
 
 	public static function addEntry(songName:String, difficulty:Int,
 		rating:Float = -1, ratingFC:String = "", ratingName:String = "", score:Int = 0,
-		sicks:Int = -1, goods:Int = -1, bads:Int = -1, shits:Int = -1,
+		marvelouses:Int = -1, sicks:Int = -1, goods:Int = -1, bads:Int = -1, shits:Int = -1,
 		misses:Int = -1, maxCombo:Int = -1,
 		replayData:Array<Dynamic> = null,
 		details:Array<Dynamic> = null,
@@ -82,6 +86,7 @@ class Allscore
 			ratingFC: ratingFC,
 			ratingName: ratingName,
 			score: score,
+			marvelouses: marvelouses,
 			sicks: sicks,
 			goods: goods,
 			bads: bads,
@@ -177,6 +182,7 @@ class Allscore
 			ratingPercent: entry.ratingPercent,
 			ratingName: entry.ratingName,
 			ratingFC: entry.ratingFC,
+			marvelouses: entry.marvelouses,
 			sicks: entry.sicks,
 			goods: entry.goods,
 			bads: entry.bads,
@@ -213,6 +219,7 @@ class Allscore
 			ratingFC: data.ratingFC,
 			ratingName: data.ratingName,
 			score: data.score,
+			marvelouses: data.marvelouses,
 			sicks: data.sicks,
 			goods: data.goods,
 			bads: data.bads,
@@ -264,6 +271,7 @@ typedef ScoreEntry = {
 	var ratingPercent:Float;
 	var ratingName:String;
 	var ratingFC:String;
+	@:optional var marvelouses:Int;
 	var sicks:Int;
 	var goods:Int;
 	var bads:Int;

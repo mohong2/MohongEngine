@@ -83,7 +83,13 @@ class CoolUtil
 
 	public static function difficultyString():String
 	{
-		return difficulties[PlayState.storyDifficulty].toUpperCase();
+		if (difficulties.length < 1)
+			return defaultDifficulty.toUpperCase();
+		var idx:Int = PlayState.storyDifficulty;
+		if (idx < 0 || idx >= difficulties.length)
+			idx = difficulties.indexOf(defaultDifficulty);
+		if (idx < 0) idx = 0;
+		return difficulties[idx].toUpperCase();
 	}
 
 	inline public static function boundTo(value:Float, min:Float, max:Float):Float {
@@ -177,18 +183,20 @@ class CoolUtil
 		#if sys
 			if(!absolute) folder =  Sys.getCwd() + '$folder';
 
-			folder = folder.replace('/', '\\');
-			if(folder.endsWith('/')) folder.substr(0, folder.length - 1);
+			folder = haxe.io.Path.normalize(folder);
+			if(folder.endsWith('/')) folder = folder.substr(0, folder.length - 1);
 
 			#if linux
 			var command:String = '/usr/bin/xdg-open';
+			#elseif mac
+			var command:String = 'open';
 			#else
 			var command:String = 'explorer.exe';
 			#end
 			Sys.command(command, [folder]);
 			trace('$command $folder');
 		#else
-			FlxG.error("Platform is not supported for CoolUtil.openFolder");
+			FlxG.log.error("Platform is not supported for CoolUtil.openFolder");
 		#end
 	}
 

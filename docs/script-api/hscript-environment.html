@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HScript · Environment &amp; API — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="he.badge">HScript</div>
+  <h1 data-i18n="he.title">HScript Environment &amp; API</h1>
+  <p class="sub" data-i18n="he.sub">Globals, shorthand, input.</p>
+  <div class="note" data-i18n="he.note_version">Version 0.2.0.</div>
+
+  <h2 data-i18n="he.h_stdlib">Haxe stdlib</h2>
+  <p><code>Math</code> <code>Std</code> <code>StringTools</code> <code>Sys</code> <code>Type</code> <code>Reflect</code> <code>Date</code> <code>DateTools</code> <code>Lambda</code> <code>EReg</code> <code>Xml</code> <code>Json</code> <code>IntMap</code> <code>StringMap</code> <code>ObjectMap</code> <code>Bytes</code> <code>File</code> <code>FileSystem</code> <code>Process</code> (sys) etc.</p>
+
+  <h2 data-i18n="he.h_flixel">Flixel / OpenFL / Lime</h2>
+  <p><code>FlxG</code> <code>FlxMath</code> <code>FlxSprite</code> <code>FlxCamera</code> <code>FlxTimer</code> <code>FlxTween</code> <code>FlxEase</code> <code>FlxText</code> <code>FlxSound</code> <code>FlxGroup</code> <code>FlxTypedGroup</code> <code>FlxSpriteGroup</code> <code>FlxAtlasFrames</code> <code>FlxColor</code> <code>FlxObject</code> <code>FlxButton</code> <code>FlxBar</code> <code>FlxPoint</code> <code>FlxRect</code> <code>FlxRandom</code> <code>Application</code> <code>Assets</code> <code>Sprite</code> <code>Stage</code> <code>BitmapData</code> <code>Graphics</code> <code>Shader</code> ...</p>
+  <p>FPS: <code>FPS</code> (new) · <code>OldFPS</code> (legacy) · <code>fpsVar</code> · <code>oldFpsVar</code></p>
+
+  <h2 data-i18n="he.h_core">Engine core classes</h2>
+  <p><code>Paths</code> <code>Conductor</code> <code>ClientPrefs</code> <code>Dialog</code> <code>Character</code> <code>Alphabet</code> <code>FunkinText</code> <code>FunkinSprite</code> <code>FunkinButton</code> <code>FunkinBar</code> <code>MusicBeatState</code> <code>MusicBeatSubstate</code> <code>ModState</code> <code>ModSubState</code> <code>PlayState</code> <code>FreeplayState</code> <code>StoryMenuState</code> <code>TitleState</code> <code>CreditsState</code> <code>MainMenuState</code> <code>OldPauseSubState</code> <code>HScript</code> <code>CoolUtil</code> <code>WeekData</code> <code>Language</code> <code>LoadingState</code> <code>Highscore</code> <code>ModConfig</code> <code>FlxRuntimeShader</code> <code>VideoSpriteManager</code> <code>MP4Handler</code> (video) ...</p>
+
+  <h2 data-i18n="he.h_const">Control constants</h2>
+  <p><code>Function_Stop</code> <code>Function_Continue</code> <code>Function_StopLua</code> <code>Function_StopHScript</code> <code>Function_StopAll</code></p>
+
+  <h2 data-i18n="he.h_bound">PlayState-bound variables</h2>
+  <p><code>game</code> <code>state</code> <code>getState()</code> <code>curBpm</code> <code>bpm</code> <code>scrollSpeed</code> <code>crochet</code> <code>stepCrochet</code> <code>songLength</code> <code>songName</code> <code>songPath</code> <code>startedCountdown</code> <code>curStage</code> <code>compatibility_mode</code> <code>isStoryMode</code> <code>difficulty</code> <code>difficultyName</code> <code>weekRaw</code> <code>week</code> <code>seenCutscene</code> <code>healthGainMult</code> <code>healthLossMult</code> <code>playbackRate</code> <code>instakillOnMiss</code> <code>botPlay</code> <code>practice</code> <code>luattf</code> <code>addBehindGF</code> <code>addBehindDad</code> <code>addBehindBF</code> <code>setVar/getVar/removeVar</code> <code>luaDebugMode</code> <code>luaDeprecatedWarnings</code> <code>inChartEditor</code> <code>language</code> <code>customSubstate</code> <code>customSubstateName</code> <code>buildTarget</code> <code>version</code> <code>screenWidth</code> <code>screenHeight</code> <code>hscriptVersion</code></p>
+  <div class="note" data-i18n="he.note_dynamic">Dynamic objects.</div>
+
+  <h2 data-i18n="he.h_short">Shorthand functions</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="he.col_method">Function</th><th data-i18n="he.col_notes">Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="fn">add(obj) · insert(pos, obj) · remove(obj, splice)</td><td data-i18n="he.short_add.desc">State helpers.</td></tr>
+        <tr><td class="fn">setModWindowIcon(?modFolder)</td><td data-i18n="he.short_icon.desc">Window icon.</td></tr>
+        <tr><td class="fn">setOldFPS(useOld) · setFpsOverride(?text, ?color) · fpsGlitch(text, color, dur) · getFpsStyle()</td><td data-i18n="he.short_fps.desc">FPS control.</td></tr>
+        <tr><td class="fn">loadModTextFile(path) · parseTextConfig(content, ?prefix)</td><td data-i18n="he.short_cfg.desc">Config helper.</td></tr>
+        <tr><td class="fn">setOldPause(useOld) · resetOldPause()</td><td data-i18n="he.short_pause.desc">Pause screen.</td></tr>
+        <tr><td class="fn">importScript(path)</td><td data-i18n="he.short_import.desc">Import.</td></tr>
+        <tr><td class="fn">runLuaCode(code)</td><td data-i18n="he.short_lua.desc">Run Lua.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 data-i18n="he.h_input">Input</h2>
+  <p><code>keyJustPressed/Pressed/Released(name)</code> (<code>left/down/up/right/accept/back/pause/reset/space</code>) · <code>keyboardJustPressed/Pressed/Released</code> · <code>anyGamepadJustPressed/Pressed/Released</code> · <code>gamepadAnalogX/Y(id, ?leftStick)</code> · <code>gamepadJustPressed/Pressed/Released(id, name)</code></p>
+
+  <h2 data-i18n="he.h_load">Script loading</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="he.col_method">Method</th><th data-i18n="he.col_notes">Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="fn">new(?path)</td><td data-i18n="he.new.desc">Construct.</td></tr>
+        <tr><td class="fn">loadScriptFromPath(path)</td><td data-i18n="he.loadpath.desc">Load path.</td></tr>
+        <tr><td class="fn">execute(code)</td><td data-i18n="he.execute.desc">Execute.</td></tr>
+        <tr><td class="fn">call(func, args)</td><td data-i18n="he.call.desc">Call.</td></tr>
+        <tr><td class="fn">set(var, data) · get(var) · exists(var)</td><td data-i18n="he.vars.desc">Variables.</td></tr>
+        <tr><td class="fn">reload() · stop()</td><td data-i18n="he.reload.desc">Reload / stop.</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Static: <code>initialize()</code> <code>loadGlobalScripts()</code> <code>reloadGlobalScripts()</code> <code>loadModBootScript()</code> <code>callOnGlobalScript(event, args)</code> <code>setOnGlobalScript(var, arg)</code> <code>isHscriptFile(file)</code></p>
+
+  <div class="btns">
+    <a class="btn ghost" href="hscript-quickstart.html" data-i18n="module.hq.title">← Quickstart</a>
+    <a class="btn primary" href="hscript-interop.html" data-i18n="module.hi.title">Next: Interop</a>
+  </div>
+</div>
+</body>
+</html>

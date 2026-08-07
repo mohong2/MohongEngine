@@ -2,6 +2,7 @@ package editors;
 
 import Section.SwagSection;
 import Song.SwagSong;
+import EKData.Keybinds;
  
 import flixel.addons.transition.FlxTransitionableState;
  
@@ -34,8 +35,9 @@ class EditorPlayState extends MusicBeatState
 	var startOffset:Float = 0;
 	var startPos:Float = 0;
 
-	public function new(startPos:Float) {
+	public function new(startPos:Float, ?mania:Null<Int>) {
 		this.startPos = startPos;
+		if (mania != null) PlayState.mania = EKData.clampMania(mania);
 		Conductor.songPosition = startPos - startOffset;
 
 		startOffset = Conductor.crochet;
@@ -59,18 +61,17 @@ class EditorPlayState extends MusicBeatState
 	override function create()
 	{
 		instance = this;
+		if (PlayState.SONG != null && PlayState.SONG.mania != null)
+			PlayState.mania = EKData.clampMania(PlayState.SONG.mania);
 
 		var bg:FlxSprite = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		bg.scrollFactor.set();
 		bg.color = FlxColor.fromHSB(FlxG.random.int(0, 359), FlxG.random.float(0, 0.8), FlxG.random.float(0.3, 1));
 		add(bg);
 
-		keysArray = [
-			ClientPrefs.copyKey(ClientPrefs.keyBinds.get('note_left')),
-			ClientPrefs.copyKey(ClientPrefs.keyBinds.get('note_down')),
-			ClientPrefs.copyKey(ClientPrefs.keyBinds.get('note_up')),
-			ClientPrefs.copyKey(ClientPrefs.keyBinds.get('note_right'))
-		];
+		EKData.loadConfig();
+		var allKeybinds:Array<Array<Dynamic>> = Keybinds.fill();
+		keysArray = (PlayState.mania >= 0 && PlayState.mania < allKeybinds.length) ? allKeybinds[PlayState.mania] : allKeybinds[3];
 		
 		strumLine = new FlxSprite(ClientPrefs.data.middleScroll ? PlayState.STRUM_X_MIDDLESCROLL : PlayState.STRUM_X, 50).makeGraphic(FlxG.width, 10);
 		if(ClientPrefs.data.downScroll) strumLine.y = FlxG.height - 150;
@@ -103,7 +104,7 @@ class EditorPlayState extends MusicBeatState
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
 		else
 			vocals = new FlxSound();
-		#if android
+		#if TOUCH_CONTROLS
 		addAndroidControls();
 		androidControls.visible = true;
 		#end
@@ -217,11 +218,14 @@ class EditorPlayState extends MusicBeatState
 				if(songNotes[1] > -1) { //Real notes
 					var daStrumTime:Float = songNotes[0];
 					if(daStrumTime >= startPos) {
-						var daNoteData:Int = Std.int(songNotes[1] % 4);
+						// 多k: 按该 Note 自身时间点的生效键数解释 (Change Mania 事件分段)
+						var noteMania:Int = EKData.effectiveManiaAtTime(songData.events, PlayState.mania, daStrumTime);
+						var noteAmmo:Int = Note.ammo[noteMania];
+						var daNoteData:Int = Std.int(songNotes[1] % noteAmmo);
 
 						var gottaHitNote:Bool = section.mustHitSection;
 
-						if (songNotes[1] > 3)
+						if (songNotes[1] >= noteAmmo)
 						{
 							gottaHitNote = !section.mustHitSection;
 						}
@@ -233,6 +237,8 @@ class EditorPlayState extends MusicBeatState
 							oldNote = null;
 
 						var swagNote:Note = new Note(daStrumTime, daNoteData, oldNote);
+						swagNote.mania = noteMania;
+						swagNote.applyLaneColor();
 						swagNote.mustPress = gottaHitNote;
 						swagNote.sustainLength = songNotes[2];
 						swagNote.noteType = songNotes[3];
@@ -251,6 +257,8 @@ class EditorPlayState extends MusicBeatState
 								oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
 
 								var sustainNote:Note = new Note(daStrumTime + (Conductor.stepCrochet * susNote) + (Conductor.stepCrochet / FlxMath.roundDecimal(PlayState.SONG.speed, 2)), daNoteData, oldNote, true);
+								sustainNote.mania = noteMania;
+								sustainNote.applyLaneColor();
 								sustainNote.mustPress = gottaHitNote;
 								sustainNote.noteType = swagNote.noteType;
 								sustainNote.scrollFactor.set();
@@ -324,7 +332,7 @@ class EditorPlayState extends MusicBeatState
 	override function update(elapsed:Float) {
 		if (#if android FlxG.android.justReleased.BACK || #end FlxG.keys.justPressed.ESCAPE)
 		{
-			#if android androidControls.visible = false; #end
+			#if TOUCH_CONTROLS androidControls.visible = false; #end
 			FlxG.sound.music.pause();
 			vocals.pause();
 			if(ClientPrefs.data.newchartingstate)
@@ -420,7 +428,7 @@ class EditorPlayState extends MusicBeatState
 							if(daNote.mustPress || !daNote.ignoreNote)
 							{
 								if(daNote.y - daNote.offset.y * daNote.scale.y + daNote.height >= center
-									&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
+									&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
 								{
 									var swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
 									swagRect.height = (center - daNote.y) / daNote.scale.y;
@@ -437,7 +445,7 @@ class EditorPlayState extends MusicBeatState
 						{
 							if (daNote.isSustainNote
 								&& daNote.y + daNote.offset.y * daNote.scale.y <= center
-								&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
+								&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
 							{
 								var swagRect = new FlxRect(0, 0, daNote.width / daNote.scale.x, daNote.height / daNote.scale.y);
 								swagRect.y = (center - daNote.y) / daNote.scale.y;
@@ -458,7 +466,7 @@ class EditorPlayState extends MusicBeatState
 					if(daNote.isSustainNote && !daNote.animation.curAnim.name.endsWith('end')) {
 						time += 0.15;
 					}
-					StrumPlayAnim(true, Std.int(Math.abs(daNote.noteData)) % 4, time);
+					StrumPlayAnim(true, Std.int(Math.abs(daNote.noteData)) % Note.ammo[PlayState.mania], time);
 					daNote.hitByOpponent = true;
 
 					if (!daNote.isSustainNote)
@@ -677,6 +685,22 @@ class EditorPlayState extends MusicBeatState
 		var down = controls.NOTE_DOWN;
 		var left = controls.NOTE_LEFT;
 		var controlHoldArray:Array<Bool> = [left, down, up, right];
+		// 多k: 4K 以上轨道直接读键位 (试玩模式)
+		for (i in 0...Note.ammo[PlayState.mania])
+		{
+			if (i < 4) continue;
+			var held:Bool = false;
+			if (i < keysArray.length)
+			{
+				var binds:Array<FlxKey> = keysArray[i];
+				if (binds != null)
+				{
+					for (j in 0...binds.length)
+						if (FlxG.keys.checkStatus(binds[j], PRESSED)) held = true;
+				}
+			}
+			controlHoldArray.push(held);
+		}
 		
 		// TO DO: Find a better way to handle controller inputs, this should work for now
 		if(ClientPrefs.data.controllerMode)
@@ -959,7 +983,7 @@ class EditorPlayState extends MusicBeatState
 
 	private function generateStaticArrows(player:Int):Void
 	{
-		for (i in 0...4)
+		for (i in 0...Note.ammo[PlayState.mania])
 		{
 			// FlxG.log.add(i);
 			var targetAlpha:Float = 1;
@@ -980,8 +1004,9 @@ class EditorPlayState extends MusicBeatState
 			{
 				if(ClientPrefs.data.middleScroll)
 				{
+					var separator:Int = Note.separator[PlayState.mania];
 					babyArrow.x += 310;
-					if(i > 1) { //Up and Right
+					if(i > separator) { //Up and Right
 						babyArrow.x += FlxG.width / 2 + 25;
 					}
 				}
@@ -990,6 +1015,17 @@ class EditorPlayState extends MusicBeatState
 
 			strumLineNotes.add(babyArrow);
 			babyArrow.postAddedToGroup();
+			// 多k: middleScroll 时对手 strum 自适应屏幕两侧, 避免与玩家 strum 重叠
+			if (player == 0 && ClientPrefs.data.middleScroll && Note.ammo[PlayState.mania] > 4)
+			{
+				var separator:Int = Note.separator[PlayState.mania];
+				var ammo:Int = Note.ammo[PlayState.mania];
+				var step:Float = babyArrow.width - EKData.lessX[PlayState.mania];
+				if (i <= separator)
+					babyArrow.x = 30 + i * step;
+				else
+					babyArrow.x = FlxG.width - 30 - (ammo - i) * step;
+			}
 		}
 	}
 
@@ -1024,9 +1060,14 @@ class EditorPlayState extends MusicBeatState
 		var skin:String = 'noteSplashes';
 		if(PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0) skin = PlayState.SONG.splashSkin;
 		
-		var hue:Float = ClientPrefs.data.arrowHSV[data % 4][0] / 360;
-		var sat:Float = ClientPrefs.data.arrowHSV[data % 4][1] / 100;
-		var brt:Float = ClientPrefs.data.arrowHSV[data % 4][2] / 100;
+		var lane:Int = Std.int(Math.abs(data)) % Note.ammo[PlayState.mania];
+		var delta:Array<Float> = EKData.getLaneColorSwap(PlayState.mania, lane);
+		var colorIdx:Int = EKData.letterColorIndex.get(EKData.getLetter(PlayState.mania, lane));
+		if (colorIdx < 0) colorIdx = lane;
+		var hsv:Array<Int> = (colorIdx < ClientPrefs.data.arrowHSV.length) ? ClientPrefs.data.arrowHSV[colorIdx] : [0, 0, 0];
+		var hue:Float = delta[0] + hsv[0] / 360;
+		var sat:Float = delta[1] + hsv[1] / 100;
+		var brt:Float = delta[2] + hsv[2] / 100;
 		if(note != null) {
 			skin = note.noteSplashTexture;
 			hue = note.noteSplashHue;

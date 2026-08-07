@@ -129,8 +129,8 @@ class ModConfig
 			readStrArray(json, "dependencies", function(v) cfg.dependencies = v);
 
 			// ── Appearance ──
-			var c:Array<Dynamic> = Reflect.getProperty(json, "color");
-			if (c != null && c.length >= 3)
+			var c:Array<Dynamic> = (json != null && Reflect.hasField(json, "color")) ? cast Reflect.field(json, "color") : null;
+			if (c != null && Std.isOfType(c, Array) && c.length >= 3)
 				cfg.color = [Std.int(c[0]), Std.int(c[1]), Std.int(c[2])];
 			cfg.iconFramerate = readInt(json, "iconFramerate", 10);
 			readStr(json, "iconPath", function(v) cfg.iconPath = v);
@@ -253,31 +253,36 @@ class ModConfig
 
 	static function readStr(json:Dynamic, field:String, cb:String->Void):Void
 	{
-		var v:String = Reflect.getProperty(json, field);
-		if (v != null && v.length > 0) cb(v);
+		if (json == null || !Reflect.hasField(json, field)) return;
+		var v:Dynamic = Reflect.field(json, field);
+		if (v != null && Std.isOfType(v, String) && Std.string(v).length > 0) cb(Std.string(v));
 	}
 
 	static function readInt(json:Dynamic, field:String, def:Int):Int
 	{
-		var v:Dynamic = Reflect.getProperty(json, field);
-		return (v != null && Std.isOfType(v, Int)) ? Std.int(v) : def;
+		if (json == null || !Reflect.hasField(json, field)) return def;
+		var v:Dynamic = Reflect.field(json, field);
+		return (v != null && (Std.isOfType(v, Int) || Std.isOfType(v, Float))) ? Std.int(v) : def;
 	}
 
 	static function readBool(json:Dynamic, field:String, def:Bool):Bool
 	{
-		var v:Dynamic = Reflect.getProperty(json, field);
+		if (json == null || !Reflect.hasField(json, field)) return def;
+		var v:Dynamic = Reflect.field(json, field);
 		return (v != null && Std.isOfType(v, Bool)) ? v == true : def;
 	}
 
 	static function readStrArray(json:Dynamic, field:String, cb:Array<String>->Void):Void
 	{
-		var v:Array<Dynamic> = Reflect.getProperty(json, field);
+		if (json == null || !Reflect.hasField(json, field)) return;
+		var v:Array<Dynamic> = cast Reflect.field(json, field);
 		if (v != null && Std.isOfType(v, Array)) cb(v.map(function(e) return Std.string(e)));
 	}
 
 	static function readMap(json:Dynamic, field:String, target:Map<String, String>):Void
 	{
-		var reps:Dynamic = Reflect.getProperty(json, field);
+		if (json == null || !Reflect.hasField(json, field)) return;
+		var reps:Dynamic = Reflect.field(json, field);
 		if (reps != null && Reflect.isObject(reps))
 		{
 			for (orig in Reflect.fields(reps))

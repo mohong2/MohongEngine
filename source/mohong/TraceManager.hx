@@ -522,8 +522,12 @@ class TraceManager
                 listener(entry);
             } catch (e:Dynamic) {
                 // 防止监听器崩溃影响系统
+                #if sys
                 if (consoleOutput)
                     Sys.println('[$RESET_COLOR\x1b[31mERROR\x1b[0m] TraceManager: Listener error: $e');
+                #else
+                trace('TraceManager: Listener error: $e');
+                #end
             }
         }
     }

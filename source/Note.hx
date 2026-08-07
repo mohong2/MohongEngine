@@ -27,6 +27,8 @@ typedef EventNote = {
     public var sustainLength:Float = 0;
     public var parentST:Float = 0;
     public var parentSL:Float = 0;
+    /** 多k: 该 Note 所属键数快照 (0 基, -1 = 跟随 PlayState.mania)。 */
+    public var mania:Int = -1;
     public var hitHealth:Float = 0.023;
     public var missHealth:Float = 0.0475;
     public var hitCausesMiss:Bool = false;
@@ -59,6 +61,36 @@ final defaultNoteTypes:Array<String> = [
 ];
 
 class Note extends FlxSprite {
+    // ============ 多k 静态数据 (转发到 EKData) ============
+    public static var minMania:Int = 0;
+    public static var maxMania:Int = 17;
+    public static var defaultMania:Int = 3;
+    public static var ammo:Array<Int> = EKData.ammo;
+    public static var keysShit:Map<Int, Map<String, Dynamic>> = EKData.keysShit;
+    public static var scales:Array<Float> = EKData.scales;
+    public static var lessX:Array<Int> = EKData.lessX;
+    public static var separator:Array<Int> = EKData.noteSep;
+    public static var xtra:Array<Float> = EKData.offsetX;
+    public static var posRest:Array<Float> = EKData.restPosition;
+    public static var gridSizes:Array<Int> = EKData.gridSizes;
+    public static var noteSplashScales:Array<Float> = EKData.splashScales;
+    public static var pixelScales:Array<Float> = EKData.pixelScales;
+    // ======================================================
+
+    /**
+     * 动画帧序列缓存：为几十万个同图集 Note 复用 addByPrefix 的帧扫描结果，
+     * 每个 Note 仍会独立 add 动画对象（flixel 动画是 per-sprite 的），但省去重复的
+     * 帧前缀扫描（对高帧数图集 + 海量 Note 可显著降低加载耗时）。
+     * key = 图集路径 + 类型 + 动画名。由 clearNoteAnimCache() 在状态/纹理切换时清空。
+     */
+    public static var noteAnimFrames:Map<String, Array<Int>> = [];
+    public static function clearNoteAnimCache():Void {
+        noteAnimFrames = [];
+    }
+
+    /** 当前 Note 的动画缓存基键（图集 + 类型），在 reloadNote 中计算。 */
+    private var _animCacheKey:String = null;
+
     public var extraData:Map<String,Dynamic> = [];
     public var strumTime:Float = 0;
     public var mustPress:Bool = false;
@@ -93,7 +125,10 @@ class Note extends FlxSprite {
     public var eventVal1:String = '';
     public var eventVal2:String = '';
 
+    /** 多k: 使用原版 ColorSwap (类型化才能触发 setter 写入 shader); Hurt/自定义纹理 Note 为 null。 */
     public var colorSwap:ColorSwap;
+    /** 多k: 是否应用轨道色着色器 (默认 true; Hurt Note / 脚本 setNoteTexture 自定义纹理时 false)。 */
+    public var applyLaneColorShader:Bool = true;
     public var inEditor:Bool = false;
 
     public var animSuffix:String = '';
@@ -143,6 +178,87 @@ class Note extends FlxSprite {
 
     public var originalHeightForCalcs:Float = 6;
 
+    /**
+     * 多k: 该 Note 生成时的 mania 快照 (0 基)。中途 Change Mania 时已生成的 Note
+     * 保持原 k 值渲染/判定，直到被销毁；新生成的 Note 使用新 k 值。
+     */
+    public var mania:Int = 3;
+
+    /** Lua/HScript: 自定义该 Note 的 ColorSwap 值 [hue, sat, brt] (直接覆盖轨道色)。null 表示按轨道。 */
+    public var noteColorOverride:Array<Float> = null;
+
+    /** Lua/HScript: 自定义该 Note 命中时的角色动作 (如 "singLEFT" 或 "singUP-miss")。null 表示按轨道。 */
+    public var customCharAnim:String = null;
+
+    /** 多k: 该 Note 在己方一侧的轨道索引 (0 ~ ammo-1)。 */
+    inline public function laneData():Int
+    {
+        return Std.int(Math.abs(noteData) % Note.ammo[mania]);
+    }
+
+    /** 多k: 复用的基底纹理索引 (0=left, 1=down, 2=up, 3=right)。 */
+    inline public function baseTex():Int
+    {
+        return EKData.getBaseTexture(mania, laneData());
+    }
+
+    /** 多k: 按轨道颜色设置 ColorSwap (基底纹理色 + 目标色差值 + 用户 arrowHSV 偏移)。 */
+    public function applyLaneColor():Void
+    {
+        if (colorSwap == null) return;
+        var lane:Int = laneData();
+        if (noteColorOverride != null)
+        {
+            colorSwap.hue = noteColorOverride[0];
+            colorSwap.saturation = noteColorOverride[1];
+            colorSwap.brightness = noteColorOverride[2];
+            return;
+        }
+        var delta:Array<Float> = EKData.getLaneColorSwap(mania, lane);
+        var colorIdx:Int = EKData.letterColorIndex.get(EKData.getLetter(mania, lane));
+        if (colorIdx < 0) colorIdx = lane;
+        var hsv:Array<Int> = (colorIdx < ClientPrefs.data.arrowHSV.length) ? ClientPrefs.data.arrowHSV[colorIdx] : [0, 0, 0];
+        var hue:Float = delta[0] + hsv[0] / 360;
+        while (hue < 0) hue += 1;
+        while (hue >= 1) hue -= 1;
+        colorSwap.hue = hue;
+        colorSwap.saturation = delta[1] + hsv[1] / 100;
+        colorSwap.brightness = delta[2] + hsv[2] / 100;
+    }
+
+    /** 多k: 每 k 值的 Note 缩放倍率 (相对 4K)。 */
+    public static function noteScale(mania:Int):Float
+    {
+        return EKData.scales[EKData.clampMania(mania)] / EKData.scales[3];
+    }
+
+    /**
+     * 多k: 中途切换 k 值时, 实时重置该 Note 的缩放大小以匹配新的 k 值布局。
+     * 保留该 Note 生成时的 mania 快照 (判定/轨道不变), 仅重算视觉缩放,
+     * 避免 >9K 时已生成 Note 与新的 strum 大小不一致。
+     * 使用 frameWidth/frameHeight (原始帧尺寸) 计算, 避免已缩放后二次缩放累积。
+     */
+    public function resetNoteScaleForMania(newMania:Int):Void
+    {
+        if (noteData < 0 || frames == null) return;
+        var lastScaleY:Float = scale.y;
+        var rawW:Int = Math.round(frameWidth);
+        if (PlayState.isPixelStage)
+        {
+            setGraphicSize(Std.int(rawW * PlayState.daPixelZoom * (EKData.pixelScales[EKData.clampMania(newMania)] / EKData.pixelScales[3])));
+            antialiasing = false;
+        }
+        else
+        {
+            setGraphicSize(Std.int(rawW * 0.7 * Note.noteScale(newMania)));
+        }
+        if (isSustainNote) scale.y = lastScaleY; // 长条高度由步进长度决定, 不随 k 缩放
+        updateHitbox();
+        // 换 k 后轨道颜色/基底纹理可能变化, 重新应用颜色
+        if (applyLaneColorShader && colorSwap != null && noteData > -1)
+            applyLaneColor();
+    }
+
     private function set_multSpeed(value:Float):Float {
         if(!isSustainNote || isSustainEnd) {
             multSpeed = value;
@@ -191,21 +307,13 @@ class Note extends FlxSprite {
     }
 
     private function set_noteType(value:String):String {
-		if (colorSwap == null) return value; // safety: colorSwap only created when noteData > -1
-        if(noteData > -1 && noteData < ClientPrefs.data.arrowHSV.length) {
-            colorSwap.hue = ClientPrefs.data.arrowHSV[noteData][0] / 360;
-            colorSwap.saturation = ClientPrefs.data.arrowHSV[noteData][1] / 100;
-            colorSwap.brightness = ClientPrefs.data.arrowHSV[noteData][2] / 100;
-        }
         if(noteData > -1 && noteType != value) {
             switch(value) {
                 case 'Hurt Note':
                     ignoreNote = mustPress;
+                    applyLaneColorShader = false; // Hurt Note 不应用多k 调色
                     reloadNote('HURT');
                     noteSplashTexture = 'HURTnoteSplashes';
-                    colorSwap.hue = 0;
-                    colorSwap.saturation = 0;
-                    colorSwap.brightness = 0;
                     lowPriority = true;
                     if(isSustainNote) missHealth = 0.1;
                     else missHealth = 0.3;
@@ -220,15 +328,34 @@ class Note extends FlxSprite {
             }
             noteType = value;
         }
-        noteSplashHue = colorSwap.hue;
-        noteSplashSat = colorSwap.saturation;
-        noteSplashBrt = colorSwap.brightness;
+        if (colorSwap != null)
+        {
+            if(noteData > -1) applyLaneColor();
+            noteSplashHue = colorSwap.hue;
+            noteSplashSat = colorSwap.saturation;
+            noteSplashBrt = colorSwap.brightness;
+        }
+        else
+        {
+            noteSplashHue = 0;
+            noteSplashSat = 0;
+            noteSplashBrt = 0;
+        }
         return value;
+    }
+
+    /** 多k: 创建原版 ColorSwap (与 vanilla 相同, 多k 仅设置轨道色差值)。 */
+    static inline function makeColorSwap():ColorSwap
+    {
+        return new ColorSwap();
     }
 
     public function new(?strumTime:Float = 0, ?noteData:Int = 0, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?skipTexture:Bool = false) {
         super();
-        if(prevNote == null) prevNote = this;
+        mania = PlayState.mania;
+        // 不再让 prevNote 自指成环（prevNote=this）。首段 sustain 的 prevNote 保持 null，
+        // 逻辑上与原自引用完全等价（见 EditorPlayState，其 prevNote 判空后结果一致），
+        // 但避免构造阶段对自身执行无谓的动画/缩放操作，以及 nextNote 自环。
         this.prevNote = prevNote;
         isSustainNote = sustainNote;
         this.inEditor = inEditor;
@@ -240,12 +367,14 @@ class Note extends FlxSprite {
         this.noteData = noteData;
 
         if(noteData > -1) {
-            if(!skipTexture) texture = '';
-            colorSwap = new ColorSwap();
+            // 先创建着色器, 再触发纹理加载 (reloadNote 内部会 applyLaneColor 设置轨道色),
+            // 避免 reloadNote 创建的着色器被构造函数再次创建的新着色器覆盖而丢失颜色
+            colorSwap = makeColorSwap();
             shader = colorSwap.shader;
+            if(!skipTexture) texture = '';
             x += swagWidth * noteData;
-            if(!skipTexture && !isSustainNote && noteData > -1 && noteData < 4) {
-                animation.play(colArray[noteData % 4] + 'Scroll');
+            if(!skipTexture && !isSustainNote && noteData > -1) {
+                animation.play(colArray[baseTex()] + 'Scroll');
             }
         }
 
@@ -260,14 +389,14 @@ class Note extends FlxSprite {
 
             offsetX += width / 2;
             copyAngle = false;
-            animation.play(colArray[noteData % 4] + 'holdend');
+            animation.play(colArray[baseTex()] + 'holdend');
             updateHitbox();
             offsetX -= width / 2;
             if(PlayState.isPixelStage) offsetX += 30;
 
             if(prevNote.isSustainNote) {
                 isSustainEnd = false;
-                prevNote.animation.play(colArray[prevNote.noteData % 4] + 'hold');
+                prevNote.animation.play(colArray[prevNote.baseTex()] + 'hold');
                 prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
                 if(PlayState.instance != null) prevNote.scale.y *= PlayState.instance.songSpeed;
                 if(PlayState.isPixelStage) {
@@ -288,6 +417,39 @@ class Note extends FlxSprite {
 
     var lastNoteOffsetXForPixelAutoAdjusting:Float = 0;
 
+    /**
+     * 计算并保存当前 (图集, 类型) 的动画缓存基键到 this._animCacheKey。
+     * 供 loadNoteAnims / loadPixelNoteAnims 中的 addCachedAnim 复用帧序列。
+     */
+    inline function setAnimCacheKey(blahblah:String):Void
+    {
+        _animCacheKey = blahblah + (isSustainNote ? '::s' : '::n');
+    }
+
+    /**
+     * 复用已缓存的帧序列添加动画；未缓存则先 addByPrefix 并缓存其帧序列。
+     * 这样每个 Note 仍独立拥有动画对象（flixel 动画 per-sprite），但避免重复扫描帧前缀。
+     */
+    inline function addCachedAnim(name:String, prefix:String):Void
+    {
+        var key:String = (_animCacheKey != null ? _animCacheKey : '') + '::' + name;
+        var cached:Array<Int> = noteAnimFrames.get(key);
+        if (cached == null)
+        {
+            animation.addByPrefix(name, prefix);
+            var anim = animation.getByName(name);
+            if (anim != null)
+            {
+                cached = anim.frames;
+                noteAnimFrames.set(key, cached);
+            }
+        }
+        else
+        {
+            animation.add(name, cached, 30, true);
+        }
+    }
+
     public function reloadNote(?prefix:String = '', ?texture:String = '', ?suffix:String = '') {
         if(prefix == null) prefix = '';
         if(texture == null) texture = '';
@@ -304,6 +466,7 @@ class Note extends FlxSprite {
         arraySkin[arraySkin.length-1] = prefix + arraySkin[arraySkin.length-1] + suffix;
         var lastScaleY:Float = scale.y;
         var blahblah:String = arraySkin.join('/');
+        setAnimCacheKey(blahblah);
 
         if(PlayState.isPixelStage) {
             if(isSustainNote) {
@@ -318,7 +481,7 @@ class Note extends FlxSprite {
                 height = height / 5;
                 loadGraphic(Paths.image('pixelUI/' + blahblah), true, Math.floor(width), Math.floor(height));
             }
-            setGraphicSize(Std.int(width * PlayState.daPixelZoom));
+            setGraphicSize(Std.int(width * PlayState.daPixelZoom * (PlayState.isPixelStage ? EKData.pixelScales[mania] / EKData.pixelScales[3] : 1)));
             loadPixelNoteAnims();
             antialiasing = false;
             if(isSustainNote) {
@@ -326,11 +489,14 @@ class Note extends FlxSprite {
                 lastNoteOffsetXForPixelAutoAdjusting = (width - 7) * (PlayState.daPixelZoom / 2);
                 offsetX -= lastNoteOffsetXForPixelAutoAdjusting;
             }
-        } else {
-            frames = Paths.getSparrowAtlas(blahblah);
-            loadNoteAnims();
-            antialiasing = ClientPrefs.data.globalAntialiasing;
-        }
+		} else {
+			frames = Paths.getSparrowAtlas(blahblah);
+			if (frames != null)
+			{
+				loadNoteAnims();
+				antialiasing = ClientPrefs.data.globalAntialiasing;
+			}
+		}
         if(isSustainNote) scale.y = lastScaleY;
         updateHitbox();
         if(animName != null) animation.play(animName, true);
@@ -338,28 +504,58 @@ class Note extends FlxSprite {
             setGraphicSize(ChartingState.GRID_SIZE, ChartingState.GRID_SIZE);
             updateHitbox();
         }
+        // 脚本显式传入非默认纹理 -> 关闭多k 调色 (模组自定义 Note 不着色)
+        if (texture.length > 0 && texture != 'NOTE_assets')
+            applyLaneColorShader = false;
+
+        if (applyLaneColorShader)
+        {
+            // 需要染色时确保着色器存在 (含从 Hurt/自定义纹理恢复的情况)
+            if (colorSwap == null && noteData > -1 && noteType != 'Hurt Note')
+            {
+                colorSwap = makeColorSwap();
+                shader = colorSwap.shader;
+            }
+            if (colorSwap != null && noteData > -1)
+                applyLaneColor();
+        }
+        else if (colorSwap != null)
+        {
+            colorSwap = null;
+            shader = null;
+        }
     }
 
     function loadNoteAnims() {
-        var safeNoteData:Int = (noteData >= 0 && noteData < 4) ? noteData : 0;
-        animation.addByPrefix(colArray[safeNoteData] + 'Scroll', colArray[safeNoteData] + '0');
+        var b:Int = (noteData >= 0) ? baseTex() : 0;
+        addCachedAnim(colArray[b] + 'Scroll', colArray[b] + '0');
         if(isSustainNote) {
-            animation.addByPrefix('purpleholdend', 'pruple end hold');
-            animation.addByPrefix(colArray[safeNoteData] + 'holdend', colArray[safeNoteData] + ' hold end');
-            animation.addByPrefix(colArray[safeNoteData] + 'hold', colArray[safeNoteData] + ' hold piece');
+            addCachedAnim('purpleholdend', 'pruple end hold');
+            addCachedAnim(colArray[b] + 'holdend', colArray[b] + ' hold end');
+            addCachedAnim(colArray[b] + 'hold', colArray[b] + ' hold piece');
         }
-        setGraphicSize(Std.int(width * 0.7));
+        setGraphicSize(Std.int(width * 0.7 * Note.noteScale(mania)));
         updateHitbox();
     }
 
     function loadPixelNoteAnims() {
-        var safeNoteData:Int = (noteData >= 0 && noteData < 4) ? noteData : 0;
+        var b:Int = (noteData >= 0) ? baseTex() : 0;
         if(isSustainNote) {
-            animation.add(colArray[safeNoteData] + 'holdend', [pixelInt[safeNoteData] + 4]);
-            animation.add(colArray[safeNoteData] + 'hold', [pixelInt[safeNoteData]]);
+            pixAddAnim(colArray[b] + 'holdend', [pixelInt[b] + 4]);
+            pixAddAnim(colArray[b] + 'hold', [pixelInt[b]]);
         } else {
-            animation.add(colArray[safeNoteData] + 'Scroll', [pixelInt[safeNoteData] + 4]);
+            pixAddAnim(colArray[b] + 'Scroll', [pixelInt[b] + 4]);
         }
+    }
+
+    /** 像素音符动画以显式帧数组注册，同样走帧序列缓存避免重复分配。 */
+    inline function pixAddAnim(name:String, frames:Array<Int>):Void
+    {
+        var key:String = (_animCacheKey != null ? _animCacheKey : '') + '::pix::' + name;
+        if (!noteAnimFrames.exists(key))
+            noteAnimFrames.set(key, frames);
+        // 像素动画始终以显式帧数组 add，按 sprite 独立注册（缓存仅用于去重复创建无谓对象）
+        animation.add(name, frames, 30, true);
     }
 
     public function setupNoteData(chartNoteData:PreloadedChartNote):Void {
@@ -367,6 +563,8 @@ class Note extends FlxSprite {
         hitByOpponent = false;
         tooLate = false;
         canBeHit = false;
+        // 多k: 优先使用谱面解析时按 Change Mania 事件算出的 k 快照
+        mania = (chartNoteData.mania >= 0) ? EKData.clampMania(chartNoteData.mania) : PlayState.mania;
 
         strumTime = chartNoteData.strumTime;
         noteData = chartNoteData.noteData;
@@ -406,10 +604,14 @@ class Note extends FlxSprite {
         x = (ClientPrefs.data.middleScroll ? PlayState.STRUM_X_MIDDLESCROLL : PlayState.STRUM_X) + 50 + Note.swagWidth * noteData;
         y = -2000;
 
+        // 多k: 池化复用 Note 时确保着色器存在
+        applyLaneColorShader = true; // 复用后恢复默认 (Hurt/自定义纹理由后续 noteType/texture 重新决定)
         if(colorSwap == null) {
-            colorSwap = new ColorSwap();
+            colorSwap = makeColorSwap();
             shader = colorSwap.shader;
         }
+        noteColorOverride = null;
+        customCharAnim = null;
 
         var ns:String = chartNoteData.noteskin;
         var tx:String = chartNoteData.texture;
@@ -442,7 +644,9 @@ class Note extends FlxSprite {
         ignoreNote = chartNoteData.ignoreNote;
         blockHit = chartNoteData.blockHit;
 
-        var safeAnimData:Int = (noteData >= 0 && noteData < 4) ? noteData : 0;
+        applyLaneColor();
+
+        var b:Int = (noteData >= 0) ? baseTex() : 0;
 
         if(isSustainNote) {
             alpha = 0.6;
@@ -452,7 +656,7 @@ class Note extends FlxSprite {
             offsetX += width / 2;
             copyAngle = false;
 
-            var animToPlay:String = colArray[safeAnimData] + (chartNoteData.isSustainEnd ? 'holdend' : 'hold');
+            var animToPlay:String = colArray[b] + (chartNoteData.isSustainEnd ? 'holdend' : 'hold');
             animation.play(animToPlay);
             updateHitbox();
             offsetX -= width / 2;
@@ -475,7 +679,7 @@ class Note extends FlxSprite {
             }
         } else {
             earlyHitMult = 1;
-            animation.play(colArray[safeAnimData] + 'Scroll');
+            animation.play(colArray[b] + 'Scroll');
             if(!copyAngle) copyAngle = true;
         }
          // Visibility (don't override alpha set above)

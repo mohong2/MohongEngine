@@ -27,6 +27,28 @@
 		"defaultValue": true
 	},
 	{
+		"nameKey": "option.ignoreErrorLoopScripts",
+		"defaultName": "Ignore Error-Loop Scripts",
+		"descKey": "option.ignoreErrorLoopScripts.desc",
+		"defaultDesc": "If a Lua/HScript keeps throwing errors every frame, ignore that script\nonce it reaches the error limit instead of spamming errors non-stop.",
+		"variable": "ignoreErrorLoopScripts",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.scriptErrorLimit",
+		"defaultName": "Script Error Limit",
+		"descKey": "option.scriptErrorLimit.desc",
+		"defaultDesc": "How many consecutive errors a script may throw before it is ignored.",
+		"variable": "scriptErrorLimit",
+		"type": "int",
+		"defaultValue": 50,
+		"scrollSpeed": 10,
+		"minValue": 10,
+		"maxValue": 1000,
+		"displayFormat": "%v"
+	},
+	{
 		"nameKey": "option.downScroll",
 		"defaultName": "Downscroll",
 		"descKey": "option.downScroll.desc",
@@ -128,6 +150,17 @@
 		"onChange": "onChangeGameplayHitsoundVolume"
 	},
 	{
+		"nameKey": "option.hitsound",
+		"defaultName": "Hitsound",
+		"descKey": "option.hitsound.desc",
+		"defaultDesc": "Select which sound plays when you hit a note.\nThe list comes from data/hitsoundList.txt, so you can add your own\nby appending a name to that txt and putting the sound file in sounds/hitsounds/.",
+		"variable": "hitsound",
+		"type": "string",
+		"defaultValue": "osu!mania",
+		"options": ["none", "osu!mania", "daveandbambi", "snap", "clap"],
+		"onChange": "onChangeHitsound"
+	},
+	{
 		"nameKey": "option.ratingOffset",
 		"defaultName": "Rating Offset",
 		"descKey": "option.ratingOffset.desc",
@@ -141,45 +174,6 @@
 		"maxValue": 30
 	},
 	{
-		"nameKey": "option.sickWindow",
-		"defaultName": "Sick! Hit Window",
-		"descKey": "option.sickWindow.desc",
-		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Sick!\" in milliseconds.",
-		"variable": "sickWindow",
-		"type": "int",
-		"defaultValue": 45,
-		"displayFormat": "%vms",
-		"scrollSpeed": 15,
-		"minValue": 15,
-		"maxValue": 80
-	},
-	{
-		"nameKey": "option.goodWindow",
-		"defaultName": "Good! Hit Window",
-		"descKey": "option.goodWindow.desc",
-		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Good\" in milliseconds.",
-		"variable": "goodWindow",
-		"type": "int",
-		"defaultValue": 90,
-		"displayFormat": "%vms",
-		"scrollSpeed": 30,
-		"minValue": 15,
-		"maxValue": 100
-	},
-	{
-		"nameKey": "option.badWindow",
-		"defaultName": "Bad! Hit Window",
-		"descKey": "option.badWindow.desc",
-		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Bad\" in milliseconds.",
-		"variable": "badWindow",
-		"type": "int",
-		"defaultValue": 130,
-		"displayFormat": "%vms",
-		"scrollSpeed": 60,
-		"minValue": 15,
-		"maxValue": 135
-	},
-	{
 		"nameKey": "option.safeFrames",
 		"defaultName": "Safe Frames",
 		"descKey": "option.safeFrames.desc",
@@ -191,6 +185,83 @@
 		"minValue": 2,
 		"maxValue": 10,
 		"changeValue": 0.1
+	},
+	{
+		"nameKey": "option.marvelousRatings",
+		"defaultName": "Marvelous Ratings",
+		"descKey": "option.marvelousRatings.desc",
+		"defaultDesc": "If checked, a 'Marvelous' rating is added before Sick.",
+		"variable": "marvelousRatings",
+		"type": "bool",
+		"defaultValue": true,
+		"onChange": "onChangeMarvelousRatings"
+	},
+	{
+		"nameKey": "option.judgementPreset",
+		"defaultName": "Judgement Preset",
+		"descKey": "option.judgementPreset.desc",
+		"defaultDesc": "Apply a preset judgement timing (Leather Engine / Psych Engine / Friday Night Funkin').\nManually changing any window below will switch this to Custom.",
+		"variable": "judgementPreset",
+		"type": "string",
+		"defaultValue": "Leather Engine",
+		"options": ["Leather Engine", "Psych Engine / Kade Engine", "Friday Night Funkin'", "Custom"],
+		"onChange": "onChangeJudgementPreset"
+	},
+	{
+		"nameKey": "option.marvelousWindow",
+		"defaultName": "Marvelous! Hit Window",
+		"descKey": "option.marvelousWindow.desc",
+		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Marvelous\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
+		"variable": "marvelousWindow",
+		"type": "int",
+		"defaultValue": 25,
+		"displayFormat": "%vms",
+		"scrollSpeed": 10,
+		"minValue": 1,
+		"maxValue": 300,
+		"onChange": "onChangeMarvelousWindow"
+	},
+	{
+		"nameKey": "option.sickWindow",
+		"defaultName": "Sick! Hit Window",
+		"descKey": "option.sickWindow.desc",
+		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Sick!\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
+		"variable": "sickWindow",
+		"type": "int",
+		"defaultValue": 45,
+		"displayFormat": "%vms",
+		"scrollSpeed": 15,
+		"minValue": 1,
+		"maxValue": 300,
+		"onChange": "onChangeSickWindow"
+	},
+	{
+		"nameKey": "option.goodWindow",
+		"defaultName": "Good! Hit Window",
+		"descKey": "option.goodWindow.desc",
+		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Good\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
+		"variable": "goodWindow",
+		"type": "int",
+		"defaultValue": 90,
+		"displayFormat": "%vms",
+		"scrollSpeed": 30,
+		"minValue": 2,
+		"maxValue": 400,
+		"onChange": "onChangeGoodWindow"
+	},
+	{
+		"nameKey": "option.badWindow",
+		"defaultName": "Bad! Hit Window",
+		"descKey": "option.badWindow.desc",
+		"defaultDesc": "Changes the amount of time you have\nfor hitting a \"Bad\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
+		"variable": "badWindow",
+		"type": "int",
+		"defaultValue": 130,
+		"displayFormat": "%vms",
+		"scrollSpeed": 60,
+		"minValue": 3,
+		"maxValue": 500,
+		"onChange": "onChangeBadWindow"
 	},
 	{
 		"nameKey": "option.sustainsAsOneNote",

@@ -61,7 +61,15 @@ typedef StateRecord = {
 	var goodWindow:Int;
 	var badWindow:Int;
 	var safeFrames:Float;
+	/** LeatherEngine 移植: 录制时的判定手感 (marvelous/sick/good/bad ms 窗口) */
+	@:optional var judgementTimings:Array<Int>;
+	/** LeatherEngine 移植: 录制时的判定类型 (预设名或 Custom) */
+	@:optional var judgementPreset:String;
+	@:optional var marvelousRatings:Bool;
+	@:optional var marvelousWindow:Int;
 	var replayVersion:Int;
+	/** 多k: 录制时的键数 (mania+1, 用于回放校验) */
+	@:optional var mania:Int;
 }
 
 class Replay extends FlxBasic
@@ -89,6 +97,10 @@ class Replay extends FlxBasic
 	private var tmpReleaseLanes:Array<Int> = [];
 	private var tmpHeldLanes:Array<Bool> = [];
 
+	/** 每帧"补长条/空闲动画"用的空事件数组 (避免每帧 GC) */
+	private var tmpEmptyPress:Array<Int> = [];
+	private var tmpEmptyRelease:Array<Int> = [];
+
 	/** 缓存的按键名称列表 (所有 FlxKey 的字符串名) */
 	private static var cachedKeyNames:Array<String> = null;
 
@@ -96,6 +108,12 @@ class Replay extends FlxBasic
 	public var hasJudgments(default, null):Bool = false;
 	private var judgmentMap:Map<String, NoteJudgment> = new Map<String, NoteJudgment>();
 	public var replayVersion(default, null):Int = 1;
+
+	// ---- 回放判定手感提示 (LeatherEngine 移植) ----
+	/** 回放恢复的判定窗口与玩家当前设置不同时为 true */
+	public var judgementRestoredDifferent:Bool = false;
+	/** 回放实际使用的判定窗口描述, 例如 "25/50/70/100 (Marvelous)" */
+	public var judgementRestoreInfo:String = '';
 
 	// ---- 回放状态 ----
 	private var globalTick:Int = 0;
@@ -109,7 +127,10 @@ class Replay extends FlxBasic
 
 	// ---- 待写入的判定 (录制时跨帧累积) ----
 	private var pendingJudgments:Array<NoteJudgment> = [];
-	private var lastSaveTime:Float = 0;
+
+	// 上一个写入帧的 songSpeed / playbackRate —— 用于只在变速时额外采样
+	private var lastRecordedSongSpeed:Float = 1;
+	private var lastRecordedPlaybackRate:Float = 1;
 
 	public function new()
 	{
@@ -123,7 +144,8 @@ class Replay extends FlxBasic
 		frameData = [];
 		keysHeld = new Map<FlxKey, Bool>();
 		pendingJudgments = [];
-		lastSaveTime = 0;
+		lastRecordedSongSpeed = PlayState.instance != null ? PlayState.instance.songSpeed : 1;
+		lastRecordedPlaybackRate = PlayState.instance != null ? PlayState.instance.playbackRate : 1;
 		lastFrameCount = 0;
 		replayVersion = 1;
 		replayTime = 0;
@@ -206,6 +228,13 @@ class Replay extends FlxBasic
 		var ps = PlayState.instance;
 		if (ps == null) return;
 
+		// 记录恢复前的判定手感, 用于"仅在不相同的时候提醒"
+		var prevSick:Int = ClientPrefs.data.sickWindow;
+		var prevGood:Int = ClientPrefs.data.goodWindow;
+		var prevBad:Int = ClientPrefs.data.badWindow;
+		var prevMarv:Int = ClientPrefs.data.marvelousWindow;
+		var prevMarvOn:Bool = ClientPrefs.data.marvelousRatings;
+
 		if (stateRecord.songSpeed != null) ps.songSpeed = stateRecord.songSpeed;
 		if (stateRecord.playbackRate != null) ps.playbackRate = stateRecord.playbackRate;
 		if (stateRecord.healthGain != null) ps.healthGain = stateRecord.healthGain;
@@ -218,7 +247,42 @@ class Replay extends FlxBasic
 		if (stateRecord.goodWindow != null) ClientPrefs.data.goodWindow = stateRecord.goodWindow;
 		if (stateRecord.badWindow != null) ClientPrefs.data.badWindow = stateRecord.badWindow;
 		if (stateRecord.safeFrames != null) ClientPrefs.data.safeFrames = stateRecord.safeFrames;
+		// LeatherEngine 移植: 回放时恢复录制时的判定手感, 保证评分/评级完全一致
+		if (stateRecord.judgementTimings != null)
+		{
+			ClientPrefs.data.judgementTimings = stateRecord.judgementTimings;
+			backend.Ratings.syncWindows();
+		}
+		if (stateRecord.judgementPreset != null && stateRecord.judgementPreset.length > 0)
+			ClientPrefs.data.judgementPreset = stateRecord.judgementPreset;
+		else if (stateRecord.judgementTimings != null)
+			ClientPrefs.data.judgementPreset = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
+		if (stateRecord.marvelousRatings != null) ClientPrefs.data.marvelousRatings = stateRecord.marvelousRatings;
+		if (stateRecord.marvelousWindow != null) ClientPrefs.data.marvelousWindow = stateRecord.marvelousWindow;
 		if (stateRecord.replayVersion != null) replayVersion = stateRecord.replayVersion;
+
+		// 判定手感变化检测: 只有在回放判定与当前设置不同时才提示
+		judgementRestoredDifferent =
+			(prevSick != ClientPrefs.data.sickWindow
+			|| prevGood != ClientPrefs.data.goodWindow
+			|| prevBad != ClientPrefs.data.badWindow
+			|| prevMarv != ClientPrefs.data.marvelousWindow
+			|| prevMarvOn != ClientPrefs.data.marvelousRatings);
+
+		if (judgementRestoredDifferent)
+		{
+			var t:Array<Int> = ClientPrefs.data.judgementTimings;
+			judgementRestoreInfo =
+				ClientPrefs.data.judgementPreset + " (" + Std.string(t[0]) + "/" + Std.string(t[1]) + "/" + Std.string(t[2]) + "/" + Std.string(t[3]) + ")"
+				+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
+			// 回放还原的窗口与玩家设置不同 → 判定类型标记为自定义
+			ClientPrefs.data.judgementPreset = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
+		}
+		else
+			judgementRestoreInfo = '';
+		// 多k: 回放键数与当前谱面不一致时警告 (轨道映射会错位)
+		if (stateRecord.mania != null && stateRecord.mania != PlayState.mania)
+			FlxG.log.warn('Replay was recorded on ${stateRecord.mania + 1}K but current chart is ${PlayState.mania + 1}K');
 
 		lastSongSpeed = ps.songSpeed;
 		lastPlaybackRate = ps.playbackRate;
@@ -259,7 +323,12 @@ class Replay extends FlxBasic
 			goodWindow: ClientPrefs.data.goodWindow,
 			badWindow: ClientPrefs.data.badWindow,
 			safeFrames: ClientPrefs.data.safeFrames,
-			replayVersion: ClientPrefs.data.saveReplayData ? 2 : 1
+			judgementTimings: ClientPrefs.data.judgementTimings != null ? ClientPrefs.data.judgementTimings.copy() : null,
+			judgementPreset: ClientPrefs.data.judgementPreset,
+			marvelousRatings: ClientPrefs.data.marvelousRatings,
+			marvelousWindow: ClientPrefs.data.marvelousWindow,
+			replayVersion: ClientPrefs.data.saveReplayData ? 2 : 1,
+			mania: PlayState.mania
 		};
 	}
 
@@ -276,6 +345,10 @@ class Replay extends FlxBasic
 		super.update(elapsed);
 		if (!isRecording || PlayState.instance == null) return;
 
+		var ps = PlayState.instance;
+		// 只在"按键事件 / 判定 / 变速或倍速变化"时才录帧；
+		// 去掉了原先的强制 60fps 匀速采样，静默停顿帧不再重复写入，
+		// 能显著减小回放文件的体积与内存占用（回放端靠 press/release 事件维持按键状态，无需空帧）。
 		var hasChanges:Bool = false;
 		if (FlxG.keys.justPressed.ANY || FlxG.keys.justReleased.ANY)
 			hasChanges = true;
@@ -283,12 +356,11 @@ class Replay extends FlxBasic
 			hasChanges = true;
 		if (pendingJudgments.length > 0)
 			hasChanges = true;
-		if (lastSaveTime >= 0.01666) // 至少 60fps 采样一次
+		if (lastRecordedSongSpeed != ps.songSpeed || lastRecordedPlaybackRate != ps.playbackRate)
 			hasChanges = true;
 
 		if (hasChanges)
 		{
-			lastSaveTime = 0;
 			var frame:FrameSave = captureFrame();
 			if (ClientPrefs.data.saveReplayData && pendingJudgments.length > 0)
 			{
@@ -296,10 +368,8 @@ class Replay extends FlxBasic
 				pendingJudgments = [];
 			}
 			frameData.push(frame);
-		}
-		else
-		{
-			lastSaveTime += elapsed;
+			lastRecordedSongSpeed = ps.songSpeed;
+			lastRecordedPlaybackRate = ps.playbackRate;
 		}
 	}
 
@@ -444,14 +514,7 @@ class Replay extends FlxBasic
 				keysHeld.set(flxKey, true);
 			}
 
-			tmpHeldLanes.resize(laneCount);
-			for (i in 0...laneCount) tmpHeldLanes[i] = false;
-			for (flxKey in keysHeld.keys())
-			{
-				var lane:Null<Int> = keyToLane.get(flxKey);
-				if (lane != null && lane >= 0 && lane < laneCount)
-					tmpHeldLanes[lane] = true;
-			}
+			buildHeldLanes();
 
 			for (keyName in frame.releaseKey)
 			{
@@ -466,6 +529,26 @@ class Replay extends FlxBasic
 
 			lastFrameCount++;
 			globalTick++;
+		}
+
+		// 关键：每帧都基于当前按键状态补一次"长条命中 / 空闲动画"。
+		// 录制瘦身之后，两帧按键事件之间不再有空帧，若只在 while 里调用 replayApplyInput，
+		// 长条 body 期间没有任何新事件时就不会再走长条判定 → 直接 miss；角色也不会回 idle。
+		// 这里用空 press/release + 当前 held-lanes 补跑一次，逻辑幂等且安全。
+		buildHeldLanes();
+		ps.replayApplyInput(Conductor.songPosition, tmpEmptyPress, tmpEmptyRelease, tmpHeldLanes);
+	}
+
+	/** 根据当前 keysHeld 构建按住轨道数组 (写入 tmpHeldLanes) */
+	private inline function buildHeldLanes():Void
+	{
+		tmpHeldLanes.resize(laneCount);
+		for (i in 0...laneCount) tmpHeldLanes[i] = false;
+		for (flxKey in keysHeld.keys())
+		{
+			var lane:Null<Int> = keyToLane.get(flxKey);
+			if (lane != null && lane >= 0 && lane < laneCount)
+				tmpHeldLanes[lane] = true;
 		}
 	}
 

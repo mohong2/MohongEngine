@@ -1,13 +1,16 @@
 package options;
 
 import haxe.Json;
+#if sys
 import sys.io.File;
 import sys.FileSystem;
+#end
 import haxe.io.Path;
 import mohong.TraceManager;
 import Language;
+import ClientPrefs;
 import Paths;
-#if (desktop && cpp && !android)
+#if (desktop && cpp && windows)
 import mohong.Windows;
 #end
 /** Option category definition */
@@ -109,7 +112,8 @@ class OptionLoader
 	{
 		_cachedCategories = [];
 
-		var builtinPath = Sys.getCwd() + BUILTIN_OPTIONS_DIR + 'categories.json';
+		var builtinPath = #if sys Sys.getCwd() + BUILTIN_OPTIONS_DIR + 'categories.json' #else BUILTIN_OPTIONS_DIR + 'categories.json' #end;
+		#if sys
 		if (FileSystem.exists(builtinPath))
 		{
 			try
@@ -127,7 +131,27 @@ class OptionLoader
 				TraceManager.error('trace.options.categoriesLoadError', 'Failed to load builtin categories: {}', [e]);
 			}
 		}
+		#else
+		if (lime.utils.Assets.exists(builtinPath, TEXT))
+		{
+			try
+			{
+				var json = lime.utils.Assets.getText(builtinPath);
+				var parsed:Array<OptionCategoryDef> = Json.parse(json);
+				for (cat in parsed)
+				{
+					cat.modSource = null;
+					_cachedCategories.push(cat);
+				}
+			}
+			catch (e:Dynamic)
+			{
+				TraceManager.error('trace.options.categoriesLoadError', 'Failed to load builtin categories: {}', [e]);
+			}
+		}
+		#end
 
+		#if MODS_ALLOWED
 		var globalMods = Paths.getGlobalMods();
 		for (mod in globalMods)
 		{
@@ -155,6 +179,7 @@ class OptionLoader
 				checkModOptionsPatch(Paths.currentModDirectory, cat.optionsFile);
 			}
 		}
+		#end
 	}
 
 	/** Load options for a category (supports dir/file/.patch). */
@@ -170,17 +195,20 @@ class OptionLoader
 
 		if (isModCategory)
 		{
+			#if MODS_ALLOWED
 			if (category.modSource == GLOBAL_ROOT_SOURCE)
 				loadGlobalRootOptions(fileName, optionsArray, extraCallbacks);
 			else
 				loadModOptions(category.modSource, fileName, optionsArray, extraCallbacks, true);
+			#end
 		}
 		else
 		{
-			var builtinBaseDir = Sys.getCwd() + BUILTIN_OPTIONS_DIR;
+			var builtinBaseDir = #if sys Sys.getCwd() + BUILTIN_OPTIONS_DIR #else BUILTIN_OPTIONS_DIR #end;
 			loadOptionsFromBase(builtinBaseDir, fileName, optionsArray, extraCallbacks, null, true);
 			postProcessOptions(optionsArray, fileName);
 
+			#if MODS_ALLOWED
 			var globalMods = Paths.getGlobalMods();
 			for (mod in globalMods)
 				loadModOptions(mod, fileName, optionsArray, extraCallbacks);
@@ -189,6 +217,7 @@ class OptionLoader
 
 			if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
 				loadModOptions(Paths.currentModDirectory, fileName, optionsArray, extraCallbacks);
+			#end
 		}
 
 		return optionsArray;
@@ -221,8 +250,45 @@ class OptionLoader
 						if (num > -1) opt.curOption = num;
 					}
 
+				case 'hitsound':
+					// LeatherEngine 移植: 击打音效列表来自 data/hitsoundList.txt,
+					// 玩家/模组可以往 txt 里加名字并放入 sounds/hitsounds/ 实现自定义音效
+					var hs:Array<String> = Paths.mergeAllTextsNamed('data/hitsoundList.txt', 'assets');
+					if (hs != null && hs.length > 0)
+					{
+						opt.options = hs;
+						var num:Int = hs.indexOf(opt.getValue());
+						if (num > -1) opt.curOption = num;
+					}
+
+				case 'judgementPreset':
+					// LeatherEngine 移植: 判定预设列表来自 data/timingPresets.txt
+					backend.Ratings.loadPresets();
+					var presets:Array<String> = backend.Ratings.presets.copy();
+					if (presets.indexOf('Custom') < 0) presets.push('Custom');
+					opt.options = presets;
+
+					// 当前预设与 judgementTimings 不匹配时自动标记为 Custom
+					var curPreset:String = opt.getValue();
+					var timings:Array<Int> = ClientPrefs.data.judgementTimings;
+					var matchesPreset:Bool = false;
+					if (curPreset != null && curPreset != 'Custom' && timings != null && timings.length == 4)
+					{
+						var presetTimings:Array<Int> = backend.Ratings.returnPreset(curPreset);
+						matchesPreset = (presetTimings != null && presetTimings.length == 4
+							&& presetTimings[0] == timings[0] && presetTimings[1] == timings[1]
+							&& presetTimings[2] == timings[2] && presetTimings[3] == timings[3]);
+					}
+					if (!matchesPreset && curPreset != 'Custom')
+					{
+						ClientPrefs.data.judgementPreset = 'Custom';
+						curPreset = 'Custom';
+					}
+					var num:Int = presets.indexOf(curPreset);
+					if (num > -1) opt.curOption = num;
+
 				case 'traceConsoleEnabled':
-					#if (desktop && cpp && !android)
+					#if (desktop && cpp && windows)
 					opt.getValue = function() {
 						return mohong.Windows.hasConsole();
 					};
@@ -237,7 +303,7 @@ class OptionLoader
 		_cachedCategories = null;
 	}
 
-
+	#if MODS_ALLOWED
 	static function loadModCategories(mod:String, isPatch:Bool):Void
 	{
 		var modPath = Paths.mods(mod + '/' + MOD_OPTIONS_DIR + 'categories.json');
@@ -329,6 +395,7 @@ class OptionLoader
 		var baseDir = Paths.mods(GLOBAL_ROOT_OPTIONS_PATH);
 		loadOptionsFromBase(baseDir, fileName, target, extraCallbacks, GLOBAL_ROOT_SOURCE, true);
 	}
+	#end
 
 	/** Load: dir/*.json → file.json → file.patch.json */
 	static function loadOptionsFromBase(baseDir:String, fileName:String, target:Array<Option>,
@@ -338,6 +405,7 @@ class OptionLoader
 		var singlePath = baseDir + fileName + '.json';
 		var patchPath = baseDir + fileName + '.patch.json';
 
+		#if sys
 			if (FileSystem.exists(dirPath) && FileSystem.isDirectory(dirPath))
 		{
 			var files = FileSystem.readDirectory(dirPath);
@@ -367,6 +435,10 @@ class OptionLoader
 			if (loadSingleJsonFile(patchPath, target, extraCallbacks, modSource))
 				TraceManager.info('trace.options.modLoaded', 'Loaded patch options from {} (mod {})', [fileName, modSource]);
 		}
+		#else
+		if (loadSingleJsonFile(singlePath, target, extraCallbacks, modSource))
+			TraceManager.info('trace.options.modLoaded', 'Loaded options from {} (mod {})', [fileName, modSource]);
+		#end
 	}
 
 	/** Parse a single JSON file into Options and append to target. */
@@ -375,7 +447,13 @@ class OptionLoader
 	{
 		try
 		{
+			#if sys
+			if (!FileSystem.exists(path)) return false;
 			var json = File.getContent(path);
+			#else
+			if (!lime.utils.Assets.exists(path, TEXT)) return false;
+			var json = lime.utils.Assets.getText(path);
+			#end
 			var defs:Array<OptionDef> = Json.parse(json);
 			for (def in defs)
 			{

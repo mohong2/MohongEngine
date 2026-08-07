@@ -165,6 +165,15 @@ class Character extends FlxSprite
 				}
 				imageFile = json.image;
 
+				if (frames == null)
+				{
+					// 纹理缺失兜底：用占位图 + 单帧 idle，避免后续注册动画 / dance 崩溃。
+					// （正常路径下 Paths.getSparrowAtlas 已通过 shared 回退找到贴图，这里仅防御。）
+					loadGraphic(Paths.image(json.image));
+					if (graphic != null && animation != null)
+						animation.add('idle', [0], 1, true);
+				}
+
 				if(json.scale != 1) {
 					jsonScale = json.scale;
 					setGraphicSize(Std.int(width * jsonScale));
@@ -188,26 +197,29 @@ class Character extends FlxSprite
 				antialiasing = !noAntialiasing;
 				if(!ClientPrefs.data.globalAntialiasing) antialiasing = false;
 
-				animationsArray = json.animations;
-				if(animationsArray != null && animationsArray.length > 0) {
-					for (anim in animationsArray) {
-						var animAnim:String = '' + anim.anim;
-						var animName:String = '' + anim.name;
-						var animFps:Int = anim.fps;
-						var animLoop:Bool = !!anim.loop; //Bruh
-						var animIndices:Array<Int> = anim.indices;
-						if(animIndices != null && animIndices.length > 0) {
-							animation.addByIndices(animAnim, animName, animIndices, "", animFps, animLoop);
-						} else {
-							animation.addByPrefix(animAnim, animName, animFps, animLoop);
-						}
+				if (frames != null)
+				{
+					animationsArray = json.animations;
+					if(animationsArray != null && animationsArray.length > 0) {
+						for (anim in animationsArray) {
+							var animAnim:String = '' + anim.anim;
+							var animName:String = '' + anim.name;
+							var animFps:Int = anim.fps;
+							var animLoop:Bool = !!anim.loop; //Bruh
+							var animIndices:Array<Int> = anim.indices;
+							if(animIndices != null && animIndices.length > 0) {
+								animation.addByIndices(animAnim, animName, animIndices, "", animFps, animLoop);
+							} else {
+								animation.addByPrefix(animAnim, animName, animFps, animLoop);
+							}
 
-						if(anim.offsets != null && anim.offsets.length > 1) {
-							addOffset(anim.anim, anim.offsets[0], anim.offsets[1]);
+							if(anim.offsets != null && anim.offsets.length > 1) {
+								addOffset(anim.anim, anim.offsets[0], anim.offsets[1]);
+							}
 						}
+					} else {
+						quickAnimAdd('idle', 'BF idle dance');
 					}
-				} else {
-					quickAnimAdd('idle', 'BF idle dance');
 				}
 				//trace('Loaded file to character ' + curCharacter);
 		}
@@ -317,6 +329,7 @@ class Character extends FlxSprite
 	 */
 	public function dance()
 	{
+		if (animation == null) return;
 		if (!debugMode && !skipDance && !specialAnim)
 		{
 			if(danceIdle)
@@ -336,6 +349,7 @@ class Character extends FlxSprite
 
 	public function playAnim(AnimName:String, Force:Bool = false, Reversed:Bool = false, Frame:Int = 0):Void
 	{
+		if (animation == null) return;
 		specialAnim = false;
 		animation.play(AnimName, Force, Reversed, Frame);
 

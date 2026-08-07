@@ -9,12 +9,14 @@ import flixel.util.FlxSpriteUtil;
 import flixel.util.FlxStringUtil;
 import flixel.util.FlxDestroyUtil;
 import flixel.input.keyboard.FlxKey;
+import flixel.math.FlxRandom;
 
 import lime.utils.Assets;
 import lime.media.AudioBuffer;
 
 import flash.media.Sound;
 import flash.geom.Rectangle;
+import flash.net.FileFilter;
 
 import haxe.Json;
 import haxe.Exception;
@@ -100,6 +102,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			['Alt Idle Animation', Language.get('newchartEditor_alt_idle_animation', "Sets a specified postfix after the idle animation name.\nYou can use this to trigger 'idle-alt' if you set\nValue 2 to -alt\n\nValue 1: Character to set (Dad, BF or GF)\nValue 2: New postfix (Leave it blank to disable)")],
 			['Screen Shake', Language.get('newchartEditor_screen_shake', "Value 1: Camera shake\nValue 2: HUD shake\n\nEvery value works as the following example: \"1, 0.05\".\nThe first number (1) is the duration.\nThe second number (0.05) is the intensity.")],
 			['Change Character', Language.get('newchartEditor_change_character', "Value 1: Character to change (Dad, BF, GF)\nValue 2: New character's name")],
+			['Change Mania', Language.get('newchartEditor_change_mania', "多k: 中途切换谱面键数\nValue 1: 新的键数 (1-18, 如 9 = 9K)\nValue 2: 动画样式 fade/slide/zoom/spin (默认 fade),\n填 true 或 skip 跳过过渡动画")],
 			['Change Scroll Speed', Language.get('newchartEditor_change_scroll_speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds.")],
 			['Set Property', Language.get('newchartEditor_set_property', "Value 1: Variable name\nValue 2: New value")],
 			['Play Sound', Language.get('newchartEditor_play_sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1")]
@@ -114,10 +117,26 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	
 	public static var keysArray:Array<FlxKey> = [ONE, TWO, THREE, FOUR, FIVE, SIX, SEVEN, EIGHT]; //Used for Vortex Editor
 	public static var SHOW_EVENT_COLUMN = true;
+	/** 多k: 事件列固定宽度 (不随格宽缩小, 保证高 K 下仍可点击)。 */
+	public static var EVENT_COLUMN_WIDTH:Int = 40;
 	public static var GRID_COLUMNS_PER_PLAYER = 4;
 	public static var GRID_PLAYERS = 2;
 	public static var GRID_SIZE = 40;
 	final BACKUP_EXT = '.bkp';
+
+	/**
+	 * 多k: 计算编辑器网格格宽。
+	 * 1K~9K 沿用固定表 (gridSizes), 10K+ 按屏幕宽度自适应, 避免高 K 时 Note 过小。
+	 */
+	public static function editorGridSize(mania:Int):Int
+	{
+		var m:Int = EKData.clampMania(mania);
+		if (m < 9) return Note.gridSizes[m];
+		var cols:Int = Note.ammo[m] * GRID_PLAYERS;
+		var usableW:Int = FlxG.width - 120 - (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
+		var auto:Int = Math.floor(usableW / cols);
+		return Std.int(Math.max(auto, 18));
+	}
 
 	public var quantizations:Array<Int> = [
 		4,
@@ -183,6 +202,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	var prevGridBg:ChartingGridSprite;
 	var gridBg:ChartingGridSprite;
 	var nextGridBg:ChartingGridSprite;
+	/** 多k: 小节内按 Change Mania 事件切分出的额外网格段 (前/中/后三窗的小节都可能被切分)。 */
+	var gridSegments:Array<ChartingGridSprite> = [];
+	/** 多k: 每个额外网格段所属窗口 (0=上 1=中 2=下)、小节、起止行 (Step*zoom) 与键数。 */
+	var gridSegmentMeta:Array<{window:Int, sec:Int, startStep:Int, endStep:Int, k:Int}> = [];
+	/** 多k: 分段网格是为哪个 curSec 构建的 (切节后重建)。 */
+	var _segmentsBuildSec:Int = -999;
 	var waveformSprite:FlxSprite;
 	var scrollY:Float = 0;
 	
@@ -305,9 +330,19 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		
 		changeTheme(chartEditorSave.data.theme != null ? chartEditorSave.data.theme : DEFAULT, false);
 
+		// 多k: 进入编辑器时同步键数与网格尺寸
+		if (PlayState.SONG != null)
+		{
+			if (PlayState.SONG.mania == null) PlayState.SONG.mania = Note.defaultMania;
+			PlayState.mania = EKData.clampMania(PlayState.SONG.mania);
+			GRID_COLUMNS_PER_PLAYER = Note.ammo[PlayState.mania];
+			GRID_SIZE = editorGridSize(PlayState.mania);
+		}
+		TraceManager.info('trace.editor.create2', 'NewChartingState create() #{} mania={} notes={}', [Math.floor(FlxG.random.float(0, 100000)), PlayState.mania, PlayState.SONG != null ? PlayState.SONG.notes.length : 0]);
+
 		createGrids();
 
-		waveformSprite = new FlxSprite(gridBg.x + (SHOW_EVENT_COLUMN ? GRID_SIZE : 0), 0).makeGraphic(1, 1, 0x00FFFFFF);
+		waveformSprite = new FlxSprite(gridBg.x + (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0), 0).makeGraphic(1, 1, 0x00FFFFFF);
 		waveformSprite.scrollFactor.x = 0;
 		waveformSprite.visible = false;
 		add(waveformSprite);
@@ -318,7 +353,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		dummyArrow.scrollFactor.x = 0;
 		add(dummyArrow);
 
-		vortexIndicator = new FlxSprite(gridBg.x - GRID_SIZE, FlxG.height/2).loadGraphic(Paths.image('editors/vortex_indicator'));
+		vortexIndicator = new FlxSprite(gridBg.x - (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : GRID_SIZE), FlxG.height/2).loadGraphic(Paths.image('editors/vortex_indicator'));
 		vortexIndicator.setGraphicSize(GRID_SIZE);
 		vortexIndicator.updateHitbox();
 		vortexIndicator.scrollFactor.set();
@@ -335,7 +370,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		eventLockOverlay.alpha = 0.6;
 		eventLockOverlay.visible = false;
 		eventLockOverlay.scrollFactor.x = 0;
-		eventLockOverlay.scale.x = GRID_SIZE;
+		eventLockOverlay.scale.x = SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : GRID_SIZE;
 		eventLockOverlay.updateHitbox();
 		add(eventLockOverlay);
 
@@ -345,11 +380,21 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		timeLine.screenCenter(Y);
 		timeLine.scrollFactor.set();
 		add(timeLine);
-		
+
+		rebuildStrumNotes();
+		buildEditorUI();
+		super.create();
+	}
+
+	/** 多k: 仅重建 strum 列 (mania 变化时调用, 不碰 UI)。 */
+	function rebuildStrumNotes():Void
+	{
+		if (strumLineNotes == null || gridBg == null) return;
+		strumLineNotes.clear();
 		var startX:Float = gridBg.x;
 		var startY:Float = FlxG.height/2;
 		vortexIndicator.visible = strumLineNotes.visible = strumLineNotes.active = vortexEnabled;
-		if(SHOW_EVENT_COLUMN) startX += GRID_SIZE;
+		if(SHOW_EVENT_COLUMN) startX += EVENT_COLUMN_WIDTH;
 
 		for (i in 0...Std.int(GRID_PLAYERS * GRID_COLUMNS_PER_PLAYER))
 		{
@@ -362,13 +407,74 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				note.setGraphicSize(GRID_SIZE);
 			else
 				note.setGraphicSize(0, GRID_SIZE);
-	
+
 			note.updateHitbox();
 			note.x += GRID_SIZE/2 - note.width/2;
 			note.y += GRID_SIZE/2 - note.height/2;
 			strumLineNotes.add(note);
 		}
+	}
 
+	/** 多k: 重排编辑器头部图标/网格分隔线 (mania 变化时调用, 不重建对象)。 */
+	function repositionEditorUI():Void
+	{
+		if (gridBg == null || eventIcon == null || icons == null) return;
+		var columns:Int = 0;
+		var iconX:Float = gridBg.x;
+		if(SHOW_EVENT_COLUMN)
+		{
+			// 多k: 事件图标大小随格宽缩放
+			eventIcon.setGraphicSize(EVENT_COLUMN_WIDTH, EVENT_COLUMN_WIDTH);
+			eventIcon.updateHitbox();
+			eventIcon.x = iconX + (EVENT_COLUMN_WIDTH * 0.5) - eventIcon.width/2;
+			iconX += EVENT_COLUMN_WIDTH;
+			columns++;
+		}
+		for (i in 0...GRID_PLAYERS)
+		{
+			columns += GRID_COLUMNS_PER_PLAYER;
+			if (i < icons.length)
+				icons[i].x = iconX + GRID_SIZE * (GRID_COLUMNS_PER_PLAYER/2) - icons[i].width/2;
+			iconX += GRID_SIZE * GRID_COLUMNS_PER_PLAYER;
+		}
+		// 多k: 各网格段分隔线按各自键数计算
+		updateGridSegmentStripes();
+
+		// 多k: 事件锁遮罩/时间线宽度随新格宽同步
+		if (eventLockOverlay != null)
+		{
+			eventLockOverlay.x = gridBg.x;
+			eventLockOverlay.scale.x = SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : NewChartingState.GRID_SIZE;
+			eventLockOverlay.updateHitbox();
+		}
+		if (timeLine != null)
+		{
+			timeLine.x = gridBg.x;
+			// 多k: 时间线宽度按当前小节最大宽度 (含事件后 9K 段)
+			timeLine.setGraphicSize(Std.int(sectionWidthPx(curSec)), 4);
+			timeLine.updateHitbox();
+		}
+		if (waveformSprite != null)
+		{
+			waveformSprite.x = gridBg.x + (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
+		}
+		if (dummyArrow != null)
+		{
+			dummyArrow.setGraphicSize(NewChartingState.GRID_SIZE, NewChartingState.GRID_SIZE);
+			dummyArrow.updateHitbox();
+		}
+		if (vortexIndicator != null)
+		{
+			vortexIndicator.x = gridBg.x - (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : NewChartingState.GRID_SIZE);
+			vortexIndicator.setGraphicSize(NewChartingState.GRID_SIZE);
+			vortexIndicator.updateHitbox();
+		}
+		updateHeads(true);
+	}
+
+	/** 编辑器 UI 构建 (仅 create() 调用一次, 切K不重建)。 */
+	function buildEditorUI():Void
+	{
 		var columns:Int = 0;
 		var iconX:Float = gridBg.x;
 		var iconY:Float = 50;
@@ -377,12 +483,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			eventIcon = new FlxSprite(0, iconY).loadGraphic(Paths.image('editors/eventIcon'));
 			eventIcon.antialiasing = ClientPrefs.data.globalAntialiasing;
 			eventIcon.alpha = 0.6;
-			eventIcon.setGraphicSize(30, 30);
+			eventIcon.setGraphicSize(EVENT_COLUMN_WIDTH, EVENT_COLUMN_WIDTH); // 固定可点击尺寸
 			eventIcon.updateHitbox();
 			eventIcon.scrollFactor.set();
 			add(eventIcon);
-			eventIcon.x = iconX + (GRID_SIZE * 0.5) - eventIcon.width/2;
-			iconX += GRID_SIZE;
+			eventIcon.x = iconX + (EVENT_COLUMN_WIDTH * 0.5) - eventIcon.width/2;
+			iconX += EVENT_COLUMN_WIDTH;
 
 			columns++;
 		}
@@ -436,6 +542,29 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		mainBox.scrollFactor.set();
 		mainBox.cameras = [camUI];
 		add(mainBox);
+
+		// 多k: 工具浮动窗口 (转换模式 / 一键写大粪 / 密度增强 集中在此)
+		toolsBox = new PsychUIBox(FlxG.width / 2 - 160, FlxG.height / 2 - 110, 320, 220, ['多k工具']);
+		toolsBox.scrollFactor.set();
+		toolsBox.cameras = [camUI];
+		toolsBox.visible = false;
+		var toolsMenu = toolsBox.getTab('多k工具').menu;
+		toolsMenu.add(new EditorsText(10, 10, 250, '切 K 转换模式 (切换键数时生效):', 13));
+		convertModeDropDown = new PsychUIDropDownMenu(10, 32, ['顺序映射', '自动打乱', '自动补双押', '打乱+双押'], function(id:Int, label:String) {}, 180);
+		convertModeDropDown.selectedIndex = 0;
+		toolsMenu.add(convertModeDropDown);
+		toolsMenu.add(new EditorsText(10, 66, 250, '一键写大粪 (4K 转多K, 匹配人声):', 13));
+		dumbChartButton = new PsychUIButton(10, 88, '一键写大粪', function() writeDumbChart(), 180, 24);
+		toolsMenu.add(dumbChartButton);
+		toolsMenu.add(new EditorsText(10, 124, 250, '密度增强阈值 (每拍 Note 数):', 13));
+		densityThresholdStepper = new PsychUINumericStepper(10, 146, 1, 6, 1, 32, 0, 45);
+		toolsMenu.add(densityThresholdStepper);
+		boostDensityButton = new PsychUIButton(70, 146, '塞一点', function() boostDensity(Std.int(densityThresholdStepper.value)), 120, 24);
+		toolsMenu.add(boostDensityButton);
+		// X 按钮最后添加, 并且文本宽度已避开其区域
+		var closeToolsBtn:PsychUIButton = new PsychUIButton(282, 8, 'X', function() toolsBox.visible = false, 26, 20);
+		toolsMenu.add(closeToolsBtn);
+		add(toolsBox);
 
 		autoSaveIcon = new FlxSprite(50).loadGraphic(Paths.image('editors/autosave'));
 		autoSaveIcon.screenCenter(Y);
@@ -600,7 +729,6 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		#if android
 		addVirtualPad(LEFT_FULL, NEW_CHART_EDITOR);
 		#end
-		super.create();
 	}
 
 	var gridColors:Array<FlxColor>;
@@ -656,6 +784,15 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				nextGridBg.vortexLineEnabled = vortexEnabled;
 				nextGridBg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
 			}
+			// 多k: 额外网格段同步换色 (中窗用当前色, 上下窗用相邻色)
+			for (i => seg in gridSegments)
+			{
+				if (seg == null || i >= gridSegmentMeta.length) continue;
+				var meta = gridSegmentMeta[i];
+				seg.loadGrid((meta.window == 1) ? gridColors[0] : gridColorsOther[0], (meta.window == 1) ? gridColors[1] : gridColorsOther[1]);
+				seg.vortexLineEnabled = vortexEnabled;
+				seg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+			}
 		}
 	}
 
@@ -706,6 +843,22 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	{
 		updateJsonData();
 		_cacheSections(); // must be called BEFORE reloadNotes so cachedSectionCrochets is fresh
+		// 多k: 任何加载/重载路径, 只要键数变了就重建网格/轨道/头部,
+		// 保证打开 7K 谱面后网格与键数显示立即同步。
+		if (_lastGridMania != PlayState.mania)
+		{
+			try
+			{
+				createGrids(false);
+				rebuildStrumNotes();
+				repositionEditorUI();
+				updateGridVisibility();
+			}
+			catch (e:Dynamic)
+			{
+				TraceManager.error('trace.editor.exception', 'grid rebuild failed: {}', [Std.string(e)]);
+			}
+		}
 		loadMusic();
 		reloadNotes();
 		onChartLoaded();
@@ -731,6 +884,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		bpmStepper.value = PlayState.SONG.bpm;
 		scrollSpeedStepper.value = PlayState.SONG.speed;
 		audioOffsetStepper.value = Reflect.hasField(PlayState.SONG, 'offset') ? PlayState.SONG.offset : 0;
+		maniaStepper.value = (PlayState.SONG.mania != null ? PlayState.SONG.mania : Note.defaultMania) + 1;
 		Conductor.offset = audioOffsetStepper.value;
 
 		playerDropDown.selectedLabel = PlayState.SONG.player1;
@@ -764,6 +918,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	#end
 
 	var fileDialog:FileDialogHandler = new FileDialogHandler();
+	var _exportKeyMode:Int = 0; // 0 = auto (4K/8K), 4 = force 4K, 8 = force 8K
 	var lastFocus:PsychUIInputText;
 
 	var autoSaveTime:Float = 0;
@@ -779,10 +934,23 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			return;
 		}
 
+		// 多k: Change Mania 事件键数输入结束后执行一次重编码 + 网格重建
+		var focusOnEventInput:Bool = (PsychUIInputText.focusOn == value1InputText || PsychUIInputText.focusOn == value2InputText);
+		if(focusOnEventInput) _eventInputFocused = true;
+		else if(_eventInputFocused)
+		{
+			_eventInputFocused = false;
+			if(_pendingManiaReencode)
+			{
+				_pendingManiaReencode = false;
+				refreshAfterManiaEventEdit(_pendingManiaOldEvents);
+			}
+		}
+
 		for (num => key in keysArray)
 			_keysPressedBuffer[num] = FlxG.keys.checkStatus(key, JUST_PRESSED);
 
-		if(autoSaveCap > 0)
+		if(ClientPrefs.data.chartAutosave && autoSaveCap > 0)
 		{
 			autoSaveTime += elapsed / 60.0;
 			//trace(autoSaveTime);
@@ -806,6 +974,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				Reflect.setField(songCopy, '__original_path', Song.chartPath);
 				var dataToSave:String = haxe.Json.stringify(songCopy);
 				//trace(chartName, dataToSave);
+				#if sys
 				if(!FileSystem.isDirectory('backups')) FileSystem.createDirectory('backups');
 				File.saveContent('backups/$chartName.$BACKUP_EXT', dataToSave);
 
@@ -854,6 +1023,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						}
 					}
 				}
+				#end
 
 				FlxTween.tween(autoSaveIcon, {alpha: 1}, 0.5, {onComplete: function(_)
 					FlxTween.tween(autoSaveIcon, {alpha: 0}, 0.5, {startDelay: 2})
@@ -1198,6 +1368,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			{
 				if(selectedNotes.length > 0)
 				{
+					// 多k: 删除 Change Mania 事件 -> 记录快照, 删除后按工具箱模式重编码
+					var oldEvents:Array<Dynamic> = deepCopyEditorEvents();
 					var removedNotes:Array<MetaNote> = [];
 					var removedEvents:Array<EventMetaNote> = [];
 					while(selectedNotes.length > 0)
@@ -1226,6 +1398,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					onSelectNote();
 					softReloadNotes();
 					addUndoAction(DELETE_NOTE, {notes: removedNotes, events: removedEvents});
+					for (ev in removedEvents)
+						if (eventHasChangeMania(ev)) { refreshAfterManiaEventEdit(oldEvents); break; }
 				}
 			}
 			else if(canContinue)
@@ -1328,29 +1502,46 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			ignoreClickForThisFrame = true;
 
 		var minX:Float = gridBg.x;
-		if(SHOW_EVENT_COLUMN && lockedEvents) minX += GRID_SIZE;
+		if(SHOW_EVENT_COLUMN && lockedEvents) minX += EVENT_COLUMN_WIDTH;
 
 		if(isMovingNotes && FlxG.mouse.justReleased)
 			stopMovingNotes();
 
-		if(FlxG.mouse.x >= minX && FlxG.mouse.x < gridBg.x + gridBg.width)
+		// 多k: 点击范围按当前小节最大宽度计算 (事件后 9K 段比 4K 段宽)
+		if(FlxG.mouse.x >= minX && FlxG.mouse.x < gridBg.x + sectionWidthPx(curSec))
 		{
 			var diffX:Float = FlxG.mouse.x - gridBg.x;
 			var diffY:Float = FlxG.mouse.y - gridBg.y;
 			if(#if android !virtualPad.buttonY.pressed || #end !FlxG.keys.pressed.SHIFT)
 				diffY -= diffY % (GRID_SIZE / (curQuant/16));
 
-			if(nextGridBg.visible) diffY = Math.min(diffY, gridBg.height + nextGridBg.height);
-			else diffY = Math.min(diffY, gridBg.height);
+			// 多k: 高度边界按各小节总高度 (含事件切分段) 计算
+			if(nextGridBg.visible) diffY = Math.min(diffY, sectionHeightPx(curSec) + sectionHeightPx(curSec + 1));
+			else diffY = Math.min(diffY, sectionHeightPx(curSec));
 
-			if(prevGridBg.visible) diffY = Math.max(diffY, -prevGridBg.height);
+			if(prevGridBg.visible) diffY = Math.max(diffY, -sectionHeightPx(curSec - 1));
 			else diffY = Math.max(diffY, 0);
 
-			var noteData:Int = Math.floor(diffX / GRID_SIZE);
+			var noteData:Int;
+			var eventColW:Int = SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0;
+			if (SHOW_EVENT_COLUMN && diffX < EVENT_COLUMN_WIDTH)
+				noteData = -1; // 事件列
+			else
+				noteData = Math.floor((diffX - eventColW) / GRID_SIZE);
+			// 多k: 幽灵箭头/放 Note 的列范围按鼠标位置所属 k 段限制:
+			// 4K 段只允许 0~7 列, 9K 段才允许 0~17 列, 避免 4K 段点到 9K 列
+			if (noteData >= 0 && diffY >= 0 && diffY < sectionHeightPx(curSec))
+			{
+				var partTime:Float = (diffY / GRID_SIZE * (cachedSectionCrochets[curSec] / 4) / curZoom) + cachedSectionTimes[curSec];
+				var partMania:Int = EKData.effectiveManiaAtTime((PlayState.SONG != null) ? PlayState.SONG.events : null, chartBaseMania(), partTime);
+				var partAmmo:Int = Note.ammo[EKData.clampMania(partMania)];
+				if (noteData >= partAmmo * GRID_PLAYERS) noteData = partAmmo * GRID_PLAYERS - 1;
+			}
 			dummyArrow.visible = !selectionBox.visible;
-			dummyArrow.x = gridBg.x + noteData * GRID_SIZE;
-			if(SHOW_EVENT_COLUMN)
-				noteData--;
+			if (noteData < 0)
+				dummyArrow.x = gridBg.x + (EVENT_COLUMN_WIDTH - dummyArrow.width) / 2;
+			else
+				dummyArrow.x = gridBg.x + eventColW + noteData * GRID_SIZE + (GRID_SIZE - dummyArrow.width) / 2;
 
 			if(#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= gridBg.y || !prevGridBg.visible)
 				dummyArrow.y = gridBg.y + diffY;
@@ -1424,7 +1615,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			}
 			else if(FlxG.mouse.justPressed && !ignoreClickForThisFrame)
 			{
-				if(FlxG.mouse.x >= gridBg.x && FlxG.mouse.x < gridBg.x + gridBg.width)
+				// 多k: 点击范围按当前小节最大宽度计算 (事件后 9K 段比 4K 段宽)
+				if(FlxG.mouse.x >= gridBg.x && FlxG.mouse.x < gridBg.x + sectionWidthPx(curSec))
 				{
 					var closest:MetaNote = null;
 					if(FlxG.mouse.overlaps(curRenderedNotes))
@@ -1489,7 +1681,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						else
 							showOutput('newchartEditor_error_note_must_select', true);
 					}
-					else if(!holdingAlt && FlxG.mouse.y >= gridBg.y && FlxG.mouse.y < gridBg.y + gridBg.height) // Add note
+					// 多k: 放置范围按当前小节总高度 (含事件切分段)
+					else if(!holdingAlt && FlxG.mouse.y >= gridBg.y && FlxG.mouse.y < gridBg.y + sectionHeightPx(curSec)) // Add note
 					{
 						var strumTime:Float = (diffY / GRID_SIZE * (cachedSectionCrochets[curSec] / 4) / curZoom) + cachedSectionTimes[curSec];
 						if(noteData >= 0)
@@ -1526,6 +1719,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 							TraceManager.debug('trace.editor.eventAdded', 'Added event at time: {}', [strumTime]);
 							var didAdd:Bool = false;
 
+							// 多k: 新增 Change Mania 事件 -> 记录快照, 插入后按工具箱模式重编码
+							var addEventName:String = eventsList[Std.int(Math.max(eventDropDown.selectedIndex, 0))][0];
+							var oldEvents:Array<Dynamic> = (addEventName == 'Change Mania') ? deepCopyEditorEvents() : null;
 							var eventAdded:EventMetaNote = createEvent([strumTime, [[eventsList[Std.int(Math.max(eventDropDown.selectedIndex, 0))][0], value1InputText.text, value2InputText.text]]]);
 							for (num in sectionFirstEventID...events.length)
 							{
@@ -1544,6 +1740,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 							selectedNotes.push(eventAdded);
 							addUndoAction(ADD_NOTE, {events: [eventAdded]});
+							if(oldEvents != null) refreshAfterManiaEventEdit(oldEvents);
 						}
 						onSelectNote();
 						softReloadNotes();
@@ -1664,6 +1861,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					}
 				}
 			}
+			// 多k: 播放中网格按播放位置动态预览 Change Mania 事件 (前进/回退均会更新)
+			if (playing) checkManiaEvents(lastTime, songPos);
 			forceDataUpdate = false;
 			
 			// moved from beatHit()
@@ -1739,6 +1938,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		var originalEvents:Array<EventMetaNote> = [];
 		var movedNotes:Array<MetaNote> = [];
 		var movedEvents:Array<EventMetaNote> = [];
+		// 多k: 拖动 Change Mania 事件前记录事件快照, 放下后按工具箱模式重编码
+		_moveHadChangeMania = false;
+		for (sel in selectedNotes)
+			if (sel != null && sel.isEvent && eventHasChangeMania(cast (sel, EventMetaNote))) { _moveHadChangeMania = true; break; }
+		_moveOldEvents = _moveHadChangeMania ? deepCopyEditorEvents() : null;
 		for (note in selectedNotes)
 		{
 			if(note == null) continue;
@@ -1798,6 +2002,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		isMovingNotes = false;
 		markUnsaved();
 		softReloadNotes();
+		if(_moveHadChangeMania && _moveOldEvents != null)
+		{
+			_moveHadChangeMania = false;
+			refreshAfterManiaEventEdit(_moveOldEvents);
+			_moveOldEvents = null;
+		}
 	}
 
 	function makeNoteDataCopy(originalData:Array<Dynamic>, isEvent:Bool)
@@ -1946,6 +2156,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	/** Create a timestamped backup before playtesting, to prevent data loss. */
 	function createPlaytestBackup():Void
 	{
+		// Only create backups when the player opted in to auto-save.
+		if(!ClientPrefs.data.chartAutosave) return;
 		#if sys
 		try
 		{
@@ -1988,6 +2200,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function doDeleteNote(note:MetaNote):Void
 	{
 		TraceManager.debug('trace.editor.noteRemoved', 'Removed {} at time: {}', [!note.isEvent ? 'note' : 'event', note.strumTime]);
+		// 多k: 删除 Change Mania 事件 -> 记录快照, 删除后按工具箱模式重编码
+		var oldEvents:Array<Dynamic> = (note.isEvent && eventHasChangeMania(cast (note, EventMetaNote)))
+			? deepCopyEditorEvents() : null;
 		if(!note.isEvent)
 			notes.remove(note);
 		else
@@ -1996,6 +2211,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		selectedNotes.remove(note);
 		curRenderedNotes.remove(note, true);
 		addUndoAction(DELETE_NOTE, !note.isEvent ? {notes: [note]} : {events: [note]});
+		if(oldEvents != null) refreshAfterManiaEventEdit(oldEvents);
 	}
 
 	function resetSelectedNotes()
@@ -2078,13 +2294,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		else selectedEventText.visible = false;
 	}
 
-	function createGrids()
+	function createGrids(?doLoadSection:Bool = true)
 	{
 		var destroyed:Bool = false;
-		var stripes:Array<Int> = null;
 		if(prevGridBg != null)
 		{
-			stripes = prevGridBg.stripes;
 			remove(prevGridBg);
 			remove(gridBg);
 			remove(nextGridBg);
@@ -2094,21 +2308,31 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			destroyed = true;
 		}
 
-		var columnCount:Int = (GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
-		gridBg = new ChartingGridSprite(columnCount, gridColors[0], gridColors[1]);
+		// 多k: 网格列数按各小节生效键数 (Change Mania 事件分段):
+		// 事件前的小节显示 4K 网格, 事件后的小节显示 9K 网格, 无需播放经过事件才更新。
+		// SONG 尚未加载 (create 早期) 时全部回退到当前 k, 避免空引用
+		var songReady:Bool = (PlayState.SONG != null && PlayState.SONG.notes != null);
+		var fallbackK:Int = EKData.clampMania(PlayState.mania);
+		var curSegs:Array<{startStep:Int, k:Int}> = songReady ? sectionSegments(curSec) : [{startStep: 0, k: fallbackK}];
+		var prevSegs:Array<{startStep:Int, k:Int}> = (songReady && curSec > 0) ? sectionSegments(curSec - 1) : [{startStep: 0, k: fallbackK}];
+		var nextSegs:Array<{startStep:Int, k:Int}> = (songReady && curSec < PlayState.SONG.notes.length - 1) ? sectionSegments(curSec + 1) : [{startStep: 0, k: fallbackK}];
+		var prevColumnCount:Int = (Note.ammo[prevSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
+		var curColumnCount:Int = (Note.ammo[curSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
+		var nextColumnCount:Int = (Note.ammo[nextSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
+
+		gridBg = new ChartingGridSprite(curColumnCount, gridColors[0], gridColors[1], NewChartingState.GRID_SIZE, SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
 		gridBg.screenCenter(X);
 
-		prevGridBg = new ChartingGridSprite(columnCount, gridColorsOther[0], gridColorsOther[1]);
-		nextGridBg = new ChartingGridSprite(columnCount, gridColorsOther[0], gridColorsOther[1]);
+		prevGridBg = new ChartingGridSprite(prevColumnCount, gridColorsOther[0], gridColorsOther[1], NewChartingState.GRID_SIZE, SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
+		nextGridBg = new ChartingGridSprite(nextColumnCount, gridColorsOther[0], gridColorsOther[1], NewChartingState.GRID_SIZE, SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
 		prevGridBg.x = nextGridBg.x = gridBg.x;
-		prevGridBg.stripes = nextGridBg.stripes = gridBg.stripes = stripes;
-		
+
 		if(destroyed)
 		{
 			insert(getFirstNull(), prevGridBg);
 			insert(getFirstNull(), nextGridBg);
 			insert(getFirstNull(), gridBg);
-			loadSection();
+			if (doLoadSection) loadSection();
 		}
 		else
 		{
@@ -2116,6 +2340,272 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			add(nextGridBg);
 			add(gridBg);
 		}
+		_lastGridMania = PlayState.mania;
+		// 多k: 分段网格在下次 loadSection 时按当前 curSec 窗口重建
+		_segmentsBuildSec = -999;
+	}
+
+	/** 多k: 当前谱面基准键数 (0 基)。 */
+	function chartBaseMania():Int
+	{
+		if (PlayState.SONG == null) return Note.defaultMania;
+		return (PlayState.SONG.mania != null) ? EKData.clampMania(PlayState.SONG.mania) : Note.defaultMania;
+	}
+
+	/** 多k: 计算某小节起始时刻 (ms), 与 _cacheSections 同一公式。 */
+	function sectionStartTimeMs(sec:Int):Float
+	{
+		if (PlayState.SONG == null || PlayState.SONG.notes == null || sec < 0) return 0;
+		var time:Float = 0;
+		var bpm:Float = (PlayState.SONG.bpm > 0) ? PlayState.SONG.bpm : 100;
+		var end:Int = Std.int(Math.min(sec, PlayState.SONG.notes.length));
+		for (i in 0...end)
+		{
+			var section = PlayState.SONG.notes[i];
+			if (section == null) continue;
+			if (section.changeBPM && section.bpm > 0) bpm = section.bpm;
+			var secs:Null<Float> = cast section.sectionBeats;
+			var beats:Float = (secs != null && secs > 0) ? secs : 4;
+			time += Conductor.calculateCrochet(bpm) * beats;
+		}
+		return time;
+	}
+
+	/** 多k: 某小节每 Step 的毫秒数 (按该小节生效的 BPM, 与 _cacheSections 同一公式)。 */
+	function sectionStepMs(sec:Int):Float
+	{
+		if (PlayState.SONG == null || PlayState.SONG.notes == null) return Conductor.stepCrochet;
+		var bpm:Float = (PlayState.SONG.bpm > 0) ? PlayState.SONG.bpm : 100;
+		var end:Int = Std.int(Math.min(sec + 1, PlayState.SONG.notes.length));
+		for (i in 0...end)
+		{
+			var section = PlayState.SONG.notes[i];
+			if (section == null) continue;
+			if (section.changeBPM && section.bpm > 0) bpm = section.bpm;
+		}
+		return Conductor.calculateCrochet(bpm) / 4;
+	}
+
+	/** 多k: 某小节的 Step 总数 (4 * 拍数)。 */
+	function sectionSteps(sec:Int):Int
+	{
+		if (PlayState.SONG == null || PlayState.SONG.notes == null || sec < 0 || sec >= PlayState.SONG.notes.length) return 16;
+		var secs:Null<Float> = cast PlayState.SONG.notes[sec].sectionBeats;
+		var beats:Float = (secs != null && secs > 0) ? secs : 4;
+		return Std.int(Math.max(1, Math.round(4 * beats)));
+	}
+
+	/**
+	 * 多k: 某小节按 Change Mania 事件切分出的网格段 (Step 级)。
+	 * 返回 [{startStep, k}, ...]: 事件所在 Step 之后换新键数网格列数,
+	 * 事件之前的行保持旧键数, 与"上面 4K 网格 / 下面 9K 网格"一致。
+	 */
+	function sectionSegments(sec:Int):Array<{startStep:Int, k:Int}>
+	{
+		var segs:Array<{startStep:Int, k:Int}> = [];
+		if (PlayState.SONG == null || PlayState.SONG.notes == null || sec < 0 || sec >= PlayState.SONG.notes.length)
+		{
+			segs.push({startStep: 0, k: EKData.clampMania(PlayState.mania)});
+			return segs;
+		}
+		var events:Array<Dynamic> = PlayState.SONG.events;
+		var base:Int = chartBaseMania();
+		var secStart:Float = sectionStartTimeMs(sec);
+		var secEnd:Float = sectionStartTimeMs(sec + 1);
+		var steps:Int = sectionSteps(sec);
+		var stepMs:Float = sectionStepMs(sec);
+		segs.push({startStep: 0, k: EKData.effectiveManiaAtTime(events, base, secStart)});
+
+		var bounds:Map<Int, Float> = [];
+		if (events != null)
+		{
+			for (event in events)
+			{
+				if (event == null || event[0] == null || event[1] == null) continue;
+				var evTime:Float = Std.parseFloat(Std.string(event[0]));
+				if (Math.isNaN(evTime) || evTime <= secStart || evTime >= secEnd) continue;
+				var subs:Array<Dynamic> = cast event[1];
+				if (subs == null) continue;
+				for (sub in subs)
+				{
+					if (sub == null || sub.length < 2) continue;
+					if (Std.string(sub[0]) != 'Change Mania') continue;
+					var s:Int = Std.int(Math.floor((evTime - secStart) / stepMs));
+					if (s < 1) s = 1;
+					if (s >= steps) s = steps - 1;
+					// 同一步多个事件时取最晚事件时刻: 该步结束时真正生效的 k
+					var prevT:Float = bounds.exists(s) ? bounds.get(s) : Math.NEGATIVE_INFINITY;
+					if (evTime > prevT) bounds.set(s, evTime);
+				}
+			}
+		}
+		var boundSteps:Array<Int> = [for (s in bounds.keys()) s];
+		boundSteps.sort((a, b) -> a - b);
+		for (s in boundSteps)
+			segs.push({startStep: s, k: EKData.effectiveManiaAtTime(events, base, bounds.get(s))});
+		return segs;
+	}
+
+	/** 多k: 销毁并清空额外的网格分段。 */
+	function destroyGridSegments():Void
+	{
+		for (seg in gridSegments)
+		{
+			if (seg == null) continue;
+			remove(seg);
+			seg = FlxDestroyUtil.destroy(seg);
+		}
+		gridSegments = [];
+		gridSegmentMeta = [];
+	}
+
+	/** 多k: 为某个窗口构建小节内事件切分出的额外网格段。 */
+	function buildExtraSegs(segs:Array<{startStep:Int, k:Int}>, window:Int, sec:Int, colors:Array<FlxColor>):Void
+	{
+		var steps:Int = sectionSteps(sec);
+		for (i in 1...segs.length)
+		{
+			var colCount:Int = (Note.ammo[segs[i].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0);
+			var s:ChartingGridSprite = new ChartingGridSprite(colCount, colors[0], colors[1], NewChartingState.GRID_SIZE, SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
+			s.x = gridBg.x;
+			s.stripes = gridStripesForMania(segs[i].k);
+			gridSegments.push(s);
+			var endStep:Int = (i + 1 < segs.length) ? segs[i + 1].startStep : steps;
+			gridSegmentMeta.push({window: window, sec: sec, startStep: segs[i].startStep, endStep: endStep, k: segs[i].k});
+		}
+	}
+
+	/**
+	 * 多k: 按当前 curSec 的三窗 (上/中/下小节) 重建全部网格 (主网格 + 事件分段) 并定位。
+	 * 主网格的列数随窗口小节变化 (columns 只读, 必须重建), 否则切到 9K 小节时
+	 * 网格仍是 4K 列数渲染不出来。
+	 */
+	function rebuildGridsForCurrentWindow():Void
+	{
+		destroyGridSegments();
+		var songReady:Bool = (PlayState.SONG != null && PlayState.SONG.notes != null);
+		var fallbackK:Int = EKData.clampMania(PlayState.mania);
+		var curSegs:Array<{startStep:Int, k:Int}> = songReady ? sectionSegments(curSec) : [{startStep: 0, k: fallbackK}];
+		var prevSegs:Array<{startStep:Int, k:Int}> = (songReady && curSec > 0) ? sectionSegments(curSec - 1) : [{startStep: 0, k: fallbackK}];
+		var nextSegs:Array<{startStep:Int, k:Int}> = (songReady && curSec < PlayState.SONG.notes.length - 1) ? sectionSegments(curSec + 1) : [{startStep: 0, k: fallbackK}];
+
+		// 主网格: 保持左起点不变, 按各窗口小节键数重建列数
+		var anchorX:Float = (gridBg != null) ? gridBg.x : 0;
+		gridBg = replaceGridSprite(gridBg, (Note.ammo[curSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0), gridColors[0], gridColors[1], anchorX);
+		prevGridBg = replaceGridSprite(prevGridBg, (Note.ammo[prevSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0), gridColorsOther[0], gridColorsOther[1], anchorX);
+		nextGridBg = replaceGridSprite(nextGridBg, (Note.ammo[nextSegs[0].k] * GRID_PLAYERS) + (SHOW_EVENT_COLUMN ? 1 : 0), gridColorsOther[0], gridColorsOther[1], anchorX);
+
+		buildExtraSegs(curSegs, 1, curSec, gridColors);
+		buildExtraSegs(prevSegs, 0, curSec - 1, gridColorsOther);
+		buildExtraSegs(nextSegs, 2, curSec + 1, gridColorsOther);
+		// 多k: 分段网格必须插在音符组之前 (否则盖住 Note/事件图标且无法点击);
+		// 不能直接 add() 追加到末尾 (首次重建无空槽时会被追加到最顶层)
+		var gridInsertIdx:Int = members.indexOf(nextGridBg);
+		for (seg in gridSegments)
+		{
+			gridInsertIdx++;
+			insert(gridInsertIdx, seg);
+		}
+		updateGridSegmentStripes();
+		positionGridSegments();
+		_segmentsBuildSec = curSec;
+	}
+
+	/** 多k: 用新列数的网格替换旧网格, 保持原 members 位置 (网格始终在音符组之前)。 */
+	function replaceGridSprite(oldSprite:ChartingGridSprite, columns:Int, color1:FlxColor, color2:FlxColor, anchorX:Float):ChartingGridSprite
+	{
+		var idx:Int = (oldSprite != null) ? members.indexOf(oldSprite) : -1;
+		if (oldSprite != null)
+		{
+			remove(oldSprite);
+			oldSprite = FlxDestroyUtil.destroy(oldSprite);
+		}
+		var sp:ChartingGridSprite = new ChartingGridSprite(columns, color1, color2, NewChartingState.GRID_SIZE, SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0);
+		sp.x = anchorX;
+		if (idx >= 0) insert(idx, sp);
+		else add(sp);
+		return sp;
+	}
+
+	/** 多k: 刷新所有网格段 (主网格 + 分段) 的玩家/对手分隔线。 */
+	function updateGridSegmentStripes():Void
+	{
+		if (gridBg != null) gridBg.stripes = gridStripesForMania(mainGridK(1));
+		if (prevGridBg != null) prevGridBg.stripes = gridStripesForMania(mainGridK(0));
+		if (nextGridBg != null) nextGridBg.stripes = gridStripesForMania(mainGridK(2));
+		for (i => seg in gridSegments)
+			if (seg != null && i < gridSegmentMeta.length)
+				seg.stripes = gridStripesForMania(gridSegmentMeta[i].k);
+	}
+
+	/** 多k: 主网格 (每窗第一段) 的键数。window: 0=prev 1=cur 2=next。 */
+	function mainGridK(window:Int):Int
+	{
+		var sec:Int = curSec + (window - 1);
+		if (sec < 0 || PlayState.SONG == null || PlayState.SONG.notes == null || sec >= PlayState.SONG.notes.length)
+			return EKData.clampMania(PlayState.mania);
+		return sectionSegments(sec)[0].k;
+	}
+
+	/** 多k: 定位额外网格分段 (y/行数/可见性), 在 loadSection 与 updateGridVisibility 时调用。 */
+	function positionGridSegments():Void
+	{
+		for (i => seg in gridSegments)
+		{
+			if (seg == null || i >= gridSegmentMeta.length) continue;
+			var meta = gridSegmentMeta[i];
+			var sec:Int = meta.sec;
+			if (sec < 0 || sec >= cachedSectionRow.length) { seg.visible = false; continue; }
+			var visible:Bool = false;
+			switch(meta.window)
+			{
+				case 0: visible = (curSec > 0 && showPreviousSection);
+				case 1: visible = true;
+				case 2: visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
+			}
+			seg.visible = visible;
+			seg.y = cachedSectionRow[sec] * GRID_SIZE * curZoom + meta.startStep * GRID_SIZE * curZoom;
+			seg.rows = (meta.endStep - meta.startStep) * curZoom;
+			seg.vortexLineEnabled = vortexEnabled;
+			seg.vortexLineSpace = GRID_SIZE * 4 * curZoom;
+		}
+	}
+
+	/** 多k: 某小节总高度 (Step 数 * 格高 * zoom)。 */
+	function sectionHeightPx(sec:Int):Float
+	{
+		return sectionSteps(sec) * GRID_SIZE * curZoom;
+	}
+
+	/** 多k: 某小节网格最大宽度 (取段内最大键数, 供鼠标点击边界使用)。 */
+	function sectionWidthPx(sec:Int):Float
+	{
+		var maxK:Int = EKData.clampMania(PlayState.mania);
+		for (seg in sectionSegments(sec))
+			if (seg.k > maxK) maxK = seg.k;
+		return (SHOW_EVENT_COLUMN ? EVENT_COLUMN_WIDTH : 0) + Note.ammo[maxK] * GRID_PLAYERS * GRID_SIZE;
+	}
+
+	/** 多k: 主网格 (每窗第一段) 的行数: 小节内首个事件之前的 Step 数 * zoom。 */
+	function mainGridRows(sec:Int, zoom:Float):Float
+	{
+		var segs:Array<{startStep:Int, k:Int}> = sectionSegments(sec);
+		if (segs.length > 1) return segs[1].startStep * zoom;
+		return sectionSteps(sec) * zoom;
+	}
+
+	/** 多k: 某键数网格的玩家/对手分隔线列号 (与旧逻辑一致, 列数随键数变化)。 */
+	function gridStripesForMania(mania:Int):Array<Int>
+	{
+		var columns:Int = SHOW_EVENT_COLUMN ? 1 : 0;
+		var stripes:Array<Int> = [];
+		var ammo:Int = Note.ammo[EKData.clampMania(mania)];
+		for (i in 0...GRID_PLAYERS)
+		{
+			if (columns > 0) stripes.push(columns);
+			columns += ammo;
+		}
+		return stripes;
 	}
 
 	var cachedSectionRow:Array<Int>;
@@ -2125,6 +2615,29 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function loadChart(song:SwagSong)
 	{
 		PlayState.SONG = song;
+		// 多k: 键数与网格尺寸同步 (旧 4K 谱面无 mania 字段)
+		if (PlayState.SONG.mania == null) PlayState.SONG.mania = Note.defaultMania;
+		PlayState.mania = EKData.clampMania(PlayState.SONG.mania);
+		PlayState.SONG.mania = PlayState.mania;
+		GRID_COLUMNS_PER_PLAYER = Note.ammo[PlayState.mania];
+		GRID_SIZE = editorGridSize(PlayState.mania);
+
+		// 多k: 打开不同键数的谱面时, 网格/轨道/头部图标必须按新键数重建,
+		// 否则只更新了静态列数, 网格精灵还是旧键数的样子 (打开 7K 谱仍显示 4K)。
+		if (gridBg != null)
+		{
+			try
+			{
+				createGrids(false);
+				rebuildStrumNotes();
+				repositionEditorUI();
+				updateGridVisibility();
+			}
+			catch (e:Dynamic)
+			{
+				TraceManager.error('trace.editor.exception', 'loadChart grid rebuild failed: {}', [Std.string(e)]);
+			}
+		}
 
 		// Smart defaults matching PlayState.create() logic
 		if(PlayState.SONG.stage == null || PlayState.SONG.stage.length < 1)
@@ -2346,6 +2859,698 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		loadSection();
 	}
 
+	/**
+	 * 多k: 切 K 后快速更新现有 Note (数据/动画/颜色/尺寸/位置), 不重建对象。
+	 * 物量极大的谱面切 K 不再逐 Note destroy/create, 避免卡顿; 也避免重建中断丢 Note。
+	 */
+	function updateNotesForMania():Void
+	{
+		for (n in notes)
+		{
+			if (n == null || n.isEvent) continue;
+			var raw:Int = Std.int(n.songData[1]);
+			if (raw < 0) continue;
+			// 多k: 按该 Note 自身时间点的生效键数解释, 不随播放头 k 变化
+			n.mania = EKData.effectiveManiaAtTime((PlayState.SONG != null) ? PlayState.SONG.events : null, chartBaseMania(), n.strumTime);
+			var noteAmmo:Int = Note.ammo[EKData.clampMania(n.mania)];
+			if (n.chartNoteData != raw || n.noteData != raw % noteAmmo)
+			{
+				n.changeNoteData(raw); // 更新动画/颜色/尺寸 (songData[1] 保持完整 raw, 保留 side)
+			}
+			else
+				n.applyLaneColor();
+			positionNoteXByData(n);
+			// 切 K 后 GRID_SIZE 变化, 必须重算 Y, 否则 Note 停留在旧位置 (渲染成空气/错位)
+			var secNum:Int = 0;
+			while (secNum + 1 < cachedSectionTimes.length && cachedSectionTimes[secNum + 1] <= n.strumTime) secNum++;
+			positionNoteYOnTime(n, secNum);
+		}
+		for (e in events)
+		{
+			if (e == null) continue;
+			e.x = gridBg.x; // 网格重居中后事件列位置同步
+			var secNum:Int = 0;
+			while (secNum + 1 < cachedSectionTimes.length && cachedSectionTimes[secNum + 1] <= e.strumTime) secNum++;
+			positionNoteYOnTime(e, secNum);
+		}
+		loadSection(); // 重排 Y / 事件 / 相邻段落
+	}
+
+	/** 多k: 预览模式下的网格键数 (-1 = 未预览, 使用谱面基准 SONG.mania)。 */
+	var previewMania:Int = -1;
+
+	/** 多k: 事件输入 (键数) 编辑会话, 焦点释放后统一重编码, 避免逐字符中间态。 */
+	var _pendingManiaReencode:Bool = false;
+	var _pendingManiaOldEvents:Array<Dynamic> = null;
+	var _eventInputFocused:Bool = false;
+	/** 多k: 拖动事件期间的事件快照 (移动 Change Mania 事件位置后重编码用)。 */
+	var _moveOldEvents:Array<Dynamic> = null;
+	var _moveHadChangeMania:Bool = false;
+
+	/** 多k: 计算某时间点应生效的键数 (0 基): 取该时间前最近一次 Change Mania 事件的 k 值。 */
+	function computeManiaAtTime(time:Float):Int
+	{
+		if (PlayState.SONG == null) return Note.defaultMania;
+		var base:Int = (PlayState.SONG.mania != null) ? EKData.clampMania(PlayState.SONG.mania) : Note.defaultMania;
+		return EKData.effectiveManiaAtTime(PlayState.SONG.events, base, time);
+	}
+
+	/**
+	 * 多k: 编辑器网格按播放位置动态预览 Change Mania 事件 (预览模式)。
+	 * - 事件之前显示谱面基准 k, 经过事件后显示新 k, 回退到事件前自动恢复;
+	 * - 只改 previewMania / PlayState.mania 显示, 不修改 SONG.mania 谱面数据。
+	 * @param lastTime 上一次播放位置 (仅用于判断位置是否有变化, 本实现按当前位置全量计算)
+	 * @param songPos  当前播放位置
+	 */
+	function checkManiaEvents(lastTime:Float, songPos:Float):Void
+	{
+		if (PlayState.SONG == null || FlxG.sound.music == null) return;
+		var target:Int = computeManiaAtTime(songPos);
+		if (target == (previewMania >= 0 ? previewMania : ((PlayState.SONG.mania != null) ? EKData.clampMania(PlayState.SONG.mania) : Note.defaultMania)))
+			return; // 显示键数未变化
+		previewMania = target;
+		PlayState.mania = target;
+		GRID_COLUMNS_PER_PLAYER = Note.ammo[PlayState.mania];
+		var oldGridSize:Int = GRID_SIZE;
+		var newGridSize:Int = editorGridSize(PlayState.mania);
+		GRID_SIZE = newGridSize;
+		try
+		{
+			// 多k: 网格列数按事件静态分段, 播放经过事件时只有跨 k 格宽变化才重建网格,
+			// 避免滑动时整段重建成像闪烁 (4K<->9K 格宽同为 40, 无需重建)。
+			if (newGridSize != oldGridSize) createGrids(false);
+			rebuildStrumNotes();
+			repositionEditorUI();
+			updateGridVisibility();
+			updateNotesForMania();
+			updateHeads(true);
+			updateScrollY();
+		}
+		catch (e2:Dynamic)
+		{
+			TraceManager.error('trace.editor.maniaEventError', 'Change Mania 事件更新网格出错: {}', [Std.string(e2)]);
+		}
+		if (maniaStepper != null) maniaStepper.value = target + 1;
+	}
+
+	/**
+	 * 多k: 切 K 时转换谱面 Note 数据。
+	 * - 玩家方/对手方归属 (side) 始终保持;
+	 * - 轨道号按新 K 取模;
+	 * - mode=1/3: 每个 (side, strumTime) 组内轨道随机重排 (组内数量超过新轨道数时保持映射, 避免冲突丢 Note);
+	 * - mode=2/3: 每组只有 1 个 Note 时自动复制到同侧空轨道组成双押。
+	 */
+	function convertChartNoteData(oldMania:Int, newMania:Int, mode:Int = 0):Void
+	{
+		if (oldMania == newMania || PlayState.SONG == null) return;
+		var oldAmmo:Int = Note.ammo[EKData.clampMania(oldMania)];
+		var newAmmo:Int = Note.ammo[EKData.clampMania(newMania)];
+		if (oldAmmo < 1 || newAmmo < 1) return;
+
+		// 记录 Note -> 所属 section, 避免补双押时 O(n^2) 查找 (物量大谱面卡顿/丢 Note)
+		var noteSection:Map<Array<Dynamic>, SwagSection> = [];
+		var all:Array<Array<Dynamic>> = [];
+		for (section in PlayState.SONG.notes)
+		{
+			if (section == null || section.sectionNotes == null) continue;
+			for (note in section.sectionNotes)
+			{
+				if (note == null || note.length < 2) continue;
+				var raw:Int = Std.int(note[1]);
+				if (raw < 0) continue; // 事件 Note (data = -1)
+				noteSection.set(note, section);
+				all.push(note);
+			}
+		}
+
+		// 1. 基础映射: side 保持, lane 按新 K 取模
+		for (note in all)
+		{
+			var raw:Int = Std.int(note[1]);
+			var side:Int = Std.int(raw / oldAmmo);
+			if (side > 1) side = 1; // 防御: 只允许玩家/对手两侧
+			var lane:Int = raw % oldAmmo;
+			note[1] = side * newAmmo + (lane % newAmmo);
+		}
+
+		// 2. 自动打乱: 每个 (side, strumTime) 组内的轨道随机重排 (确定性 seed)
+		var doShuffle:Bool = (mode == 1 || mode == 3);
+		var doFill:Bool = (mode == 2 || mode == 3);
+		if (doShuffle && newAmmo > oldAmmo)
+		{
+			var groups:Map<String, Array<{note:Array<Dynamic>, side:Int}>> = [];
+			for (note in all)
+			{
+				var raw:Int = Std.int(note[1]);
+				var side:Int = Std.int(raw / newAmmo);
+				var key:String = side + ':' + note[0];
+				if (!groups.exists(key)) groups.set(key, []);
+				groups.get(key).push({note: note, side: side});
+			}
+			for (key => grp in groups)
+			{
+				// 组内数量超过新轨道数时保持基础映射, 避免同轨冲突导致 Note 重叠/丢失
+				if (grp.length < 2 || grp.length > newAmmo) continue;
+				var targets:Array<Int> = [for (i in 0...newAmmo) i];
+				// xorshift 确定性随机 (FlxRandom 的 LCG 在 32 位 Int 下溢出, 分布偏斜)
+				var rstate:Int = hashStr(key);
+				if (rstate == 0) rstate = 0x9E3779B9;
+				var i:Int = targets.length - 1;
+				while (i >= 1)
+				{
+					rstate ^= (rstate << 13);
+					rstate ^= (rstate >>> 17);
+					rstate ^= (rstate << 5);
+					var j:Int = (rstate & 0x7FFFFFFF) % (i + 1);
+					var tmp:Int = targets[i];
+					targets[i] = targets[j];
+					targets[j] = tmp;
+					i--;
+				}
+				for (i in 0...grp.length)
+					grp[i].note[1] = grp[0].side * newAmmo + targets[i];
+			}
+		}
+
+		// 3. 自动补双押: 每组只有 1 个 Note 时复制到同侧空轨道
+		if (doFill && newAmmo > oldAmmo)
+		{
+			var groups2:Map<String, Array<Array<Dynamic>>> = [];
+			for (note in all)
+			{
+				var raw:Int = Std.int(note[1]);
+				var side:Int = Std.int(raw / newAmmo);
+				var key:String = side + ':' + note[0];
+				if (!groups2.exists(key)) groups2.set(key, []);
+				groups2.get(key).push(note);
+			}
+			for (key => grp in groups2)
+			{
+				if (grp.length != 1) continue; // 已是双押/多押则跳过
+				var raw:Int = Std.int(grp[0][1]);
+				var side:Int = Std.int(raw / newAmmo);
+				var used:Array<Bool> = [for (i in 0...newAmmo) false];
+				for (n in grp) used[Std.int(n[1]) % newAmmo] = true;
+				var free:Array<Int> = [for (i in 0...newAmmo) if (!used[i]) i];
+				if (free.length < 1) continue;
+				var seed:Int = hashStr(key);
+				var newLane:Int = free[Std.int(Math.abs(seed)) % free.length];
+				var copyNote:Array<Dynamic> = grp[0].copy();
+				copyNote[1] = side * newAmmo + newLane;
+				var sec:SwagSection = noteSection.get(grp[0]);
+				if (sec != null && sec.sectionNotes != null) sec.sectionNotes.push(copyNote);
+			}
+		}
+	}
+
+	/**
+	 * 多k: 事件列表变化 (增删改 Change Mania) 后, 把受影响 Note 从旧生效键数
+	 * 重编码到新生效键数, 遵循"多k工具"里的转换模式。
+	 * - 顺序映射 (mode=0): side 保持, lane 按新 k 取模;
+	 * - mode=1/3: 每个 (side, 旧k, 时间) 组内确定性重排;
+	 * - mode=2/3: 单押自动复制到同侧空轨道组成双押。
+	 */
+	function reencodeNotesForEventChange(oldEvents:Array<Dynamic>, newEvents:Array<Dynamic>, mode:Int):Void
+	{
+		if (PlayState.SONG == null || PlayState.SONG.notes == null) return;
+		var baseMania:Int = chartBaseMania();
+		var noteSection:Map<Array<Dynamic>, SwagSection> = [];
+		var all:Array<Array<Dynamic>> = [];
+		for (section in PlayState.SONG.notes)
+		{
+			if (section == null || section.sectionNotes == null) continue;
+			for (note in section.sectionNotes)
+			{
+				if (note == null || note.length < 2) continue;
+				var raw:Int = Std.int(note[1]);
+				if (raw < 0) continue; // 事件 Note
+				noteSection.set(note, section);
+				all.push(note);
+			}
+		}
+		if (all.length < 1) return;
+
+		// 筛选受影响 Note (新旧事件列表下生效键数不同的), 并记录旧键数
+		var changed:Array<Array<Dynamic>> = [];
+		var oldKOf:Map<Array<Dynamic>, Int> = [];
+		for (note in all)
+		{
+			var t:Float = Std.parseFloat(Std.string(note[0]));
+			var oldK:Int = EKData.effectiveManiaAtTime(oldEvents, baseMania, t);
+			var newK:Int = EKData.effectiveManiaAtTime(newEvents, baseMania, t);
+			if (oldK == newK) continue;
+			oldKOf.set(note, oldK);
+			changed.push(note);
+		}
+		if (changed.length < 1) return;
+
+		// 1. 顺序映射基础: side 保持, lane 按新 k 取模
+		for (note in changed)
+		{
+			var t:Float = Std.parseFloat(Std.string(note[0]));
+			var newK:Int = EKData.effectiveManiaAtTime(newEvents, baseMania, t);
+			note[1] = EKData.convertRawData(Std.int(note[1]), oldKOf.get(note), newK);
+		}
+
+		var doShuffle:Bool = (mode == 1 || mode == 3);
+		var doFill:Bool = (mode == 2 || mode == 3);
+		if (!doShuffle && !doFill) return;
+
+		// 2. 按 (side, 旧k, 新k, 时间) 分组
+		var groups:Map<String, Array<{note:Array<Dynamic>, side:Int, newK:Int, newAmmo:Int}>> = [];
+		for (note in changed)
+		{
+			var t:Float = Std.parseFloat(Std.string(note[0]));
+			var newK:Int = EKData.effectiveManiaAtTime(newEvents, baseMania, t);
+			var raw:Int = Std.int(note[1]);
+			var newAmmo:Int = Note.ammo[newK];
+			var side:Int = Std.int(raw / newAmmo);
+			if (side > 1) side = 1;
+			var key:String = side + ':' + oldKOf.get(note) + ':' + newK + ':' + note[0];
+			if (!groups.exists(key)) groups.set(key, []);
+			groups.get(key).push({note: note, side: side, newK: newK, newAmmo: newAmmo});
+		}
+
+		for (key => grp in groups)
+		{
+			var oldK:Int = oldKOf.get(grp[0].note);
+			if (grp[0].newAmmo <= Note.ammo[oldK]) continue; // 只在扩容时重排/补双押
+
+			if (doShuffle && grp.length >= 2 && grp.length <= grp[0].newAmmo)
+			{
+				var targets:Array<Int> = [for (i in 0...grp[0].newAmmo) i];
+				var rstate:Int = hashStr(key);
+				if (rstate == 0) rstate = 0x9E3779B9;
+				var i:Int = targets.length - 1;
+				while (i >= 1)
+				{
+					rstate ^= (rstate << 13);
+					rstate ^= (rstate >>> 17);
+					rstate ^= (rstate << 5);
+					var j:Int = (rstate & 0x7FFFFFFF) % (i + 1);
+					var tmp:Int = targets[i];
+					targets[i] = targets[j];
+					targets[j] = tmp;
+					i--;
+				}
+				for (i in 0...grp.length)
+					grp[i].note[1] = grp[0].side * grp[0].newAmmo + targets[i];
+			}
+			else if (doFill && grp.length == 1)
+			{
+				var used:Array<Bool> = [for (i in 0...grp[0].newAmmo) false];
+				used[Std.int(grp[0].note[1]) % grp[0].newAmmo] = true;
+				var free:Array<Int> = [for (i in 0...grp[0].newAmmo) if (!used[i]) i];
+				if (free.length < 1) continue;
+				var seed:Int = hashStr(key);
+				var newLane:Int = free[Std.int(Math.abs(seed)) % free.length];
+				var copyNote:Array<Dynamic> = grp[0].note.copy();
+				copyNote[1] = grp[0].side * grp[0].newAmmo + newLane;
+				var sec:SwagSection = noteSection.get(grp[0].note);
+				if (sec != null && sec.sectionNotes != null) sec.sectionNotes.push(copyNote);
+			}
+		}
+	}
+
+	/** 多k: Change Mania 事件编辑后统一处理: 重编码受影响 Note + 重建网格/音符。 */
+	function refreshAfterManiaEventEdit(oldEvents:Array<Dynamic>):Void
+	{
+		if (PlayState.SONG == null) return;
+		var mode:Int = (convertModeDropDown != null) ? convertModeDropDown.selectedIndex : 0;
+		// 编辑器事件数组是权威数据, 先同步回 SONG.events 再重编码
+		try { _cacheSections(); updateChartData(); } catch (e:Dynamic) {}
+		reencodeNotesForEventChange(oldEvents, PlayState.SONG.events, mode);
+		try
+		{
+			createGrids(false);
+			rebuildStrumNotes();
+			repositionEditorUI();
+			updateGridVisibility();
+			// 补双押模式会新增 Note, 需要整表重载; 其余模式复用现有 Note 快速更新
+			if (mode == 2 || mode == 3)
+				reloadNotes();
+			else
+				updateNotesForMania();
+			updateHeads(true);
+			updateScrollY();
+		}
+		catch (e:Dynamic)
+		{
+			TraceManager.error('trace.editor.maniaEventError', 'Change Mania 事件更新网格出错: {}', [Std.string(e)]);
+		}
+		markUnsaved();
+	}
+
+	/** 多k: 深拷贝编辑器当前事件数组 (格式同 EKData.deepCopyEvents, 不共享内部数组)。 */
+	function deepCopyEditorEvents():Array<Dynamic>
+	{
+		var ret:Array<Dynamic> = [];
+		for (ev in events)
+		{
+			if (ev == null || ev.songData == null) continue;
+			var dataCopy:Array<Dynamic> = ev.songData.copy();
+			if (dataCopy[1] != null)
+			{
+				var subs:Array<Dynamic> = cast dataCopy[1].copy();
+				for (i => sub in subs)
+					if (sub != null) subs[i] = sub.copy();
+				dataCopy[1] = subs;
+			}
+			ret.push(dataCopy);
+		}
+		return ret;
+	}
+
+	/** 多k: 标记 Change Mania 事件键数输入会话 (首次输入时记录事件快照)。 */
+	function markPendingManiaReencode():Void
+	{
+		if(!_pendingManiaReencode)
+			_pendingManiaOldEvents = deepCopyEditorEvents();
+		_pendingManiaReencode = true;
+	}
+
+	/** 多k: 该事件对象是否包含 Change Mania 子事件。 */
+	function eventHasChangeMania(ev:EventMetaNote):Bool
+	{
+		if (ev == null || ev.events == null) return false;
+		for (sub in ev.events)
+			if (sub != null && Std.string(sub[0]) == 'Change Mania') return true;
+		return false;
+	}
+
+	/** 字符串哈希, 用作确定性随机种子。 */
+	static function hashStr(s:String):Int
+	{
+		var h:Int = 0;
+		for (i in 0...s.length)
+			h = ((h << 5) - h) + s.charCodeAt(i);
+		return h;
+	}
+
+	/** 安全获取 section 开始时间; 缓存缺失/过期时从头累加计算, 绝不静默返回 0。 */
+	function safeSectionStart(secNum:Int):Float
+	{
+		if (PlayState.SONG == null) return 0;
+		if (secNum < cachedSectionTimes.length)
+			return cachedSectionTimes[secNum];
+		var t:Float = 0;
+		var bpm:Float = PlayState.SONG.bpm;
+		for (i in 0...secNum)
+		{
+			if (i >= PlayState.SONG.notes.length) break;
+			var sec:SwagSection = PlayState.SONG.notes[i];
+			if (sec == null) continue;
+			if (sec.changeBPM && sec.bpm != null && sec.bpm > 0) bpm = sec.bpm;
+			var sb:Null<Float> = sec.sectionBeats;
+			var beats:Float = (sb != null && sb > 0) ? sb : 4;
+			t += Conductor.calculateCrochet(bpm) * beats;
+		}
+		return t;
+	}
+
+	/** 安全获取 section 的 16 分音符步长 (ms); 缓存缺失时按 BPM 推算。 */
+	function safeSectionStepMs(secNum:Int):Float
+	{
+		if (PlayState.SONG == null) return 150;
+		if (secNum < cachedSectionCrochets.length && cachedSectionCrochets[secNum] > 0)
+			return cachedSectionCrochets[secNum] / 4;
+		var bpm:Float = PlayState.SONG.bpm;
+		for (i in 0...secNum)
+		{
+			if (i >= PlayState.SONG.notes.length) break;
+			var sec:SwagSection = PlayState.SONG.notes[i];
+			if (sec != null && sec.changeBPM && sec.bpm != null && sec.bpm > 0) bpm = sec.bpm;
+		}
+		var step:Float = Conductor.calculateCrochet(bpm) / 4;
+		return (step > 0) ? step : 150;
+	}
+
+	/** 歌曲总时长 (ms), 用于 clamp 生成 Note 的时间。 */
+	inline function songLengthMs():Float
+	{
+		return (FlxG.sound.music != null) ? FlxG.sound.music.length : Math.POSITIVE_INFINITY;
+	}
+
+	/** 打开/关闭 "多k工具" 浮动窗口。 */
+	function toggleToolsBox():Void
+	{
+		if (toolsBox == null) return;
+		toolsBox.visible = !toolsBox.visible;
+		toolsBox.active = toolsBox.visible;
+		if (toolsBox.visible)
+		{
+			// 重新加入状态 (隐藏时已移除)
+			if (FlxG.state.members.indexOf(toolsBox) < 0)
+				FlxG.state.add(toolsBox);
+		}
+		else
+		{
+			// 隐藏时彻底移出状态: 仅 active=false 时 PsychUI 子控件仍可能响应点击
+			if (FlxG.state.members.indexOf(toolsBox) >= 0)
+				FlxG.state.remove(toolsBox);
+		}
+		ignoreClickForThisFrame = true;
+	}
+
+	/**
+	 * 多k: 一键写大粪。
+	 * 先把当前谱面切到目标 K (键数处先调好, 例如 4K -> 9K), 再点此按钮:
+	 * - 分析人声 (vocals) 能量, 人声密集处生成更多 Note;
+	 * - 现有 Note 按人声能量附加 1~3 个随机轨道副本 (粪谱多押);
+	 * - 人声强且没有 Note 的 16 分位置补随机轨道 Note。
+	 */
+	function writeDumbChart():Void
+	{
+		if (PlayState.SONG == null) return;
+		_cacheSections(); // 先刷新 section 缓存, 避免过期缓存导致时间错位
+		var ammo:Int = Note.ammo[PlayState.mania];
+		if (ammo < 5)
+		{
+			showOutput('请先切换到 5K 以上再一键写大粪', true);
+			return;
+		}
+		var energy:Array<Float> = analyzeVocalEnergy();
+		var avg:Float = 0;
+		for (e in energy) avg += e;
+		if (energy.length > 0) avg /= energy.length;
+		var rnd:FlxRandom = new FlxRandom();
+		var totalAdd:Int = 0;
+
+		for (secNum => section in PlayState.SONG.notes)
+		{
+			if (section == null || section.sectionNotes == null) continue;
+			var secStart:Float = safeSectionStart(secNum);
+			var stepMs:Float = safeSectionStepMs(secNum);
+			var sb:Null<Float> = section.sectionBeats;
+			var beats:Float = (sb != null && sb > 0) ? sb : 4;
+			var steps:Int = Std.int(Math.max(4, beats * 4));
+			var maxTime:Float = songLengthMs();
+			var used:Map<String, Bool> = [];
+			var addList:Array<Array<Dynamic>> = [];
+
+			// 记录已用轨道 + 按 (side:strumTime) 分组的单押
+			var groups:Map<String, Array<Array<Dynamic>>> = [];
+			for (n in section.sectionNotes)
+			{
+				if (n == null || n.length < 2) continue;
+				var raw:Int = Std.int(n[1]);
+				if (raw < 0) continue;
+				var side:Int = Std.int(raw / ammo);
+				var lane:Int = raw % ammo;
+				used.set(Std.string(n[0]) + ':' + side + ':' + lane, true);
+				var key:String = side + ':' + n[0];
+				if (!groups.exists(key)) groups.set(key, []);
+				groups.get(key).push(n);
+			}
+
+			// 1) 现有 Note 按人声能量多押化 (4K -> 多K 粪谱)
+			for (key => grp in groups)
+			{
+				var raw:Int = Std.int(grp[0][1]);
+				var side:Int = Std.int(raw / ammo);
+				var t:Float = Std.parseFloat(Std.string(grp[0][0]));
+				var e:Float = energyAt(energy, t);
+				var extra:Int = 0;
+				if (e > avg * 1.3) extra = rnd.int(2, 3);
+				else if (e > avg * 0.7) extra = 1;
+				else if (rnd.float() < 0.25) extra = 1;
+				for (k in 0...extra)
+				{
+					var freeLanes:Array<Int> = [];
+					for (lane in 0...ammo)
+						if (!used.exists(Std.string(t) + ':' + side + ':' + lane)) freeLanes.push(lane);
+					if (freeLanes.length < 1) break;
+					var newLane:Int = freeLanes[rnd.int(0, freeLanes.length - 1)];
+					var copyNote:Array<Dynamic> = grp[0].copy();
+					copyNote[1] = side * ammo + newLane;
+					addList.push(copyNote);
+					used.set(Std.string(t) + ':' + side + ':' + newLane, true);
+				}
+			}
+
+			// 2) 人声强且无 Note 的 16 分位置补随机轨道 Note
+			for (i in 0...steps)
+			{
+				var st:Float = secStart + i * stepMs;
+				if (st >= maxTime - 1) break; // 不生成超出歌曲长度的 Note
+				var e:Float = energyAt(energy, st);
+				if (e <= avg * 1.2) continue;
+				var side:Int = rnd.int(0, 1);
+				var has:Bool = false;
+				for (lane in 0...ammo)
+					if (used.exists(Std.string(st) + ':' + side + ':' + lane)) { has = true; break; }
+				if (has) continue;
+				var lane:Int = rnd.int(0, ammo - 1);
+				var key:String = Std.string(st) + ':' + side + ':' + lane;
+				if (used.exists(key)) continue;
+				addList.push([st, side * ammo + lane, 0]);
+				used.set(key, true);
+			}
+
+			for (n in addList) section.sectionNotes.push(n);
+			totalAdd += addList.length;
+		}
+
+		markUnsaved();
+		reloadNotes();
+		showOutput('一键写大粪完成(匹配人声), 新增 ' + totalAdd + ' 个 Note');
+	}
+
+	/**
+	 * 多k: 分析人声轨能量, 每 25ms 一个能量桶 (0~1 平均绝对值)。
+	 */
+	function analyzeVocalEnergy():Array<Float>
+	{
+		var result:Array<Float> = [];
+		#if (lime_cffi && !macro)
+		@:privateAccess
+		if (vocals != null && vocals._sound != null && vocals._sound.__buffer != null)
+		{
+			var buffer:AudioBuffer = vocals._sound.__buffer;
+			if (buffer != null && buffer.data != null)
+			{
+				var bytes:Bytes = buffer.data.toBytes();
+				var channels:Int = buffer.channels;
+				if (channels >= 1 && bytes != null && bytes.length >= 2)
+				{
+					var samplesPerBucket:Int = Math.round(buffer.sampleRate * 0.025);
+					if (samplesPerBucket < 1) samplesPerBucket = 1;
+					var totalFrames:Int = Math.floor(bytes.length / (2 * channels));
+					var bucketCount:Int = Math.floor(totalFrames / samplesPerBucket) + 1;
+					var sums:Array<Float> = [for (i in 0...bucketCount) 0.0];
+					var counts:Array<Int> = [for (i in 0...bucketCount) 0];
+					var i:Int = 0;
+					while (i < totalFrames)
+					{
+						var byte:Int = bytes.getUInt16(i * channels * 2);
+						if (byte > 65535 / 2) byte -= 65535;
+						var sample:Float = byte / 65535;
+						if (channels >= 2)
+						{
+							byte = bytes.getUInt16(i * channels * 2 + 2);
+							if (byte > 65535 / 2) byte -= 65535;
+							var s2:Float = byte / 65535;
+							if (Math.abs(s2) > Math.abs(sample)) sample = s2;
+						}
+						var bucket:Int = Math.floor(i / samplesPerBucket);
+						if (bucket < bucketCount)
+						{
+							sums[bucket] += Math.abs(sample);
+							counts[bucket]++;
+						}
+						i++;
+					}
+					result = [for (b in 0...bucketCount) (counts[b] > 0) ? sums[b] / counts[b] : 0];
+				}
+			}
+		}
+		#end
+		return result;
+	}
+
+	/** 查询某时刻的人声能量 (25ms 桶)。 */
+	inline function energyAt(energy:Array<Float>, t:Float):Float
+	{
+		if (energy == null || energy.length < 1 || t < 0) return 0;
+		var idx:Int = Std.int(t / 25);
+		if (idx >= energy.length) return 0;
+		return energy[idx];
+	}
+
+	/**
+	 * 多k: 密度增强。
+	 * 按 1 拍窗口统计 Note 密度, 窗口内 Note 数 >= 阈值 (玩家可调) 时,
+	 * 在该拍内补充 1~2 个随机轨道 Note。
+	 */
+	function boostDensity(threshold:Int):Void
+	{
+		if (PlayState.SONG == null) return;
+		_cacheSections(); // 先刷新 section 缓存
+		if (threshold < 1) threshold = 1;
+		var ammo:Int = Note.ammo[PlayState.mania];
+		var rnd:FlxRandom = new FlxRandom();
+		var totalAdd:Int = 0;
+		var maxTime:Float = songLengthMs();
+
+		for (secNum => section in PlayState.SONG.notes)
+		{
+			if (section == null || section.sectionNotes == null) continue;
+			var stepMs:Float = safeSectionStepMs(secNum);
+			var beatMs:Float = stepMs * 4;
+			var secStart:Float = safeSectionStart(secNum);
+			var sb:Null<Float> = section.sectionBeats;
+			var beats:Float = (sb != null && sb > 0) ? sb : 4;
+			var steps:Int = Std.int(Math.max(4, beats * 4));
+			var used:Map<String, Bool> = [];
+			var addList:Array<Array<Dynamic>> = [];
+
+			for (n in section.sectionNotes)
+			{
+				if (n == null || n.length < 2) continue;
+				var raw:Int = Std.int(n[1]);
+				if (raw < 0) continue;
+				var side:Int = Std.int(raw / ammo);
+				var lane:Int = raw % ammo;
+				used.set(Std.string(n[0]) + ':' + side + ':' + lane, true);
+			}
+
+			// 按拍遍历 (每拍一个密度窗口, 避免同一拍被重复处理)
+			var beatCount:Int = Std.int(Math.max(1, beats));
+			for (b in 0...beatCount)
+			{
+				var beatStart:Float = secStart + b * beatMs;
+				if (beatStart >= maxTime - 1) break;
+				var count:Int = 0;
+				for (n in section.sectionNotes)
+				{
+					if (n == null || n.length < 2) continue;
+					var t:Float = Std.parseFloat(Std.string(n[0]));
+					if (t >= beatStart && t < beatStart + beatMs) count++;
+				}
+				if (count < threshold) continue;
+				var toAdd:Int = rnd.int(1, 2);
+				for (k in 0...toAdd)
+				{
+					var st:Float = beatStart + rnd.int(0, 3) * stepMs;
+					if (st >= maxTime - 1) continue;
+					var side:Int = rnd.int(0, 1);
+					var lane:Int = rnd.int(0, ammo - 1);
+					var key:String = Std.string(st) + ':' + side + ':' + lane;
+					if (used.exists(key)) continue;
+					addList.push([st, side * ammo + lane, 0]);
+					used.set(key, true);
+				}
+			}
+
+			for (n in addList) section.sectionNotes.push(n);
+			totalAdd += addList.length;
+		}
+
+		markUnsaved();
+		reloadNotes();
+		showOutput('密度增强完成(阈值 ' + threshold + '), 新增 ' + totalAdd + ' 个 Note');
+	}
+
 		function createNote(note:Dynamic, ?secNum:Null<Int> = null)
 		{
 			if(secNum == null) secNum = curSec;
@@ -2354,21 +3559,30 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			var daStrumTime:Float = note[0];
 			var rawNoteData:Int = Std.int(note[1]);
 			if (rawNoteData < 0) rawNoteData = 0; // safety: clamp negative values
-			var daNoteData:Int = rawNoteData % GRID_COLUMNS_PER_PLAYER;
+			// 多k: 按该 Note 自身时间点的生效键数解释 (Change Mania 事件分段, 各段各自解释)
+			var noteMania:Int = EKData.effectiveManiaAtTime((PlayState.SONG != null) ? PlayState.SONG.events : null, chartBaseMania(), daStrumTime);
+			var noteAmmo:Int = Note.ammo[EKData.clampMania(noteMania)];
+			var daNoteData:Int = rawNoteData % noteAmmo;
 			// 谱面加载时已通过 Song.convert() 统一转为 psych_v1 格式
 			// 转换后: data 0-3 = 玩家Note, data 4-7 = 对手Note
-			// 因此使用新逻辑: (rawNoteData < GRID_COLUMNS_PER_PLAYER)
-			var gottaHitNote:Bool = (rawNoteData < GRID_COLUMNS_PER_PLAYER);
+			// 因此使用新逻辑: (rawNoteData < noteAmmo)
+			var gottaHitNote:Bool = (rawNoteData < noteAmmo);
 
 			var swagNote:MetaNote = new MetaNote(daStrumTime, daNoteData, note);
+			swagNote.mania = noteMania; // 记录该 Note 所属 k, 使后续渲染/颜色按正确 k
 			swagNote.mustPress = gottaHitNote;
-			swagNote.setSustainLength(note[2], cachedSectionCrochets[secNum] / 4, curZoom);
+			// 构造时着色器按 PlayState.mania 应用过颜色, 这里按 Note 自身 k 重刷
+			swagNote.applyLaneColor();
+			// 缓存越界保护: 防止缓存与小节数不一致时中断导致 Note 链丢失
+			var susStep:Float = (secNum < cachedSectionCrochets.length && cachedSectionCrochets[secNum] > 0)
+				? cachedSectionCrochets[secNum] / 4 : Conductor.stepCrochet;
+			swagNote.setSustainLength(note[2], susStep, curZoom);
 			swagNote.gfNote = (section.gfSection && gottaHitNote);
 			swagNote.noteType = note[3];
 			swagNote.scrollFactor.x = 0;
 
 			var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
-			var animToPlay:String = colArray[daNoteData % 4] + 'Scroll';
+			var animToPlay:String = colArray[swagNote.baseTex()] + 'Scroll';
 			if(swagNote.animation.getByName(animToPlay) != null)
 				swagNote.animation.play(animToPlay);
 
@@ -2431,62 +3645,41 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			var secs:Null<Float> = cast section.sectionBeats;
 			if(secs == null || Math.isNaN(secs) || secs <= 0) section.sectionBeats = 4;
-	
+
 			if(section.changeBPM) bpm = section.bpm;
 			var beat:Float = Conductor.calculateCrochet(bpm);
-			//trace(secBPM, beat);
-			
+
 			cachedSectionRow.push(row);
 			cachedSectionTimes.push(time);
 			cachedSectionCrochets.push(beat);
 			cachedSectionBPMs.push(bpm);
 
-			var lastTime:Float = time;
 			var rowRound:Int = Math.round(4 * section.sectionBeats);
+			if(rowRound < 1) rowRound = 1;
 			row += rowRound;
-			time += beat * (rowRound / 4);
+			// 精确拍数推进时间线 (行数取整只影响网格行, 不影响真实时间),
+			// 避免取整漂移导致缓存时间线提前越过音乐长度。
+			time += beat * section.sectionBeats;
 
-			for (note in section.sectionNotes)
-			{
-				if(secNum > 0 && note[0] < lastTime) note[0] = lastTime;
-				else if(secNum < PlayState.SONG.notes.length && note[0] >= time - 0.000001) note[0] = time - 0.000001;
-			}
-
-			if(FlxG.sound.music != null && time >= FlxG.sound.music.length)
-			{
-				var lastSectionNum:Int = PlayState.SONG.notes.length - 1;
-				if(secNum < lastSectionNum) //Delete extra sections
-				{
-					while(PlayState.SONG.notes.length - 1 > secNum)
-					{
-						PlayState.SONG.notes.pop();
-					}
-	
-					TraceManager.debug('trace.editor.breakingSection', 'breaking at section {}', [secNum]);
-					reachedLimit = true;
-					break;
-				}
-				else if(secNum == lastSectionNum)
-				{
-					TraceManager.debug('trace.editor.reachedLimit', 'reached limit at section {}', [secNum]);
-					reachedLimit = true;
-				}
-			}
+			// 注意: 绝不在缓存时删除/篡改谱面段落或音符时间!
+			// (旧逻辑会按音乐长度 pop 掉后面的段落, 导致长谱/音频短于谱面时
+			//  所有后续 Note 连同段落一起消失, 且切换多K重新缓存时反复触发)
 		}
 
-		if(FlxG.sound.music != null && !reachedLimit) //Created sections to fill blank space
+		if(FlxG.sound.music != null && time < FlxG.sound.music.length) //Pad blank sections only when chart shorter than music
 		{
 			var lastSection = PlayState.SONG.notes[PlayState.SONG.notes.length-1];
 			var beat:Float = Conductor.calculateCrochet(bpm);
 			var sectionBeats:Float = lastSection != null ? lastSection.sectionBeats : 4;
 			var rowRound:Int = Math.round(4 * sectionBeats);
-			var timeAdd:Float = beat * (rowRound / 4);
+			if(rowRound < 1) rowRound = 1;
+			var timeAdd:Float = beat * sectionBeats;
 			var mustHitSec:Bool = lastSection != null ? lastSection.mustHitSection : true;
 			var changeBpmSec:Bool = lastSection != null ? lastSection.changeBPM : false;
 			var altAnimSec:Bool = lastSection != null ? lastSection.altAnim : false;
 			var gfSec:Bool = lastSection != null ? lastSection.gfSection : false;
 
-			while(!reachedLimit)
+			while(time < FlxG.sound.music.length)
 			{
 				PlayState.SONG.notes.push({
 					sectionNotes: [],
@@ -2527,13 +3720,18 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		curSec = Std.int(FlxMath.bound(curSec, 0, PlayState.SONG.notes.length-1));
 		Conductor.bpm = cachedSectionBPMs[curSec];
 
+		// 多k: 切节后先按新的上/中/下三窗重建主网格与事件分段 (主网格列数随窗口小节变化)
+		if (_segmentsBuildSec != curSec)
+			rebuildGridsForCurrentWindow();
+
 		var hei:Float = 0;
 		if(curSec > 0)
 		{
 			prevGridBg.y = cachedSectionRow[curSec-1] * GRID_SIZE * curZoom;
-			prevGridBg.rows = 4 * PlayState.SONG.notes[curSec-1].sectionBeats * curZoom;
+			// 多k: 主网格只画到小节内首个 Change Mania 事件为止, 之后由分段网格接管
+			prevGridBg.rows = mainGridRows(curSec - 1, curZoom);
 			prevGridBg.visible = showPreviousSection;
-			hei += prevGridBg.height;
+			hei += sectionHeightPx(curSec - 1);
 			eventLockOverlay.y = prevGridBg.y;
 		}
 		else prevGridBg.visible = false;
@@ -2541,15 +3739,18 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if(curSec < PlayState.SONG.notes.length - 1)
 		{
 			nextGridBg.y = cachedSectionRow[curSec+1] * GRID_SIZE * curZoom;
-			nextGridBg.rows = 4 * PlayState.SONG.notes[curSec+1].sectionBeats * curZoom;
+			nextGridBg.rows = mainGridRows(curSec + 1, curZoom);
 			nextGridBg.visible = showNextSection;
-			hei += nextGridBg.height;
+			hei += sectionHeightPx(curSec + 1);
 		}
 		else nextGridBg.visible = false;
 
 		gridBg.y = cachedSectionRow[curSec] * GRID_SIZE * curZoom;
-		gridBg.rows = 4 * PlayState.SONG.notes[curSec].sectionBeats * curZoom;
-		hei += gridBg.height;
+		gridBg.rows = mainGridRows(curSec, curZoom);
+		hei += sectionHeightPx(curSec);
+
+		// 多k: 小节内事件切分出的网格段定位 (y/行数/可见性)
+		positionGridSegments();
 
 		if(!prevGridBg.visible) eventLockOverlay.y = gridBg.y;
 		eventLockOverlay.scale.y = hei;
@@ -2711,7 +3912,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function getMaxNoteTime(sec:Int)
 	{
 		var maxTime:Float = Math.POSITIVE_INFINITY;
-		if(sec < cachedSectionTimes.length)
+		if(sec + 1 < cachedSectionTimes.length)
 			maxTime = cachedSectionTimes[sec + 1];
 		return maxTime;
 	}
@@ -2719,7 +3920,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	/** 根据 strumTime 和章节信息快速计算 Note 的 Y 坐标（不含居中偏移） */
 	inline function calcNoteY(strumTime:Float, sec:Int, zoom:Float):Float
 	{
-		return Math.max(((strumTime - cachedSectionTimes[sec]) / cachedSectionCrochets[sec]) * GRID_SIZE * 4 * zoom + cachedSectionRow[sec] * GRID_SIZE * zoom, -150);
+		// 缓存越界保护: 防止缓存与小节数不一致时中断导致 Note 链丢失
+		var secTime:Float = (sec < cachedSectionTimes.length) ? cachedSectionTimes[sec] : 0;
+		var secCrochet:Float = (sec < cachedSectionCrochets.length && cachedSectionCrochets[sec] > 0) ? cachedSectionCrochets[sec] : Conductor.stepCrochet * 4;
+		var secRow:Int = (sec < cachedSectionRow.length) ? cachedSectionRow[sec] : 0;
+		return Math.max(((strumTime - secTime) / secCrochet) * GRID_SIZE * 4 * zoom + secRow * GRID_SIZE * zoom, -150);
 	}
 
 	function positionNoteXByData(note:MetaNote, ?data:Null<Int> = null)
@@ -2727,7 +3932,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if(data == null) data = note.songData[1];
 
 		var noteX:Float = gridBg.x + (GRID_SIZE - note.width) / 2;
-		if(SHOW_EVENT_COLUMN) noteX += GRID_SIZE;
+		if(SHOW_EVENT_COLUMN) noteX += EVENT_COLUMN_WIDTH;
 
 		noteX += GRID_SIZE * data;
 		note.x = noteX;
@@ -2755,6 +3960,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	
 	var _lastSec:Int = -1;
 	var _lastGfSection:Null<Bool> = null;
+	/** 网格当前使用的键数 (用于加载不同 K 谱面时强制重建网格)。 */
+	var _lastGridMania:Int = -1;
 	function updateHeads(ignoreCheck:Bool = false):Void
 	{
 		var curSecData:SwagSection = PlayState.SONG.notes[curSec];
@@ -2927,7 +4134,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					for (note in notes)
 					{
 						if(note == null) continue;
-						note.reloadNote(note.texture);
+						note.reloadNote(); // 重载当前 arrowSkin (之前误把纹理名传成 prefix)
 		
 						if(note.width > note.height)
 							note.setGraphicSize(GRID_SIZE);
@@ -2988,6 +4195,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			var eventName:String = eventSelected[0];
 			var description:String = eventSelected[1];
 			eventDescriptionText.text = description;
+			// 多k: 事件改名 (含改为/改掉 Change Mania) -> 记录快照, 改完按工具箱模式重编码
+			var oldEvents:Array<Dynamic> = deepCopyEditorEvents();
 			if(selectedNotes.length > 1)
 			{
 				for (note in selectedNotes)
@@ -3005,6 +4214,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				event.events[Std.int(FlxMath.bound(curEventSelected, 0, event.events.length - 1))][0] = eventName;
 				event.updateEventText();
 			}
+			refreshAfterManiaEventEdit(oldEvents);
 		});
 
 		function genericEventButton(func:EventMetaNote->Void)
@@ -3027,6 +4237,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			genericEventButton(function(event:EventMetaNote)
 			{
+				// 多k: 删除事件 -> 记录快照, 删除后按工具箱模式重编码
+				var oldEvents:Array<Dynamic> = deepCopyEditorEvents();
 				if(event.events.length > 1)
 				{
 					var selectedEvent = event.events[curEventSelected];
@@ -3045,15 +4257,19 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					curRenderedNotes.remove(event, true);
 					addUndoAction(DELETE_NOTE, {events: [event]});
 				}
+				refreshAfterManiaEventEdit(oldEvents);
 			});
 		}, 20, Paths.font("editors.ttf"), 12);
 		var addButton:PsychUIButton = new PsychUIButton(objX2 + 30, objY, '+', function()
 		{
 			genericEventButton(function(event:EventMetaNote)
 			{
+				// 多k: 新增子事件 (可能是 Change Mania) -> 记录快照, 插入后按工具箱模式重编码
+				var oldEvents:Array<Dynamic> = deepCopyEditorEvents();
 				event.events.push([eventsList[Std.int(Math.max(eventDropDown.selectedIndex, 0))][0], value1InputText.text, value2InputText.text]);
 				event.updateEventText();
 				curEventSelected++;
+				refreshAfterManiaEventEdit(oldEvents);
 			});
 		}, 20, Paths.font("editors.ttf"), 12);
 		var leftButton:PsychUIButton = new PsychUIButton(objX2 + 80, objY, '<', function()
@@ -3090,6 +4306,14 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				var event:EventMetaNote = cast (selectedNotes[0], EventMetaNote);
 				event.events[Std.int(FlxMath.bound(curEventSelected, 0, event.events.length - 1))][n] = str;
 				event.updateEventText();
+			}
+			// 多k: Change Mania 事件改键数 -> 延迟到输入结束再重编码, 避免逐字符中间态
+			if (n == 1 && selectedNotes.length == 1 && selectedNotes[0] != null && selectedNotes[0].isEvent)
+			{
+				var ev:EventMetaNote = cast selectedNotes[0];
+				var sub:Dynamic = ev.events[Std.int(FlxMath.bound(curEventSelected, 0, ev.events.length - 1))];
+				if (sub != null && Std.string(sub[0]) == 'Change Mania')
+					markPendingManiaReencode();
 			}
 		}
 
@@ -3159,6 +4383,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			if(selectedNotes.length < 1) return;
 
 			var firstTime:Float = selectedNotes[0].strumTime;
+			// 多k: 移动 Change Mania 事件位置 -> 记录快照, 移动后按工具箱模式重编码
+			var hasManiaEvent:Bool = false;
+			for (note in selectedNotes)
+				if (note != null && note.isEvent && eventHasChangeMania(cast (note, EventMetaNote))) { hasManiaEvent = true; break; }
+			var oldEvents:Array<Dynamic> = hasManiaEvent ? deepCopyEditorEvents() : null;
 			for (note in selectedNotes)
 			{
 				if(note == null) continue;
@@ -3172,6 +4401,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				}
 			}
 			softReloadNotes();
+			if(oldEvents != null) refreshAfterManiaEventEdit(oldEvents);
 		};
 		
 		objY += 40;
@@ -3572,6 +4802,19 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		var pushedNotes:Array<MetaNote> = [];
 		var nts:Array<MetaNote> = [];
 		var evs:Array<EventMetaNote> = [];
+		// 多k: 粘贴 Change Mania 事件 -> 记录快照, 粘贴后按工具箱模式重编码
+		var oldEvents:Array<Dynamic> = null;
+		if(canCopyEvents && copiedEvents.length > 0)
+		{
+			for (ev in copiedEvents)
+			{
+				if (ev == null || ev[1] == null) continue;
+				var subs:Array<Dynamic> = cast ev[1];
+				for (sub in subs)
+					if (sub != null && Std.string(sub[0]) == 'Change Mania') { oldEvents = deepCopyEditorEvents(); break; }
+				if (oldEvents != null) break;
+			}
+		}
 		if(canCopyNotes && copiedNotes.length > 0)
 		{
 			for (note in copiedNotes)
@@ -3603,6 +4846,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			}
 			events.sort(PlayState.sortByTime);
 		}
+		if(oldEvents != null) refreshAfterManiaEventEdit(oldEvents);
 		loadSection();
 		
 		if(showMessage)
@@ -3633,6 +4877,18 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	var bpmStepper:PsychUINumericStepper;
 	var scrollSpeedStepper:PsychUINumericStepper;
 	var audioOffsetStepper:PsychUINumericStepper;
+	var maniaStepper:PsychUINumericStepper;
+	/** 多k: 工具窗口入口按钮。 */
+	var openToolsButton:PsychUIButton;
+	/** 多k: 工具浮动窗口 (转换模式 / 一键写大粪 / 密度增强)。 */
+	var toolsBox:PsychUIBox;
+	/** 多k: 切 K 转换模式 (0=顺序映射 1=自动打乱 2=自动补双押 3=打乱+补双押)。 */
+	var convertModeDropDown:PsychUIDropDownMenu;
+	/** 多k: 一键写大粪按钮。 */
+	var dumbChartButton:PsychUIButton;
+	/** 多k: 密度增强 (玩家可调阈值)。 */
+	var densityThresholdStepper:PsychUINumericStepper;
+	var boostDensityButton:PsychUIButton;
 
 	var stageDropDown:PsychUIDropDownMenu;
 	var playerDropDown:PsychUIDropDownMenu;
@@ -3708,6 +4964,41 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			updateWaveform();
 		};
 
+		// 多k: 键数 (显示 1-18, 内部 mania = 值-1)
+		maniaStepper = new PsychUINumericStepper(objX, objY + 40, 1, (PlayState.SONG.mania != null ? PlayState.SONG.mania : Note.defaultMania) + 1, 1, Note.maxMania + 1, 0, 45);
+		// 多k: 工具入口 (与键数同行, 避免挤压下方下拉控件)
+		openToolsButton = new PsychUIButton(objX + 55, objY + 40, '多k工具', function() toggleToolsBox(), 120, 24);
+		maniaStepper.onValueChange = function()
+		{
+			var newMania:Int = EKData.clampMania(Std.int(maniaStepper.value) - 1);
+			if (previewMania >= 0) previewMania = -1; // 手动切 K: 退出事件预览模式
+			if (PlayState.SONG.mania != null && newMania == PlayState.SONG.mania) return; // 防抖
+			var oldMania:Int = (PlayState.SONG.mania != null) ? EKData.clampMania(PlayState.SONG.mania) : Note.defaultMania;
+			_cacheSections(); // 先刷新 section 缓存, 避免转换/重排使用过期时间表
+			convertChartNoteData(oldMania, newMania, convertModeDropDown.selectedIndex);
+			PlayState.SONG.mania = newMania;
+			PlayState.mania = EKData.clampMania(PlayState.SONG.mania);
+			GRID_COLUMNS_PER_PLAYER = Note.ammo[PlayState.mania];
+			GRID_SIZE = editorGridSize(PlayState.mania);
+			TraceManager.info('trace.editor.mania2', 'Change mania -> {} (stepper={}) membersBefore={}', [newMania, maniaStepper.value, members.length]);
+			try
+			{
+				createGrids(false); // 不重复 loadSection (reloadNotes 内部以 loadSection 收尾)
+				rebuildStrumNotes();
+				repositionEditorUI();
+				updateGridVisibility();
+				updateNotesForMania(); // 复用现有 Note 快速更新, 物量大谱面切 K 不重建不卡顿
+				updateHeads(true);
+				updateScrollY();
+			}
+			catch (e:Dynamic)
+			{
+				TraceManager.error('trace.editor.maniaError', '切换键数时出错: {}', [Std.string(e)]);
+			}
+			TraceManager.info('trace.editor.maniaAfter2', 'membersAfter={}', [members.length]);
+			markUnsaved();
+		};
+
 		tab_group.add(new EditorsText(songNameInputText.x, songNameInputText.y - 15, 80, Language.get('newchartEditor_song_name', 'Song Name:')));
 		tab_group.add(songNameInputText);
 		tab_group.add(allowVocalsCheckBox);
@@ -3716,7 +5007,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(reloadJsonButton);
 		#end
 
-		objY += 40;
+		objY += 80;
 		
 		var characters:Array<String> = loadFileList('characters/', 'data/characterList.txt');
 		
@@ -3764,9 +5055,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(new EditorsText(bpmStepper.x, bpmStepper.y - 15, 50, Language.get('newchartEditor_bpm', 'BPM:')));
 		tab_group.add(new EditorsText(scrollSpeedStepper.x, scrollSpeedStepper.y - 15, 80, Language.get('newchartEditor_scroll_speed', 'Scroll Speed:')));
 		tab_group.add(new EditorsText(audioOffsetStepper.x, audioOffsetStepper.y - 15, 100, Language.get('newchartEditor_audio_offset', 'Audio Offset (ms):')));
+		tab_group.add(new EditorsText(maniaStepper.x, maniaStepper.y - 15, 80, Language.get('newchartEditor_keys', 'Keys (1-18):')));
 		tab_group.add(bpmStepper);
 		tab_group.add(scrollSpeedStepper);
 		tab_group.add(audioOffsetStepper);
+		tab_group.add(maniaStepper);
+		tab_group.add(openToolsButton);
 
 		tab_group.add(new EditorsText(stageDropDown.x, stageDropDown.y - 15, 80, Language.get('newchartEditor_stage', 'Stage:')));
 		tab_group.add(new EditorsText(playerDropDown.x, playerDropDown.y - 15, 80, Language.get('newchartEditor_player', 'Player:')));
@@ -3776,6 +5070,402 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(girlfriendDropDown);
 		tab_group.add(opponentDropDown);
 		tab_group.add(playerDropDown);
+	}
+
+	// ========================================================================
+	//  EXTERNAL CHART IMPORT (osu! / Malody / OSZ / MCZ)
+	// ========================================================================
+
+	function finishOpenChart(loadedChart:SwagSong, filePath:String):Void
+	{
+		if (loadedChart == null || !Reflect.hasField(loadedChart, 'song'))
+		{
+			showOutput('newchartEditor_error_file_not_chart', true);
+			return;
+		}
+
+		var func:Void->Void = function()
+		{
+			loadChart(loadedChart);
+			Song.chartPath = filePath;
+			reloadNotesDropdowns();
+			prepareReload();
+			showOutput('newchartEditor_chart_opened', false, [Song.chartPath]);
+		}
+
+		if(!ignoreProgressCheckBox.checked) openSubState(new Prompt('newchartEditor_warning_unsaved_progress', func));
+		else func();
+	}
+
+	/**
+	 * Shows the import options prompt (music + key mapping) for an external
+	 * chart, then converts and loads it. format: 0 = osu, 1 = malody.
+	 */
+	function promptExternalChartImport(rawText:String, format:Int, sourcePath:String, ?audioBytes:haxe.io.Bytes, ?audioName:String):Void
+	{
+		var audioRef:String = audioName;
+		if (audioRef == null || audioRef.length == 0)
+			audioRef = OsuMalodyConvert.chartAudioName(rawText, format);
+
+		var hasAudio:Bool = (audioBytes != null) || (OsuMalodyConvert.findAdjacentAudio(sourcePath, audioRef) != null);
+
+		ClientPrefs.toggleVolumeKeys(false);
+
+		var musicCheck:PsychUICheckBox = new PsychUICheckBox(0, 0, Language.get('newchartEditor_import_music', 'Import music'), 240);
+		musicCheck.checked = hasAudio;
+
+		var destNames:Array<String> = [
+			Language.get('newchartEditor_music_dest_disk', 'To disk (mods/songs/)'),
+			Language.get('newchartEditor_music_dest_ram', 'Load into RAM only')
+		];
+		var destGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, destNames, 20, 5, false, 260);
+		destGrp.checked = 0;
+
+		var mapNames:Array<String> = [
+			Language.get('newchartEditor_map_auto', 'Keep original K'),
+			Language.get('newchartEditor_map_4k', 'Compress to 4K'),
+			Language.get('newchartEditor_map_8k', 'Split 4K + Opponent'),
+			Language.get('newchartEditor_map_custom', 'Custom K')
+		];
+		var mapGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, mapNames, 24, 5, false, 260);
+		mapGrp.checked = 0;
+		// 自定义键数默认跟随源谱面实际 K (避免玩家选"自定义"后不改数字被默认 4 压成 4K)
+		var srcK:Int = (format == 0)
+			? OsuMalodyConvert.osuKeyCount(rawText)
+			: OsuMalodyConvert.malodyKeyCount(rawText);
+		if (srcK < 1) srcK = 4;
+		var customStepper:PsychUINumericStepper = new PsychUINumericStepper(0, 0, 1, srcK, 1, 18, 0, 60);
+
+		openSubState(new BasePrompt(520, 400, Language.get('newchartEditor_import_options', 'Import Options...'), function(state:BasePrompt)
+		{
+			musicCheck.x = state.bg.x + 30;
+			musicCheck.y = state.bg.y + 40;
+			musicCheck.cameras = state.cameras;
+			state.add(musicCheck);
+
+			destGrp.x = state.bg.x + 30;
+			destGrp.y = state.bg.y + 70;
+			destGrp.cameras = state.cameras;
+			state.add(destGrp);
+
+			var ramWarn:EditorsText = new EditorsText(state.bg.x + 30, state.bg.y + 118, 460,
+				Language.get('newchartEditor_ram_warning', 'RAM mode: session only, lost on restart, uses memory!'));
+			ramWarn.cameras = state.cameras;
+			ramWarn.color = FlxColor.YELLOW;
+			state.add(ramWarn);
+
+			var mapTxt:EditorsText = new EditorsText(state.bg.x + 30, state.bg.y + 146, 200, Language.get('newchartEditor_key_mapping', 'Key mapping:'));
+			mapTxt.cameras = state.cameras;
+			state.add(mapTxt);
+
+			var detectedTxt:EditorsText = new EditorsText(state.bg.x + 210, state.bg.y + 146, 280,
+				Language.get('newchartEditor_detected_k', 'Detected source: %sK').replace('%s', Std.string(srcK)));
+			detectedTxt.cameras = state.cameras;
+			detectedTxt.color = FlxColor.fromRGB(140, 220, 140);
+			state.add(detectedTxt);
+
+			mapGrp.x = state.bg.x + 30;
+			mapGrp.y = state.bg.y + 166;
+			mapGrp.cameras = state.cameras;
+			state.add(mapGrp);
+
+			var customTxt:EditorsText = new EditorsText(state.bg.x + 30, state.bg.y + 254, 130, Language.get('newchartEditor_custom_k', 'Custom K:'));
+			customTxt.cameras = state.cameras;
+			state.add(customTxt);
+
+			customStepper.x = state.bg.x + 130;
+			customStepper.y = state.bg.y + 248;
+			customStepper.cameras = state.cameras;
+			state.add(customStepper);
+
+			var btnY:Float = state.bg.y + state.bg.height - 45;
+			var saveBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_save_btn', 'Save'), function()
+			{
+				var mapMode:Int = mapGrp.checked;
+				var customK:Int = Std.int(customStepper.value);
+				var doMusic:Bool = musicCheck.checked;
+				state.close();
+
+				haxe.Timer.delay(function()
+				{
+					try
+					{
+						var loadedChart:SwagSong = (format == 0)
+							? OsuMalodyConvert.osuToPsych(rawText, mapMode, customK)
+							: OsuMalodyConvert.malodyToPsych(rawText, mapMode, customK);
+						loadedChart.format = "psych_v1_convert";
+
+						if (doMusic)
+						{
+							var imported:Bool = false;
+							var useRam:Bool = (destGrp.checked == 1);
+
+							// RAM mode: decode straight into memory, no file written
+							if (useRam)
+							{
+								var ramBytes:haxe.io.Bytes = audioBytes;
+								if (ramBytes == null)
+								{
+									var adj:String = OsuMalodyConvert.findAdjacentAudio(sourcePath, audioRef);
+									#if sys
+									if (adj != null && sys.FileSystem.exists(adj))
+										ramBytes = sys.io.File.getBytes(adj);
+									#end
+								}
+								if (ramBytes != null)
+								{
+									var ramExt:String = 'ogg';
+									if (audioRef != null && audioRef.length > 0)
+									{
+										var rdot:Int = audioRef.lastIndexOf('.');
+										if (rdot > 0) ramExt = audioRef.substr(rdot + 1).toLowerCase();
+									}
+									imported = importSongAudioToRam(loadedChart.song, ramBytes, ramExt);
+								}
+							}
+							else
+							{
+								if (audioBytes != null)
+								{
+									var ext:String = 'ogg';
+									if (audioRef != null && audioRef.length > 0)
+									{
+										var dot:Int = audioRef.lastIndexOf('.');
+										if (dot > 0) ext = audioRef.substr(dot + 1).toLowerCase();
+									}
+									imported = importSongAudio(loadedChart.song, audioBytes, null, ext);
+								}
+								else
+								{
+									var adj:String = OsuMalodyConvert.findAdjacentAudio(sourcePath, audioRef);
+									if (adj != null) imported = importSongAudio(loadedChart.song, null, adj);
+								}
+							}
+
+							if (imported && useRam)
+								showOutput('newchartEditor_music_loaded_ram', false, [loadedChart.song]);
+							else if (imported) {
+								#if MODS_ALLOWED
+								showOutput('newchartEditor_music_imported', false, [Paths.mods('songs/' + Paths.formatToSongPath(loadedChart.song))]);
+								#else
+								showOutput('newchartEditor_music_imported', false, ['songs/' + Paths.formatToSongPath(loadedChart.song)]);
+								#end
+							}
+							else
+								showOutput('newchartEditor_music_not_found', true);
+						}
+
+						finishOpenChart(loadedChart, sourcePath);
+					}
+					catch(e:Exception)
+					{
+						showOutput('newchartEditor_error', true, [e.message]);
+						TraceManager.error('trace.editor.exception', 'Exception: {}', [e.stack]);
+					}
+				}, 400);
+			});
+			saveBtn.screenCenter(X);
+			saveBtn.x -= 80;
+			saveBtn.cameras = state.cameras;
+			saveBtn.normalStyle.bgColor = FlxColor.GREEN;
+			saveBtn.normalStyle.textColor = FlxColor.WHITE;
+			state.add(saveBtn);
+
+			var cancelBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_cancel_btn', 'Cancel'), function()
+			{
+				state.close();
+			});
+			cancelBtn.screenCenter(X);
+			cancelBtn.x += 80;
+			cancelBtn.cameras = state.cameras;
+			state.add(cancelBtn);
+		}));
+	}
+
+	/** Opens an .osz / .mcz package: lists difficulties, lets the player pick. */
+	function importPackageChart(pkgPath:String):Void
+	{
+		try
+		{
+			var entries:Array<Dynamic> = OsuMalodyConvert.readPackageEntries(pkgPath);
+			var chartList:Array<Dynamic> = OsuMalodyConvert.packageChartList(entries);
+			if (chartList.length == 0)
+			{
+				showOutput('newchartEditor_error_no_chart_in_package', true);
+				return;
+			}
+
+			if (chartList.length == 1)
+			{
+				startPackageChartImport(entries, chartList[0], pkgPath);
+				return;
+			}
+
+			var labels:Array<String> = [];
+			for (c in chartList) labels.push(c.label);
+			var pick:PsychUIDropDownMenu = new PsychUIDropDownMenu(0, 0, labels, function(id:Int, label:String) {}, 320);
+			pick.selectedLabel = labels[0];
+
+			openSubState(new BasePrompt(460, 210, Language.get('newchartEditor_pick_difficulty', 'Choose a difficulty...'), function(state:BasePrompt)
+			{
+				pick.x = state.bg.x + 30;
+				pick.y = state.bg.y + 45;
+				pick.cameras = state.cameras;
+				state.add(pick);
+
+				var btnY:Float = state.bg.y + state.bg.height - 45;
+				var loadBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_load_btn', 'Load'), function()
+				{
+					var idx:Int = labels.indexOf(pick.selectedLabel);
+					if (idx < 0) idx = 0;
+					state.close();
+					haxe.Timer.delay(function()
+					{
+						startPackageChartImport(entries, chartList[idx], pkgPath);
+					}, 400);
+				});
+				loadBtn.screenCenter(X);
+				loadBtn.x -= 80;
+				loadBtn.cameras = state.cameras;
+				loadBtn.normalStyle.bgColor = FlxColor.GREEN;
+				loadBtn.normalStyle.textColor = FlxColor.WHITE;
+				state.add(loadBtn);
+
+				var cancelBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_cancel_btn', 'Cancel'), state.close);
+				cancelBtn.screenCenter(X);
+				cancelBtn.x += 80;
+				cancelBtn.cameras = state.cameras;
+				state.add(cancelBtn);
+			}));
+		}
+		catch(e:Exception)
+		{
+			showOutput('newchartEditor_error', true, [e.message]);
+			TraceManager.error('trace.editor.exception', 'Exception: {}', [e.stack]);
+		}
+	}
+
+	function startPackageChartImport(entries:Array<Dynamic>, chartInfo:Dynamic, pkgPath:String):Void
+	{
+		var foundAudio:Dynamic = OsuMalodyConvert.findPackageAudio(entries, chartInfo.audioName);
+		var audioBytes:haxe.io.Bytes = (foundAudio != null) ? foundAudio.data : null;
+		// Prefer the real entry name: the extension must match the actual file bytes
+		var audioName:String = (foundAudio != null) ? foundAudio.name : chartInfo.audioName;
+		promptExternalChartImport(chartInfo.content, chartInfo.format, pkgPath, audioBytes, audioName);
+	}
+
+	/**
+	 * Writes the imported audio to mods/songs/<song>/Inst.<ext> so Paths.inst
+	 * can find it. Returns true on success.
+	 */
+	function importSongAudio(songName:String, ?audioBytes:haxe.io.Bytes, ?audioFilePath:String, ?audioExt:String):Bool
+	{
+		#if sys
+		try
+		{
+			var ext:String = 'ogg';
+			if (audioExt != null && audioExt.length > 0)
+				ext = audioExt.toLowerCase();
+			else if (audioFilePath != null)
+			{
+				var fdot:Int = audioFilePath.lastIndexOf('.');
+				if (fdot > 0) ext = audioFilePath.substr(fdot + 1).toLowerCase();
+			}
+			var dot:Int = ext.lastIndexOf('.');
+			if (dot >= 0) ext = ext.substr(dot + 1);
+
+			// MP3 (and other formats lime can't decode) -> decode to WAV so it
+			// plays on every platform (Windows & Android)
+			var wavBytes:haxe.io.Bytes = null;
+			if (ext != 'ogg' && ext != 'wav')
+			{
+				if (audioBytes != null)
+					wavBytes = OsuMalodyConvert.audioBytesToWav(audioBytes);
+				else if (audioFilePath != null && sys.FileSystem.exists(audioFilePath))
+					wavBytes = OsuMalodyConvert.audioBytesToWav(sys.io.File.getBytes(audioFilePath));
+				if (wavBytes != null) ext = 'wav';
+			}
+
+			var dir:String = Paths.mods('songs/' + Paths.formatToSongPath(songName));
+			if (!sys.FileSystem.exists(dir)) sys.FileSystem.createDirectory(dir);
+
+			var target:String = dir + '/Inst.' + ext;
+			if (wavBytes != null)
+				sys.io.File.saveBytes(target, wavBytes);
+			else if (audioBytes != null)
+				sys.io.File.saveBytes(target, audioBytes);
+			else if (audioFilePath != null && sys.FileSystem.exists(audioFilePath))
+				sys.io.File.copy(audioFilePath, target);
+			else
+				return false;
+
+			// Drop stale cached sounds for this song so the editor picks up the new file
+			var songKey:String = '/songs/' + Paths.formatToSongPath(songName) + '/';
+			for (key => snd in Paths.currentTrackedSounds)
+			{
+				if (snd != null && key.contains(songKey))
+				{
+					snd.close();
+					Paths.currentTrackedSounds.remove(key);
+				}
+			}
+			return true;
+		}
+		catch(e:Dynamic)
+		{
+			TraceManager.error('trace.editor.exception', 'Exception: {}', [e]);
+			return false;
+		}
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * Decodes the audio directly into memory (no file written) and registers
+	 * it so Paths.inst() returns it for this session. RAM import is volatile:
+	 * the caller should have already shown the player the warning.
+	 */
+	function importSongAudioToRam(songName:String, audioBytes:haxe.io.Bytes, ?srcExt:String):Bool
+	{
+		try
+		{
+			if (audioBytes == null || audioBytes.length == 0) return false;
+
+			// Decode MP3 first: lime can't decode MP3 from bytes on Windows/Android
+			var playable:haxe.io.Bytes = audioBytes;
+			if (srcExt != 'ogg' && srcExt != 'wav')
+			{
+				var wav:haxe.io.Bytes = OsuMalodyConvert.audioBytesToWav(audioBytes);
+				if (wav == null) return false;
+				playable = wav;
+			}
+
+			var limeBytes:lime.utils.Bytes = lime.utils.Bytes.ofData(playable.getData());
+			var buffer:lime.media.AudioBuffer = lime.media.AudioBuffer.fromBytes(limeBytes);
+			if (buffer == null) return false;
+
+			var sound:Sound = Sound.fromAudioBuffer(buffer);
+			Paths.setRamInst(songName, sound);
+			Paths.setRamInstBytes(songName, playable);
+
+			// Drop any stale on-disk cached sound so the RAM one takes over
+			var songKey:String = '/songs/' + Paths.formatToSongPath(songName) + '/';
+			for (key => snd in Paths.currentTrackedSounds)
+			{
+				if (snd != null && key.contains(songKey))
+				{
+					snd.close();
+					Paths.currentTrackedSounds.remove(key);
+				}
+			}
+			return true;
+		}
+		catch(e:Dynamic)
+		{
+			TraceManager.error('trace.editor.exception', 'Exception: {}', [e]);
+			return false;
+		}
 	}
 
 	function addFileTab()
@@ -3809,45 +5499,48 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			upperBox.isMinimized = true;
 			upperBox.bg.visible = false;
 
-			fileDialog.open(function()
+			fileDialog.open(null, Language.get('newchartEditor_open_chart_title', 'Open Chart...'),
+				[new FileFilter('Chart Files', 'json;osu;mc;osz;mcz'), new FileFilter('All Files', '*.*')], function()
 			{
 				try
 				{
 					var filePath:String = fileDialog.path.replace('\\', '/');
-					var loadedChart:SwagSong;
+
+					// OSZ/MCZ packages may contain several difficulties + the audio file
+					if (OsuMalodyConvert.isPackageFile(filePath))
+					{
+						importPackageChart(filePath);
+						return;
+					}
 
 					// Detect CNE format
 					if (CneExport.isCneFormat(fileDialog.data))
 					{
-						loadedChart = CneExport.cneToPsych(fileDialog.data);
+						var loadedChart:SwagSong = CneExport.cneToPsych(fileDialog.data);
 						loadedChart.format = "psych_v1_convert";
+						finishOpenChart(loadedChart, filePath);
+					}
+					else if (OsuMalodyConvert.isOsuFile(fileDialog.data) || OsuMalodyConvert.isMalodyFile(fileDialog.data))
+					{
+						// osu!/Malody charts: let the player configure key mapping + music import
+						var extFormat:Int = OsuMalodyConvert.isOsuFile(fileDialog.data) ? 0 : 1;
+						promptExternalChartImport(fileDialog.data, extFormat, filePath, null, null);
 					}
 					else
 					{
-						loadedChart = Song.parseJSON(fileDialog.data, filePath.substr(filePath.lastIndexOf('/')));
+						var loadedChart:SwagSong = Song.parseJSON(fileDialog.data, filePath.substr(filePath.lastIndexOf('/')));
+						finishOpenChart(loadedChart, filePath);
 					}
-
-					if(loadedChart == null || !Reflect.hasField(loadedChart, 'song'))
-					{
-						showOutput('newchartEditor_error_file_not_chart', true);
-						return;
-					}
-
-					var func:Void->Void = function()
-					{
-						loadChart(loadedChart);
-						Song.chartPath = fileDialog.path;
-						reloadNotesDropdowns();
-						prepareReload();
-						showOutput('newchartEditor_chart_opened', false, [Song.chartPath]);
-					}
-					
-					if(!ignoreProgressCheckBox.checked) openSubState(new Prompt('newchartEditor_warning_unsaved_progress', func));
-					else func();
 				}
 				catch(e:Exception)
 				{
-					showOutput('newchartEditor_error', true, [e.message]);
+					var diag:String = e.message;
+					#if android
+					diag += ' | path=' + (fileDialog.path != null ? fileDialog.path : 'null')
+						+ ' | dataLen=' + (fileDialog.data != null ? Std.string(fileDialog.data.length) : 'null')
+						+ ' | dataHead=' + (fileDialog.data != null && fileDialog.data.length > 0 ? fileDialog.data.substr(0, 30) : 'NULL');
+					#end
+					showOutput('newchartEditor_error', true, [diag]);
 					TraceManager.error('trace.editor.exception', 'Exception: {}', [e.stack]);
 				}
 			});
@@ -3862,13 +5555,23 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			upperBox.isMinimized = true;
 			upperBox.bg.visible = false;
 
+			#if sys
 			if(!FileSystem.exists('backups/'))
 			{
 				showOutput('newchartEditor_error_no_autosave_folder', true);
 				return;
 			}
+			#else
+			showOutput('newchartEditor_error_no_autosave_folder', true);
+			return;
+			#end
 			
-			var fileList:Array<String> = FileSystem.readDirectory('backups/').filter((file:String) -> file.endsWith('.$BACKUP_EXT'));
+			#if sys
+			var fileList:Array<String> = FileSystem.readDirectory('backups/')
+				.filter((file:String) -> file.endsWith('.$BACKUP_EXT') || file == 'autosave.json');
+			#else
+			var fileList:Array<String> = [];
+			#end
 			if(fileList.length < 1)
 			{
 				showOutput('newchartEditor_error_no_autosave_files', true);
@@ -3897,6 +5600,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						var path:String = 'backups/$autosaveName';
 						state.close();
 
+						#if sys
 						if(FileSystem.exists(path))
 						{
 							try
@@ -3914,7 +5618,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	
 								var func:Void->Void = function()
 								{
+									#if sys
 									Song.chartPath = FileSystem.exists(originalPath) ? originalPath : null;
+									#else
+									Song.chartPath = null;
+									#end
 									loadChart(loadedChart);
 									reloadNotesDropdowns();
 									prepareReload();
@@ -3931,6 +5639,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 							}
 						}
 						else showOutput('newchartEditor_error_autosave_not_found', true);
+						#else
+						showOutput('newchartEditor_error_autosave_not_found', true);
+						#end
 					});
 					btn.cameras = tab_group.cameras; 
 					btn.screenCenter(X);
@@ -4057,15 +5768,26 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					return;
 				}
 	
-				if(FileSystem.exists(Song.chartPath))
+			#if sys
+			if(FileSystem.exists(Song.chartPath))
+			{
+				try
 				{
-					try
-					{
 						var rawContent:String = File.getContent(Song.chartPath);
 						var reloadedChart:SwagSong;
 						if (CneExport.isCneFormat(rawContent))
 						{
 							reloadedChart = CneExport.cneToPsych(rawContent);
+							reloadedChart.format = "psych_v1_convert";
+						}
+						else if (OsuMalodyConvert.isOsuFile(rawContent))
+						{
+							reloadedChart = OsuMalodyConvert.osuToPsych(rawContent);
+							reloadedChart.format = "psych_v1_convert";
+						}
+						else if (OsuMalodyConvert.isMalodyFile(rawContent))
+						{
+							reloadedChart = OsuMalodyConvert.malodyToPsych(rawContent);
 							reloadedChart.format = "psych_v1_convert";
 						}
 						else
@@ -4084,6 +5806,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					}
 				}
 				else showOutput('newchartEditor_error_must_save_first', true);
+			#else
+			showOutput('newchartEditor_error_must_save_first', true);
+			#end
 				
 			}
 
@@ -4152,6 +5877,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						{
 							try
 							{
+								#if sys
 								var diffs:Array<String> = pack.metadata.playData.difficulties;
 								if(diffs != null && diffs.length > 0)
 								{
@@ -4215,6 +5941,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 									});
 								}
 								else showOutput('newchartEditor_error_need_one_difficulty', true);
+								#else
+								showOutput('newchartEditor_error_need_one_difficulty', true);
+								#end
 							}
 							catch(e:Exception)
 							{
@@ -4960,7 +6689,50 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function saveChart()
 	{
 		updateChartData();
-		var chartData:String = PsychJsonPrinter.print(PlayState.SONG, ['sectionNotes', 'events']);
+		// 多k: 4K 谱面可选择是否导出 mania 字段; 非 4K 必须导出 (锁死)
+		if (PlayState.SONG.mania == null || PlayState.SONG.mania == Note.defaultMania)
+		{
+			openSubState(new BasePrompt(420, 180, Language.get('newchartEditor_export_mania_title', 'Export Multi-K Field?'),
+				function(state:BasePrompt)
+				{
+					var check:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 60, state.bg.y + 80,
+						Language.get('newchartEditor_export_mania_label', 'Include mania field (4K)'), 500);
+					check.checked = false;
+					check.cameras = state.cameras;
+					state.add(check);
+
+					var saveBtn:PsychUIButton = new PsychUIButton(0, state.bg.y + state.bg.height - 45,
+						Language.get('newchartEditor_save_btn', 'Save'), function()
+						{
+							state.close();
+							haxe.Timer.delay(function() { doSaveChart(check.checked); }, 200);
+						});
+					saveBtn.screenCenter(X);
+					saveBtn.x -= 80;
+					saveBtn.cameras = state.cameras;
+					saveBtn.normalStyle.bgColor = FlxColor.GREEN;
+					saveBtn.normalStyle.textColor = FlxColor.WHITE;
+					state.add(saveBtn);
+
+					var cancelBtn:PsychUIButton = new PsychUIButton(0, state.bg.y + state.bg.height - 45,
+						Language.get('newchartEditor_cancel_btn', 'Cancel'), function() { state.close(); });
+					cancelBtn.screenCenter(X);
+					cancelBtn.x += 80;
+					cancelBtn.cameras = state.cameras;
+					state.add(cancelBtn);
+				}));
+			return;
+		}
+		doSaveChart(true);
+	}
+
+	function doSaveChart(includeManiaField:Bool)
+	{
+		var songCopy:Dynamic = {};
+		for (f in Reflect.fields(PlayState.SONG))
+			Reflect.setField(songCopy, f, Reflect.field(PlayState.SONG, f));
+		if (!includeManiaField) Reflect.deleteField(songCopy, 'mania');
+		var chartData:String = PsychJsonPrinter.print(songCopy, ['sectionNotes', 'events']);
 
 		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.json';
 		if(Song.chartPath != null)
@@ -4970,6 +6742,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				chartName = Song.chartPath.substring(lastSlash + 1);
 			else
 				chartName = Song.chartPath;
+			var dot:Int = chartName.lastIndexOf('.');
+			if(dot > 0) chartName = chartName.substr(0, dot);
+			chartName += '.json';
 		}
 
 		fileDialog.save(chartName, chartData,
@@ -4994,13 +6769,23 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			Language.get('newchartEditor_format_psych_v0', 'Psych Engine v0.x (Legacy)'),
 			Language.get('newchartEditor_format_cne', 'Codename Engine (CNE)'),
 			Language.get('newchartEditor_format_vslice', 'V-Slice'),
-			Language.get('newchartEditor_format_events', 'Events Only')
+			Language.get('newchartEditor_format_events', 'Events Only'),
+			Language.get('newchartEditor_format_osu', 'osu!mania (.osu)'),
+			Language.get('newchartEditor_format_malody', 'Malody (.mc)')
 		];
 
-		var radioGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, formatNames, 35, 5, false, 260);
+		var radioGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, formatNames, 35, formatNames.length, false, 260);
 		radioGrp.checked = 0;
 
-		var promptHeight:Float = 100 + 5 * 35 + 70;
+		var keyNames:Array<String> = [
+			Language.get('newchartEditor_key_auto', 'Auto (chart K)'),
+			Language.get('newchartEditor_key_4k', '4K'),
+			Language.get('newchartEditor_key_8k', '8K')
+		];
+		var keyGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, keyNames, 24, 5, true, 100);
+		keyGrp.checked = 0;
+
+		var promptHeight:Float = 100 + formatNames.length * 35 + 70 + 45;
 		openSubState(new BasePrompt(420, promptHeight,
 			Language.get('newchartEditor_save_format_title', 'Save Chart As...'),
 			function(state:BasePrompt)
@@ -5010,10 +6795,21 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				radioGrp.cameras = state.cameras;
 				state.add(radioGrp);
 
+				var keyTxt:EditorsText = new EditorsText(state.bg.x + 30, radioGrp.y + formatNames.length * 35 + 8, 260,
+					Language.get('newchartEditor_export_keys', 'Key count (osu/Malody):'));
+				keyTxt.cameras = state.cameras;
+				state.add(keyTxt);
+
+				keyGrp.x = state.bg.x + 30;
+				keyGrp.y = keyTxt.y + 18;
+				keyGrp.cameras = state.cameras;
+				state.add(keyGrp);
+
 				var btnY:Float = state.bg.y + state.bg.height - 45;
 				var saveBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_save_btn', 'Save'), function()
 				{
 					var choice:Int = radioGrp.checked;
+					_exportKeyMode = switch(keyGrp.checked) { case 1: 4; case 2: 8; default: 0; }
 					state.close();
 					// Delay to ensure prompt closes before file dialog opens
 					haxe.Timer.delay(function() {
@@ -5024,6 +6820,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 							case 2: saveAsCne();
 							case 3: saveAsVslice();
 							case 4: saveEventsOnly();
+							case 5: saveAsOsu();
+							case 6: saveAsMalody();
 						}
 					}, 200);
 				});
@@ -5059,6 +6857,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				chartName = Song.chartPath.substring(lastSlash + 1);
 			else
 				chartName = Song.chartPath;
+			var dot:Int = chartName.lastIndexOf('.');
+			if(dot > 0) chartName = chartName.substr(0, dot);
+			chartName += '.json';
 		}
 
 		fileDialog.save(chartName, Json.stringify({song: oldFormatSong}, "\t"),
@@ -5090,6 +6891,112 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				var newPath:String = fileDialog.path;
 				Song.chartPath = newPath.replace('\\', '/');
 				showOutput('newchartEditor_cne_saved', false, [newPath]);
+			}, null, function() showOutput('newchartEditor_error_save', true));
+	}
+
+	function saveAsOsu()
+	{
+		updateChartData();
+		var audioInfo:Dynamic = OsuMalodyConvert.findInstAudioFile(PlayState.SONG.song);
+		var audioRef:String = null;
+		if (audioInfo != null)
+			audioRef = Paths.formatToSongPath(PlayState.SONG.song) + '.' + audioInfo.ext;
+		var osuText:String = OsuMalodyConvert.psychToOsu(PlayState.SONG, _exportKeyMode, audioRef);
+
+		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.osu';
+		if(Song.chartPath != null)
+		{
+			var lastSlash:Int = Song.chartPath.lastIndexOf('/');
+			var baseName:String = lastSlash >= 0 ? Song.chartPath.substring(lastSlash + 1) : Song.chartPath;
+			var dot:Int = baseName.lastIndexOf('.');
+			if(dot > 0) baseName = baseName.substr(0, dot);
+			chartName = baseName + '.osu';
+		}
+
+		fileDialog.save(chartName, osuText,
+			function()
+			{
+				var newPath:String = fileDialog.path;
+				var msg:String = StringTools.replace(Language.get('newchartEditor_osu_saved', 'Chart saved as osu!mania to: %s'), '%s', newPath);
+				if (audioRef != null && audioInfo != null)
+				{
+					if (OsuMalodyConvert.exportAudioAlongside(newPath, audioInfo.path, audioRef))
+						msg += '\n' + StringTools.replace(Language.get('newchartEditor_audio_exported', 'Audio copied next to chart: %s'), '%s', audioRef);
+					else
+						msg += '\n' + Language.get('newchartEditor_audio_copy_failed', 'Audio copy failed!');
+				}
+				else
+					msg += '\n' + Language.get('newchartEditor_audio_not_found_export', 'Music not found on disk, chart exported without audio.');
+				showOutput(msg, false);
+			}, null, function() showOutput('newchartEditor_error_save', true));
+	}
+
+	function saveAsMalody()
+	{
+		updateChartData();
+		var audioInfo:Dynamic = OsuMalodyConvert.findInstAudioFile(PlayState.SONG.song);
+		var songKey:String = Paths.formatToSongPath(PlayState.SONG.song) + '/Inst';
+		var audioRef:String = null;
+		var audioWavBytes:haxe.io.Bytes = null; // mp3 (or RAM) audio converted to WAV
+		var convertedFrom:String = null;
+
+		// Malody can't reliably play MP3: convert to WAV unless we already have ogg/wav
+		if (audioInfo != null && (audioInfo.ext == 'ogg' || audioInfo.ext == 'wav'))
+		{
+			audioRef = Paths.formatToSongPath(PlayState.SONG.song) + '.' + audioInfo.ext;
+		}
+		else if (audioInfo != null)
+		{
+			convertedFrom = audioInfo.ext;
+			audioRef = Paths.formatToSongPath(PlayState.SONG.song) + '.wav';
+			#if sys
+			audioWavBytes = OsuMalodyConvert.audioBytesToWav(sys.io.File.getBytes(audioInfo.path));
+			#end
+		}
+		else if (Paths.ramInstBytes.exists(songKey))
+		{
+			convertedFrom = 'RAM';
+			audioRef = Paths.formatToSongPath(PlayState.SONG.song) + '.wav';
+			audioWavBytes = OsuMalodyConvert.audioBytesToWav(Paths.ramInstBytes.get(songKey));
+		}
+
+		var malodyText:String = OsuMalodyConvert.psychToMalody(PlayState.SONG, _exportKeyMode, audioRef);
+
+		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.mc';
+		if(Song.chartPath != null)
+		{
+			var lastSlash:Int = Song.chartPath.lastIndexOf('/');
+			var baseName:String = lastSlash >= 0 ? Song.chartPath.substring(lastSlash + 1) : Song.chartPath;
+			var dot:Int = baseName.lastIndexOf('.');
+			if(dot > 0) baseName = baseName.substr(0, dot);
+			chartName = baseName + '.mc';
+		}
+
+		fileDialog.save(chartName, malodyText,
+			function()
+			{
+				var newPath:String = fileDialog.path;
+				var msg:String = StringTools.replace(Language.get('newchartEditor_malody_saved', 'Chart saved as Malody to: %s'), '%s', newPath);
+				if (audioRef != null)
+				{
+					var exportedAudio:Bool = false;
+					if (audioWavBytes != null)
+						exportedAudio = OsuMalodyConvert.writeAudioAlongside(newPath, audioWavBytes, audioRef);
+					else if (audioInfo != null)
+						exportedAudio = OsuMalodyConvert.exportAudioAlongside(newPath, audioInfo.path, audioRef);
+
+					if (exportedAudio)
+					{
+						msg += '\n' + StringTools.replace(Language.get('newchartEditor_audio_exported', 'Audio copied next to chart: %s'), '%s', audioRef);
+						if (convertedFrom != null)
+							msg += '\n' + StringTools.replace(Language.get('newchartEditor_audio_converted', 'Converted from %s to WAV for Malody'), '%s', convertedFrom);
+					}
+					else
+						msg += '\n' + Language.get('newchartEditor_audio_copy_failed', 'Audio copy failed!');
+				}
+				else
+					msg += '\n' + Language.get('newchartEditor_audio_not_found_export', 'Music not found on disk, chart exported without audio.');
+				showOutput(msg, false);
 			}, null, function() showOutput('newchartEditor_error_save', true));
 	}
 
@@ -5222,12 +7129,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
                         note.colorSwap.saturation = 0;
                         note.colorSwap.brightness = 0;
                     }
-                    else if (note.noteData < ClientPrefs.data.arrowHSV.length)
-                    {
-                        note.colorSwap.hue = ClientPrefs.data.arrowHSV[note.noteData][0] / 360;
-                        note.colorSwap.saturation = ClientPrefs.data.arrowHSV[note.noteData][1] / 100;
-                        note.colorSwap.brightness = ClientPrefs.data.arrowHSV[note.noteData][2] / 100;
-                    }
+                    else
+                        note.applyLaneColor();
                 }
             }
         }
@@ -5240,6 +7143,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 		prevGridBg.visible = (curSec > 0 && showPreviousSection);
 		nextGridBg.visible = (curSec < PlayState.SONG.notes.length - 1 && showNextSection);
+		positionGridSegments();
 		
 		noteTypeLabelsButton.text.text = showNoteTypeLabels ? Language.get('newchartEditor_hide_note_labels', 'Hide Note Labels') : Language.get('newchartEditor_show_note_labels', 'Show Note Labels');
 		for (num => text in MetaNote.noteTypeTexts)
@@ -5368,13 +7272,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if(unsavedChanges)
 		{
 			openSubState(new editors.content.Prompt(
-				Language.get('newchartEditor_unsaved_preview', 'You have unsaved changes.\nAutosave and preview?'),
+				Language.get('newchartEditor_unsaved_preview', 'You have unsaved changes.\nPreview anyway? (Changes won\'t be lost)'),
 				function()
 				{
-					autosaveSong();
 					doOpenEditorPlayState();
 				},
-				'newchartEditor_save',
+				'newchartEditor_preview',
 				'newchartEditor_cancel'
 			));
 		}
@@ -5389,16 +7292,34 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		setSongPlaying(false);
 		chartEditorSave.flush(); //just in case a random crash happens before loading
 		autosaveSong();
-		LoadingState.loadAndSwitchState(new editors.EditorPlayState(sectionStartTime()));
+		LoadingState.loadAndSwitchState(new editors.EditorPlayState(sectionStartTime(), PlayState.SONG.mania));
 		upperBox.isMinimized = true;
 		upperBox.visible = mainBox.visible = infoBox.visible = false;
 	}
     function autosaveSong():Void
 	{
-		FlxG.save.data.autosave = Json.stringify({
-			"song": PlayState.SONG 
-		});
-		FlxG.save.flush();
+		// Autosave is opt-in via the Chart Auto-save setting.
+		// When disabled, we never touch the player's chart / autosave data.
+		if(!ClientPrefs.data.chartAutosave) return;
+		var data:String = Json.stringify({"song": PlayState.SONG});
+		try
+		{
+			// 大谱面直接落盘到文件 (FlxG.save 对大 JSON 有截断风险, 会导致
+			// 重新打开时后半段谱面丢失); 文件版本可被 "Open Autosave" 直接读取。
+			#if sys
+			if(!FileSystem.isDirectory('backups')) FileSystem.createDirectory('backups');
+			File.saveContent('backups/autosave.json', data);
+			#else
+			FlxG.save.data.autosave = data;
+			FlxG.save.flush();
+			#end
+		}
+		catch(e:Dynamic)
+		{
+			// Fall back to FlxG.save only if the file write fails
+			FlxG.save.data.autosave = data;
+			FlxG.save.flush();
+		}
 	}
     function sectionStartTime(add:Int = 0):Float
 	{
@@ -5474,6 +7395,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		}
 
 		var preloadPath:String = Paths.getPreloadPath(mainFolder);
+		#if sys
 		if(FileSystem.exists(preloadPath))
 		{
 			for (file in FileSystem.readDirectory(preloadPath))
@@ -5494,6 +7416,26 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				}
 			}
 		}
+		#else
+		var prefix:String = preloadPath + '/';
+		for(asset in lime.utils.Assets.list())
+		{
+			if(!asset.startsWith(prefix)) continue;
+			var file:String = asset.substr(prefix.length);
+			if(file.indexOf('/') >= 0 || file.startsWith('readme.')) continue;
+			var path:String = asset;
+			for (fileType in fileTypes)
+			{
+				var fileToCheck:String = file.substr(0, file.length - fileType.length);
+				if(fileToCheck.length > 0 && path.endsWith(fileType) && !tempMap.exists(fileToCheck))
+				{
+					fileList.push(fileToCheck);
+					tempMap.set(fileToCheck, true);
+					break;
+				}
+			}
+		}
+		#end
 		#if MODS_ALLOWED
 
 		var modsPath:String = Paths.mods(mainFolder);
@@ -5589,7 +7531,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				path = Paths.getPreloadPath(characterPath);
 				#end
 
+				#if sys
 				if (!FileSystem.exists(path))
+				#else
+				if (!OpenFlAssets.exists(path, TEXT))
+				#end
 				{
 					path = Paths.getPreloadPath('characters/' + Character.DEFAULT_CHARACTER + '.json');
 				}
@@ -5613,6 +7559,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	var overwriteSavedSomething:Bool = false;
 	function overwriteCheck(savePath:String, overwriteName:String, saveData:String, continueFunc:Void->Void = null, ?continueOnCancel:Bool = false)
 	{
+		#if sys
 		if(FileSystem.exists(savePath))
 		{
 			openSubState(new Prompt('${Language.get("newchartEditor_overwrite", "Overwrite")}: "$overwriteName"?', function()
@@ -5629,6 +7576,10 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			File.saveContent(savePath, saveData);
 			if(continueFunc != null) continueFunc();
 		}
+		#else
+		overwriteSavedSomething = true;
+		if(continueFunc != null) continueFunc();
+		#end
 	}
 
 	// Undo/Redo stuff
@@ -5697,6 +7648,23 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				if(lockedEvents) selectedNotes = selectedNotes.filter((note:MetaNote) -> !note.isEvent);
 				onSelectNote();
 		}
+		if (action.action != SELECT_NOTE)
+		{
+			// 多k: 撤销涉及事件/音符结构变化时, 重同步 SONG 数据并重建网格
+			try
+			{
+				_cacheSections();
+				updateChartData();
+				createGrids(false);
+				rebuildStrumNotes();
+				repositionEditorUI();
+				updateGridVisibility();
+				updateNotesForMania();
+				updateHeads(true);
+				updateScrollY();
+			}
+			catch (e:Dynamic) {}
+		}
 		showOutput('${Language.get("newchartEditor_undo", "Undo")} #${currentUndo+1}: ${action.action}');
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 		currentUndo++;
@@ -5729,6 +7697,23 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				selectedNotes = action.data.current;
 				if(lockedEvents) selectedNotes = selectedNotes.filter((note:MetaNote) -> !note.isEvent);
 				onSelectNote();
+		}
+		if (action.action != SELECT_NOTE)
+		{
+			// 多k: 重做涉及事件/音符结构变化时, 重同步 SONG 数据并重建网格
+			try
+			{
+				_cacheSections();
+				updateChartData();
+				createGrids(false);
+				rebuildStrumNotes();
+				repositionEditorUI();
+				updateGridVisibility();
+				updateNotesForMania();
+				updateHeads(true);
+				updateScrollY();
+			}
+			catch (e:Dynamic) {}
 		}
 		showOutput('${Language.get("newchartEditor_redo", "Redo")} #${currentUndo+1}: ${action.action}');
 		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
@@ -5835,7 +7820,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		waveformSprite.visible = true;
 		waveformSprite.y = gridBg.y;
 		var width:Int = Std.int(GRID_SIZE * GRID_COLUMNS_PER_PLAYER * GRID_PLAYERS);
-		var height:Int = Std.int(gridBg.height);
+		// 多k: 波形高度按当前小节总高度 (含事件切分段)
+		var height:Int = Std.int(sectionHeightPx(curSec));
 		if(Std.int(waveformSprite.height) != height && waveformSprite.pixels != null)
 		{
 			waveformSprite.pixels.dispose();
@@ -6126,49 +8112,69 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if(CoolUtil.difficulties.length < 1 && Difficulty.list.length > 0)
 			CoolUtil.difficulties = Difficulty.list.copy();
 
-		var foundDifficulties:Array<{name:String, index:Int}> = [];
+		var foundDifficulties:Array<{name:String, chartName:String, index:Int}> = [];
 		var defaultIndex:Int = 0;
 
+		// 1) Standard difficulties from the difficulty list
 		for(i in 0...Difficulty.list.length)
 		{
 			var diff:String = Difficulty.list[i];
 			var chartName:String = songLowercase + Difficulty.getFilePath(i);
 
-			var exists:Bool = false;
-			#if MODS_ALLOWED
-			if(FileSystem.exists(Paths.modsJson('$songLowercase/$chartName'))) exists = true;
-			else if(FileSystem.exists(Paths.json('$songLowercase/$chartName'))) exists = true;
-			#else
+			if(chartFileExists(songLowercase, chartName))
 			{
-				try {
-					if(Assets.exists(Paths.json('$songLowercase/$chartName'))) exists = true;
-				} catch(e:Dynamic) {}
-			}
-			#end
-
-			if(exists)
-			{
-				foundDifficulties.push({name: diff, index: i});
+				foundDifficulties.push({name: diff, chartName: chartName, index: i});
 				if(diff == Difficulty.getDefault()) defaultIndex = foundDifficulties.length - 1;
 			}
+		}
+
+		// 2) Extra difficulties found on disk: any <song>-<something>.json file
+		var extraNames:Array<String> = [];
+		for(dir in songChartFolders(songLowercase))
+		{
+			#if sys
+			if(!FileSystem.exists(dir)) continue;
+			for(file in FileSystem.readDirectory(dir))
+			{
+				var lower:String = file.toLowerCase();
+				if(!lower.startsWith(songLowercase + '-') || !lower.endsWith('.json')) continue;
+				var name:String = lower.substr(songLowercase.length + 1, lower.length - songLowercase.length - 6);
+				if(name.length < 1 || name == 'events') continue;
+				if(!extraNames.contains(name)) extraNames.push(name);
+			}
+			#else
+			var prefix:String = dir + '/';
+			for(asset in lime.utils.Assets.list())
+			{
+				if(!asset.startsWith(prefix)) continue;
+				var file:String = asset.substr(prefix.length);
+				var lower:String = file.toLowerCase();
+				if(!lower.startsWith(songLowercase + '-') || !lower.endsWith('.json')) continue;
+				var name:String = lower.substr(songLowercase.length + 1, lower.length - songLowercase.length - 6);
+				if(name.length < 1 || name == 'events') continue;
+				if(!extraNames.contains(name)) extraNames.push(name);
+			}
+			#end
+		}
+		for(name in extraNames)
+		{
+			var already:Bool = false;
+			for(d in foundDifficulties)
+			{
+				if(d.chartName == '$songLowercase-$name' || d.name.toLowerCase() == name)
+				{
+					already = true;
+					break;
+				}
+			}
+			if(already) continue;
+			foundDifficulties.push({name: name.charAt(0).toUpperCase() + name.substr(1), chartName: '$songLowercase-$name', index: -1});
 		}
 
 		if(foundDifficulties.length < 1)
 		{
 			// Try loading without any difficulty suffix
-			var exists:Bool = false;
-			#if MODS_ALLOWED
-			if(FileSystem.exists(Paths.modsJson('$songLowercase/$songLowercase'))) exists = true;
-			else if(FileSystem.exists(Paths.json('$songLowercase/$songLowercase'))) exists = true;
-			#else
-			{
-				try {
-					if(Assets.exists(Paths.json('$songLowercase/$songLowercase'))) exists = true;
-				} catch(e:Dynamic) {}
-			}
-			#end
-
-			if(exists)
+			if(chartFileExists(songLowercase, songLowercase))
 				doLoadJson(songLowercase, -1);
 			else
 				showOutput('newchartEditor_error_not_valid_chart', true);
@@ -6177,7 +8183,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 		if(foundDifficulties.length == 1)
 		{
-			doLoadJson(songLowercase, foundDifficulties[0].index);
+			doLoadJson(songLowercase, foundDifficulties[0].index, foundDifficulties[0].chartName);
 			return;
 		}
 
@@ -6204,7 +8210,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				var confirmBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_load_btn', 'Load'), function()
 				{
 					state.close();
-					doLoadJson(songLowercase, foundDifficulties[radioGrp.checked].index);
+					doLoadJson(songLowercase, foundDifficulties[radioGrp.checked].index, foundDifficulties[radioGrp.checked].chartName);
 				});
 				confirmBtn.screenCenter(X);
 				confirmBtn.x -= 100;
@@ -6225,11 +8231,18 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		));
 	}
 
-	function doLoadJson(songLowercase:String, diffIndex:Int):Void
+	function doLoadJson(songLowercase:String, diffIndex:Int, ?chartName:String = null):Void
 	{
 		var loadedChart:SwagSong = null;
 
-		if(diffIndex >= 0)
+		if(chartName != null && chartName.length > 0)
+		{
+			// Explicit chart file name (also covers custom difficulties)
+			loadedChart = Song.getChart(chartName, songLowercase);
+			if(loadedChart != null && Reflect.hasField(loadedChart, 'song') && diffIndex >= 0)
+				PlayState.storyDifficulty = diffIndex;
+		}
+		else if(diffIndex >= 0)
 		{
 			var chartName:String = songLowercase + Difficulty.getFilePath(diffIndex);
 			loadedChart = Song.getChart(chartName, songLowercase);
@@ -6246,14 +8259,15 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			// Attempt to read the raw file and check for CNE format
 			var rawJson:String = null;
+			var baseChart:String = (chartName != null && chartName.length > 0) ? chartName : songLowercase;
 			#if MODS_ALLOWED
-			var moddyFile:String = Paths.modsJson('$songLowercase/$songLowercase');
+			var moddyFile:String = Paths.modsJson('$songLowercase/$baseChart');
 			if(FileSystem.exists(moddyFile)) rawJson = File.getContent(moddyFile).trim();
 			#end
 			if(rawJson == null)
 			{
 				try {
-					var path:String = Paths.json('$songLowercase/$songLowercase');
+					var path:String = Paths.json('$songLowercase/$baseChart');
 					#if sys
 					if(FileSystem.exists(path)) rawJson = File.getContent(path).trim();
 					#else
@@ -6280,6 +8294,33 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		reloadNotesDropdowns();
 		prepareReload();
 		showOutput('newchartEditor_chart_reloaded_old', false, [songLowercase]);
+	}
+
+	/** True when a chart file exists for the given song folder + chart name. */
+	function chartFileExists(songLowercase:String, chartName:String):Bool
+	{
+		#if MODS_ALLOWED
+		if(FileSystem.exists(Paths.modsJson('$songLowercase/$chartName'))) return true;
+		if(FileSystem.exists(Paths.json('$songLowercase/$chartName'))) return true;
+		#else
+		try { if(Assets.exists(Paths.json('$songLowercase/$chartName'))) return true; } catch(e:Dynamic) {}
+		#end
+		return false;
+	}
+
+	/** Data folders that may contain chart files for this song. */
+	function songChartFolders(songLowercase:String):Array<String>
+	{
+		var dirs:Array<String> = [];
+		#if MODS_ALLOWED
+		if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			dirs.push(Paths.mods(Paths.currentModDirectory + '/data/' + songLowercase));
+		for(mod in Paths.getGlobalMods())
+			dirs.push(Paths.mods(mod + '/data/' + songLowercase));
+		dirs.push(Paths.mods('data/' + songLowercase));
+		#end
+		dirs.push(Paths.getPreloadPath('data/' + songLowercase));
+		return dirs;
 	}
 
 }

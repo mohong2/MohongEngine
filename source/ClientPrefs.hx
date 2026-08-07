@@ -57,7 +57,11 @@ import sys.io.Process;
 	public var camZooms:Bool = true;
 	public var hideHud:Bool = false;
 	public var noteOffset:Int = 0;
-	public var arrowHSV:Array<Array<Int>> = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+	// 多k: 前 4 项为 4K 基础色偏移, 后 5 项对应 space/leftex1/downex1/upex1/rightex1
+	public var arrowHSV:Array<Array<Int>> = [
+		[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0],
+		[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]
+	];
 	public var ghostTapping:Bool = true;
 	public var timeBarType:String = 'Time Left';
 	public var scoreZoom:Bool = true;
@@ -65,6 +69,8 @@ import sys.io.Process;
 	public var healthBarAlpha:Float = 1;
 	public var controllerMode:Bool = #if !android false #else true #end;
 	public var hitsoundVolume:Float = 0;
+	// LeatherEngine 移植: 击打音效选择 (列表来自 data/hitsoundList.txt, 可被 mod 扩展)
+	public var hitsound:String = "osu!mania";
 	public var trackAlpha:Float = 0;
 	public var pauseMusic:String = 'Tea Time';
 	public var checkForUpdates:Bool = true;
@@ -78,6 +84,9 @@ import sys.io.Process;
 	public var opponentfe:Bool = true;
 	public var currentFont:String = "vcr.ttf"; 
 	public var windowedmode:String = "windowed";
+	// 关闭动画：样式 (off/squeeze/zoom/drop/slide) + 速度倍率
+	public var closeAnimStyle:String = 'squeeze';
+	public var closeAnimSpeed:Float = 1.0;
 	public var compatibility_mode:Bool = false; 
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
@@ -103,6 +112,11 @@ import sys.io.Process;
 	public var goodWindow:Int = 90;
 	public var badWindow:Int = 130;
 	public var safeFrames:Float = 10;
+	// LeatherEngine 移植: 判定手感 (marvelous/sick/good/bad 的 ms 窗口)
+	public var judgementTimings:Array<Int> = [25, 50, 70, 100];
+	public var judgementPreset:String = 'Leather Engine';
+	public var marvelousRatings:Bool = true;
+	public var marvelousWindow:Int = 25;
 
 	public var saveReplayData:Bool = true;
 	public var lastNoteAnimation:Bool = false;
@@ -114,6 +128,8 @@ import sys.io.Process;
 	public var runInBackground:Bool = false;
 	public var backgroundDim:Bool = false;
 	public var autoExtractAssets:Bool = true;
+	// Chart editor auto-save (off by default — player opts in)
+	public var chartAutosave:Bool = false;
 
 	// Trace Console 调试设置
 	public var traceConsoleEnabled:Bool = false;
@@ -128,6 +144,12 @@ import sys.io.Process;
 	// Old pause menu style
 	public var oldPauseMenu:Bool = false;
 
+	// Seiun Engine menu effects (aurora glows, particles, beat-synced pulses)
+	public var seiuMenuFx:Bool = true;
+
+	// Freeplay: automatically play the selected song's music
+	public var freeplayAutoPreview:Bool = false;
+
 	// Android storage type (empty = auto-detect)
 	public var storageType:String = "";
 
@@ -138,6 +160,10 @@ import sys.io.Process;
 	public var texturePooling:Bool = true;
 	/** Render quality level: 0 = Low, 1 = Medium, 2 = High. */
 	public var renderQualityLevel:String = "High";
+
+	// Lua / HScript error loop protection: ignore a script file after too many consecutive errors.
+	public var ignoreErrorLoopScripts:Bool = true;
+	public var scriptErrorLimit:Int = 50;
 }
 
 class ClientPrefs {
@@ -184,6 +210,7 @@ class ClientPrefs {
 	public static var healthBarAlpha(get, never):Float;
 	public static var controllerMode(get, never):Bool;
 	public static var hitsoundVolume(get, never):Float;
+	public static var hitsound(get, never):String;
 	public static var trackAlpha(get, never):Float;
 	public static var pauseMusic(get, never):String;
 	public static var checkForUpdates(get, never):Bool;
@@ -197,6 +224,8 @@ class ClientPrefs {
 	public static var opponentfe(get, never):Bool;
 	public static var currentFont(get, never):String;
 	public static var windowedmode(get, never):String;
+	public static var closeAnimStyle(get, never):String;
+	public static var closeAnimSpeed(get, never):Float;
 	public static var compatibility_mode(get, never):Bool;
 	public static var guitarHeroSustains(get, never):Bool;
 	public static var smoothhpbar(get, never):Bool;
@@ -217,11 +246,17 @@ class ClientPrefs {
 	public static var goodWindow(get, never):Int;
 	public static var badWindow(get, never):Int;
 	public static var safeFrames(get, never):Float;
+	public static var judgementTimings(get, never):Array<Int>;
+	public static var judgementPreset(get, never):String;
+	public static var marvelousRatings(get, never):Bool;
+	public static var marvelousWindow(get, never):Int;
 	public static var touchSwipeEnabled(get, never):Bool;
 	public static var separateUpdateDraw(get, never):Bool;
 	public static var memoryOptimization(get, never):Bool;
 	public static var texturePooling(get, never):Bool;
 	public static var renderQualityLevel(get, never):String;
+	public static var ignoreErrorLoopScripts(get, never):Bool;
+	public static var scriptErrorLimit(get, never):Int;
 	static inline function get_arrowRGB() return data.arrowRGB;
 	static inline function get_arrowRGBPixel() return data.arrowRGBPixel;
 	static inline function get_noteSkin() return data.noteSkin;
@@ -263,6 +298,7 @@ class ClientPrefs {
 	static inline function get_healthBarAlpha() return data.healthBarAlpha;
 	static inline function get_controllerMode() return data.controllerMode;
 	static inline function get_hitsoundVolume() return data.hitsoundVolume;
+	static inline function get_hitsound() return data.hitsound;
 	static inline function get_trackAlpha() return data.trackAlpha;
 	static inline function get_pauseMusic() return data.pauseMusic;
 	static inline function get_checkForUpdates() return data.checkForUpdates;
@@ -276,6 +312,8 @@ class ClientPrefs {
 	static inline function get_opponentfe() return data.opponentfe;
 	static inline function get_currentFont() return data.currentFont;
 	static inline function get_windowedmode() return data.windowedmode;
+	static inline function get_closeAnimStyle() return data.closeAnimStyle;
+	static inline function get_closeAnimSpeed() return data.closeAnimSpeed;
 	static inline function get_compatibility_mode() return data.compatibility_mode;
 	static inline function get_guitarHeroSustains() return data.guitarHeroSustains;
 	static inline function get_smoothhpbar() return data.smoothhpbar;
@@ -296,11 +334,17 @@ class ClientPrefs {
 	static inline function get_goodWindow() return data.goodWindow;
 	static inline function get_badWindow() return data.badWindow;
 	static inline function get_safeFrames() return data.safeFrames;
+	static inline function get_judgementTimings() return data.judgementTimings;
+	static inline function get_judgementPreset() return data.judgementPreset;
+	static inline function get_marvelousRatings() return data.marvelousRatings;
+	static inline function get_marvelousWindow() return data.marvelousWindow;
 	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
 	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
 	static inline function get_memoryOptimization() return data.memoryOptimization;
 	static inline function get_texturePooling() return data.texturePooling;
 	static inline function get_renderQualityLevel() return data.renderQualityLevel;
+	static inline function get_ignoreErrorLoopScripts() return data.ignoreErrorLoopScripts;
+	static inline function get_scriptErrorLimit() return data.scriptErrorLimit;
 
 	public static var keyBinds:Map<String, Array<FlxKey>> = [
 		//Key Bind, Name for ControlsSubState
@@ -308,6 +352,191 @@ class ClientPrefs {
 		'note_down'		=> [S, DOWN],
 		'note_up'		=> [W, UP],
 		'note_right'	=> [D, RIGHT],
+
+		// 多k (extra keys) 键位, 移植自 EK 0.6.3
+		'note_one1'		=> [SPACE, NONE],
+
+		'note_two1'		=> [D, NONE],
+		'note_two2'		=> [K, NONE],
+
+		'note_three1'	=> [D, NONE],
+		'note_three2'	=> [SPACE, NONE],
+		'note_three3'	=> [K, NONE],
+
+		'note_five1'	=> [D, NONE],
+		'note_five2'	=> [F, NONE],
+		'note_five3'	=> [SPACE, NONE],
+		'note_five4'	=> [J, NONE],
+		'note_five5'	=> [K, NONE],
+
+		'note_six1'		=> [S, NONE],
+		'note_six2'		=> [D, NONE],
+		'note_six3'		=> [F, NONE],
+		'note_six4'		=> [J, NONE],
+		'note_six5'		=> [K, NONE],
+		'note_six6'		=> [L, NONE],
+
+		'note_seven1'	=> [S, NONE],
+		'note_seven2'	=> [D, NONE],
+		'note_seven3'	=> [F, NONE],
+		'note_seven4'	=> [SPACE, NONE],
+		'note_seven5'	=> [J, NONE],
+		'note_seven6'	=> [K, NONE],
+		'note_seven7'	=> [L, NONE],
+
+		'note_eight1'	=> [A, NONE],
+		'note_eight2'	=> [S, NONE],
+		'note_eight3'	=> [D, NONE],
+		'note_eight4'	=> [F, NONE],
+		'note_eight5'	=> [H, NONE],
+		'note_eight6'	=> [J, NONE],
+		'note_eight7'	=> [K, NONE],
+		'note_eight8'	=> [L, NONE],
+
+		'note_nine1'	=> [A, NONE],
+		'note_nine2'	=> [S, NONE],
+		'note_nine3'	=> [D, NONE],
+		'note_nine4'	=> [F, NONE],
+		'note_nine5'	=> [SPACE, NONE],
+		'note_nine6'	=> [H, NONE],
+		'note_nine7'	=> [J, NONE],
+		'note_nine8'	=> [K, NONE],
+		'note_nine9'	=> [L, NONE],
+
+		'note_ten1'		=> [A, NONE],
+		'note_ten2'		=> [S, NONE],
+		'note_ten3'		=> [D, NONE],
+		'note_ten4'		=> [F, NONE],
+		'note_ten5'		=> [G, NONE],
+		'note_ten6'		=> [SPACE, NONE],
+		'note_ten7'		=> [H, NONE],
+		'note_ten8'		=> [J, NONE],
+		'note_ten9'		=> [K, NONE],
+		'note_ten10'	=> [L, NONE],
+
+		'note_elev1'	=> [A, NONE],
+		'note_elev2'	=> [S, NONE],
+		'note_elev3'	=> [D, NONE],
+		'note_elev4'	=> [F, NONE],
+		'note_elev5'	=> [G, NONE],
+		'note_elev6'	=> [SPACE, NONE],
+		'note_elev7'	=> [H, NONE],
+		'note_elev8'	=> [J, NONE],
+		'note_elev9'	=> [K, NONE],
+		'note_elev10'	=> [L, NONE],
+		'note_elev11'	=> [PERIOD, NONE],
+
+		'note_twel1'	=> [A, NONE],
+		'note_twel2'	=> [S, NONE],
+		'note_twel3'	=> [D, NONE],
+		'note_twel4'	=> [F, NONE],
+		'note_twel5'	=> [C, NONE],
+		'note_twel6'	=> [V, NONE],
+		'note_twel7'	=> [N, NONE],
+		'note_twel8'	=> [M, NONE],
+		'note_twel9'	=> [H, NONE],
+		'note_twel10'	=> [J, NONE],
+		'note_twel11'	=> [K, NONE],
+		'note_twel12'	=> [L, NONE],
+
+		'note_thir1'	=> [A, NONE],
+		'note_thir2'	=> [S, NONE],
+		'note_thir3'	=> [D, NONE],
+		'note_thir4'	=> [F, NONE],
+		'note_thir5'	=> [C, NONE],
+		'note_thir6'	=> [V, NONE],
+		'note_thir7'	=> [SPACE, NONE],
+		'note_thir8'	=> [N, NONE],
+		'note_thir9'	=> [M, NONE],
+		'note_thir10'	=> [H, NONE],
+		'note_thir11'	=> [J, NONE],
+		'note_thir12'	=> [K, NONE],
+		'note_thir13'	=> [L, NONE],
+
+		'note_fourt1'	=> [A, NONE],
+		'note_fourt2'	=> [S, NONE],
+		'note_fourt3'	=> [D, NONE],
+		'note_fourt4'	=> [F, NONE],
+		'note_fourt5'	=> [C, NONE],
+		'note_fourt6'	=> [V, NONE],
+		'note_fourt7'	=> [G, NONE],
+		'note_fourt8'	=> [Y, NONE],
+		'note_fourt9'	=> [N, NONE],
+		'note_fourt10'	=> [M, NONE],
+		'note_fourt11'	=> [H, NONE],
+		'note_fourt12'	=> [J, NONE],
+		'note_fourt13'	=> [K, NONE],
+		'note_fourt14'	=> [L, NONE],
+
+		'note_151'	=> [A, NONE],
+		'note_152'	=> [S, NONE],
+		'note_153'	=> [D, NONE],
+		'note_154'	=> [F, NONE],
+		'note_155'	=> [C, NONE],
+		'note_156'	=> [V, NONE],
+		'note_157'	=> [T, NONE],
+		'note_158'	=> [Y, NONE],
+		'note_159'	=> [U, NONE],
+		'note_1510'	=> [N, NONE],
+		'note_1511'	=> [M, NONE],
+		'note_1512'	=> [H, NONE],
+		'note_1513'	=> [J, NONE],
+		'note_1514'	=> [K, NONE],
+		'note_1515'	=> [L, NONE],
+
+		'note_161'	=> [A, NONE],
+		'note_162'	=> [S, NONE],
+		'note_163'	=> [D, NONE],
+		'note_164'	=> [F, NONE],
+		'note_165'	=> [Q, NONE],
+		'note_166'	=> [W, NONE],
+		'note_167'	=> [E, NONE],
+		'note_168'	=> [R, NONE],
+		'note_169'	=> [Y, NONE],
+		'note_1610'	=> [U, NONE],
+		'note_1611'	=> [I, NONE],
+		'note_1612'	=> [O, NONE],
+		'note_1613'	=> [H, NONE],
+		'note_1614'	=> [J, NONE],
+		'note_1615'	=> [K, NONE],
+		'note_1616'	=> [L, NONE],
+
+		'note_171'	=> [A, NONE],
+		'note_172'	=> [S, NONE],
+		'note_173'	=> [D, NONE],
+		'note_174'	=> [F, NONE],
+		'note_175'	=> [Q, NONE],
+		'note_176'	=> [W, NONE],
+		'note_177'	=> [E, NONE],
+		'note_178'	=> [R, NONE],
+		'note_179'	=> [SPACE, NONE],
+		'note_1710'	=> [Y, NONE],
+		'note_1711'	=> [U, NONE],
+		'note_1712'	=> [I, NONE],
+		'note_1713'	=> [O, NONE],
+		'note_1714'	=> [H, NONE],
+		'note_1715'	=> [J, NONE],
+		'note_1716'	=> [K, NONE],
+		'note_1717'	=> [L, NONE],
+
+		'note_181'	=> [A, NONE],
+		'note_182'	=> [S, NONE],
+		'note_183'	=> [D, NONE],
+		'note_184'	=> [F, NONE],
+		'note_185'	=> [SPACE, NONE],
+		'note_186'	=> [H, NONE],
+		'note_187'	=> [J, NONE],
+		'note_188'	=> [K, NONE],
+		'note_189'	=> [L, NONE],
+		'note_1810'	=> [Q, NONE],
+		'note_1811'	=> [W, NONE],
+		'note_1812'	=> [E, NONE],
+		'note_1813'	=> [R, NONE],
+		'note_1814'	=> [T, NONE],
+		'note_1815'	=> [Y, NONE],
+		'note_1816'	=> [U, NONE],
+		'note_1817'	=> [I, NONE],
+		'note_1818'	=> [O, NONE],
 		
 		'ui_left'		=> [A, LEFT],
 		'ui_down'		=> [S, DOWN],
@@ -403,6 +632,58 @@ class ClientPrefs {
 			if (key != 'gameplaySettings' && Reflect.hasField(FlxG.save.data, key))
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
 
+		// 多k: 老存档 arrowHSV 只有 4 项, 补足到 9 项 (对应 A~I 9 个颜色轨道),
+		// 保证 NotesSubState 轮播/游戏内取色不会越界。
+		if (data.arrowHSV == null || data.arrowHSV.length < 9)
+		{
+			var padded:Array<Array<Int>> = [];
+			if (data.arrowHSV != null) for (hsv in data.arrowHSV) padded.push(hsv != null ? hsv : [0, 0, 0]);
+			while (padded.length < 9) padded.push([0, 0, 0]);
+			data.arrowHSV = padded;
+		}
+
+		// 判定手感迁移: 老存档没有 judgementTimings, 从原 Psych 窗口初始化
+		// (marvelous 默认 25ms, sick/good/bad 沿用玩家已保存的窗口值 → 视为自定义预设)
+		if (!Reflect.hasField(FlxG.save.data, 'judgementTimings'))
+		{
+			if (Reflect.hasField(FlxG.save.data, 'sickWindow') || Reflect.hasField(FlxG.save.data, 'goodWindow') || Reflect.hasField(FlxG.save.data, 'badWindow'))
+			{
+				// 老玩家: 保留已保存的 Psych 窗口, 判定类型标记为自定义
+				data.judgementTimings = [25, data.sickWindow, data.goodWindow, data.badWindow];
+				data.judgementPreset = 'Custom';
+			}
+			else
+			{
+				// 新玩家: 使用 Leather Engine 预设
+				data.judgementTimings = [25, 50, 70, 100];
+				data.judgementPreset = 'Leather Engine';
+			}
+			data.marvelousWindow = data.judgementTimings[0];
+		}
+		else if (data.judgementTimings == null || data.judgementTimings.length != 4)
+		{
+			data.judgementTimings = [25, data.sickWindow, data.goodWindow, data.badWindow];
+			data.judgementPreset = 'Custom';
+			data.marvelousWindow = data.judgementTimings[0];
+		}
+		else
+		{
+			data.marvelousWindow = data.judgementTimings[0];
+			// 老版本已有 judgementTimings 但没有 judgementPreset 时, 按窗口值匹配预设
+			if (!Reflect.hasField(FlxG.save.data, 'judgementPreset'))
+			{
+				var t:Array<Int> = data.judgementTimings;
+				if (t[0] == 25 && t[1] == 50 && t[2] == 70 && t[3] == 100)
+					data.judgementPreset = 'Leather Engine';
+				else if (t[0] == 23 && t[1] == 45 && t[2] == 90 && t[3] == 135)
+					data.judgementPreset = 'Psych Engine / Kade Engine';
+				else if (t[0] == 16 && t[1] == 33 && t[2] == 124 && t[3] == 149)
+					data.judgementPreset = 'Friday Night Funkin\'';
+				else
+					data.judgementPreset = 'Custom';
+			}
+		}
+
 		if (Main.fpsVar != null) {
 			Main.fpsVar.visible = data.showFPS && !Main.useOldFPS;
 			Main.oldFpsVar.visible = data.showFPS && Main.useOldFPS;
@@ -451,13 +732,6 @@ class ClientPrefs {
 			case "high":   2;
 			default:       2;
 		}
-
-		// Mobile-specific: auto-enable more frequent GC
-		#if mobile
-		if (data.memoryOptimization) {
-			MemoryMonitor.garbageCollectionInterval = 20.0;
-		}
-		#end
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;

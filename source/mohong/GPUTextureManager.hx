@@ -1,21 +1,21 @@
 package mohong;
 
-import openfl.display.BitmapData;
-import openfl.display3D.textures.RectangleTexture;
-import openfl.display3D.Context3DTextureFormat;
-import flixel.FlxG;
 import flixel.graphics.FlxGraphic;
+import openfl.display.BitmapData;
 
 /**
- * GPU texture lifecycle manager.
- * 
- * Manages GPU-side texture allocation and disposal to:
- * - Prevent VRAM leaks from orphaned textures
- * - Pool frequently-used texture sizes for reuse
- * - Track texture memory usage for diagnostics
- * - Ensure proper cleanup on state transitions
- * 
- * Design: All settings are soft-coded as static configurable properties.
+ * Texture / bitmap memory manager (rewritten).
+ *
+ * The previous version uploaded every bitmap to a Stage3D RectangleTexture and
+ * wrapped it back with BitmapData.fromTexture(), which broke image rendering
+ * with the standard OpenFL/Flixel renderer (blank images until the asset was
+ * loaded a few times). This engine does not use Stage3D rendering, so that
+ * path was both useless and harmful.
+ *
+ * This rewrite is a lightweight, safe bookkeeper: it estimates the memory used
+ * by FlxGraphic bitmaps and exposes diagnostics. It never disposes textures on
+ * its own — all disposal is left to Flixel's own refcounted FlxGraphic cache,
+ * which only frees bitmaps that no sprite references anymore.
  */
 class GPUTextureManager
 {
@@ -23,38 +23,38 @@ class GPUTextureManager
 	//  Configurable settings (soft-coded)
 	// ═══════════════════════════════════════
 
-	/** Whether GPU texture management is enabled. */
+	/** Whether texture memory management is enabled. */
 	public static var managementEnabled:Bool = true;
 
-	/** Maximum number of pooled textures per size category. */
+	/** Maximum number of pooled textures per size category (kept for compat). */
 	public static var maxPooledTexturesPerSize:Int = 8;
 
 	/** Whether to log texture allocation/deallocation events. */
 	public static var logTextureEvents:Bool = false;
 
-	/** Estimated VRAM usage in bytes (tracked). */
+	/** Estimated memory usage in bytes (tracked). */
 	public static var estimatedVRAMUsage(get, never):Float;
 
-	/** Peak VRAM usage observed. */
+	/** Peak memory usage observed. */
 	public static var peakVRAMUsage:Float = 0;
 
 	// ═══════════════════════════════════════
 	//  Internal state
 	// ═══════════════════════════════════════
 
-	/** Active texture references tracked for leak detection. */
-	static var _activeTextures:Array<RectangleTexture> = [];
+	/** Tracked bitmap memory per asset key. */
+	static var _trackedMemory:Map<String, Float> = new Map<String, Float>();
 
-	/** Count of textures created since tracking began. */
+	/** Count of tracked allocations. */
 	static var _texturesCreated:Int = 0;
 
-	/** Count of textures disposed since tracking began. */
+	/** Count of tracked disposals. */
 	static var _texturesDisposed:Int = 0;
 
 	/** Cached estimate of bytes per pixel (RGBA = 4 bytes). */
 	static final BYTES_PER_PIXEL:Float = 4.0;
 
-	/** Tracked VRAM estimate. */
+	/** Current VRAM/bitmap estimate. */
 	static var _vramEstimate:Float = 0;
 
 	// ═══════════════════════════════════════
@@ -70,20 +70,19 @@ class GPUTextureManager
 	//  Public API
 	// ═══════════════════════════════════════
 
-	/**
-	 * Register a newly created GPU texture for tracking.
-	 * Call this whenever a RectangleTexture is created.
-	 */
-	public static function trackTextureAllocation(texture:RectangleTexture, width:Int, height:Int):Void
+	/** Register a FlxGraphic's bitmap memory for tracking. */
+	public static function trackGraphic(key:String, graphic:FlxGraphic):Void
 	{
-		if (!managementEnabled || texture == null)
+		if (!managementEnabled || key == null || graphic == null)
 			return;
+		if (_trackedMemory.exists(key))
+			untrackGraphic(key);
 
+		var bitmap:BitmapData = graphic.bitmap;
+		var memory:Float = (bitmap != null) ? bitmap.width * bitmap.height * BYTES_PER_PIXEL : 0;
+		_trackedMemory.set(key, memory);
+		_vramEstimate += memory;
 		_texturesCreated++;
-		_activeTextures.push(texture);
-
-		var textureMemory:Float = width * height * BYTES_PER_PIXEL;
-		_vramEstimate += textureMemory;
 
 		if (_vramEstimate > peakVRAMUsage)
 			peakVRAMUsage = _vramEstimate;
@@ -91,116 +90,88 @@ class GPUTextureManager
 		if (logTextureEvents)
 		{
 			TraceManager.debug('gpuTextureManager.alloc',
-				'Texture allocated: {w}x{h} ({mem}KB) | Active: {active} | Total VRAM: {vram}MB',
-				[width, height, Std.int(textureMemory / 1024),
-				 _activeTextures.length, Std.int(_vramEstimate / 1024 / 1024)]);
+				'Texture tracked: {key} ({mem}KB) | Total: {vram}MB',
+				[key, Std.int(memory / 1024), Std.int(_vramEstimate / 1024 / 1024)]);
 		}
 	}
 
-	/**
-	 * Register a GPU texture disposal for tracking.
-	 * Call this whenever a RectangleTexture is disposed.
-	 */
-	public static function trackTextureDisposal(texture:RectangleTexture, width:Int, height:Int):Void
+	/** Unregister an asset key. */
+	public static function untrackGraphic(key:String):Void
 	{
-		if (!managementEnabled || texture == null)
+		if (!_trackedMemory.exists(key))
 			return;
-
-		_texturesDisposed++;
-		_activeTextures.remove(texture);
-
-		var textureMemory:Float = width * height * BYTES_PER_PIXEL;
-		_vramEstimate -= textureMemory;
+		var memory:Float = _trackedMemory.get(key);
+		_trackedMemory.remove(key);
+		_vramEstimate -= memory;
 		if (_vramEstimate < 0)
 			_vramEstimate = 0;
+		_texturesDisposed++;
 	}
 
-	/**
-	 * Safely dispose a GPU texture with tracking.
-	 * Use this instead of calling texture.dispose() directly.
-	 */
-	public static function safeDisposeTexture(texture:RectangleTexture, width:Int = 0, height:Int = 0):Void
+	// ── Backwards-compatible aliases (old Stage3D API) ──
+
+	/** Compat alias: register allocation. Kept for old callers. */
+	public static function trackTextureAllocation(texture:Dynamic, width:Int, height:Int):Void
 	{
-		if (texture == null)
-			return;
-
-		trackTextureDisposal(texture, width, height);
-
-		try
-		{
-			texture.dispose();
-		}
-		catch (e:Dynamic)
-		{
-			TraceManager.warn('gpuTextureManager.disposeFailed',
-				'Failed to dispose texture: {error}', [Std.string(e)]);
-		}
+		if (!managementEnabled || texture == null) return;
+		var memory:Float = width * height * BYTES_PER_PIXEL;
+		_vramEstimate += memory;
+		_texturesCreated++;
+		if (_vramEstimate > peakVRAMUsage)
+			peakVRAMUsage = _vramEstimate;
 	}
 
-	/**
-	 * Dispose all tracked textures. Use for emergency cleanup.
-	 */
+	/** Compat alias: register disposal. Kept for old callers. */
+	public static function trackTextureDisposal(texture:Dynamic, width:Int = 0, height:Int = 0):Void
+	{
+		if (texture == null) return;
+		_vramEstimate -= width * height * BYTES_PER_PIXEL;
+		if (_vramEstimate < 0)
+			_vramEstimate = 0;
+		_texturesDisposed++;
+	}
+
+	/** Safe no-op: disposal is handled by Flixel's refcounted graphic cache. */
+	public static function safeDisposeTexture(texture:Dynamic, width:Int = 0, height:Int = 0):Void
+	{
+		// Intentionally a no-op — see class docs.
+	}
+
+	/** Safe no-op: never force-dispose tracked resources. */
 	public static function disposeAllTrackedTextures():Void
 	{
-		if (logTextureEvents)
-		{
-			TraceManager.info('gpuTextureManager.disposeAll',
-				'Disposing {count} tracked textures ({vram}MB VRAM)',
-				[_activeTextures.length, Std.int(_vramEstimate / 1024 / 1024)]);
-		}
-
-		var textures:Array<RectangleTexture> = _activeTextures.copy();
-		for (texture in textures)
-		{
-			try
-			{
-				texture.dispose();
-			}
-			catch (e:Dynamic) {}
-		}
-
-		_activeTextures = [];
-		_vramEstimate = 0;
+		// Intentionally a no-op — see class docs.
 	}
 
-	/**
-	 * Check for potential VRAM leaks: textures that are still allocated
-	 * but have no known FlxGraphic reference.
-	 */
+	/** Check for stale tracking entries (null/key mismatches). */
 	public static function detectOrphanedTextures():Int
 	{
 		var orphanCount:Int = 0;
-		// Iterate active textures and check if they still have valid references
-		for (texture in _activeTextures)
+		for (key in _trackedMemory.keys())
 		{
-			// A heuristic: if the texture object exists but has been disposed
-			// by the GC without our knowledge, it shouldn't be in our list.
-			// Most orphan detection relies on the FlxGraphic cache.
-			if (texture == null)
+			if (key == null)
 				orphanCount++;
 		}
-
-		// Clean up null references
-		while (_activeTextures.remove(null)) {}
+		for (key in _trackedMemory.keys())
+		{
+			if (key == null)
+				_trackedMemory.remove(key);
+		}
 		return orphanCount;
 	}
 
-	/**
-	 * Get a diagnostic summary of GPU texture state.
-	 */
+	/** Get a diagnostic summary of texture memory state. */
 	public static function getDiagnostics():String
 	{
-		return 'GPU Textures: ${_activeTextures.length} active | '
+		return 'GPU Textures: ${_trackedMemory.keys().hasNext() ? "tracked" : "none"} | '
 			+ '${_texturesCreated} created, ${_texturesDisposed} disposed | '
 			+ 'VRAM: ~${Std.int(_vramEstimate / 1024 / 1024)}MB / ${Std.int(peakVRAMUsage / 1024 / 1024)}MB peak';
 	}
 
-	/**
-	 * Reset all tracking counters. Does not dispose any textures.
-	 */
+	/** Reset all tracking counters. Does not dispose any resources. */
 	public static function resetTracking():Void
 	{
-		_activeTextures = [];
+		_trackedMemory = new Map<String, Float>();
 		_texturesCreated = 0;
 		_texturesDisposed = 0;
 		_vramEstimate = 0;

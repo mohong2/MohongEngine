@@ -18,6 +18,7 @@ class NoteSplash extends FlxSprite
 
 		loadAnims(skin);
 		
+		// 多k: 统一使用原版 ColorSwap (保证着色器生效)
 		colorSwap = new ColorSwap();
 		shader = colorSwap.shader;
 
@@ -43,7 +44,13 @@ class NoteSplash extends FlxSprite
 		offset.set(10, 10);
 
 		var animNum:Int = FlxG.random.int(1, 2);
-		animation.play('note' + note + '-' + animNum, true);
+		// 多k: 溅射动画复用 0.6.3 的 4 个方向, 颜色由 ColorSwap 偏移
+		var splashData:Int = note;
+		if (PlayState.mania > 3)
+			splashData = EKData.getBaseTexture(PlayState.mania, Std.int(Math.abs(note)) % Note.ammo[PlayState.mania]);
+		else
+			splashData = Std.int(Math.abs(note)) % 4;
+		animation.play('note' + splashData + '-' + animNum, true);
 		if(animation.curAnim != null)animation.curAnim.frameRate = 24 + FlxG.random.int(-2, 2);
 	}
 

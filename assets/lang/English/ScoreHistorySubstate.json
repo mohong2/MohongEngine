@@ -4,6 +4,7 @@
     "ScoreHistorySubstate.accuracy" : "Accuracy",
     "ScoreHistorySubstate.rating" : "Rating",
     "ScoreHistorySubstate.songRating" : "Song Rating",
+    "ScoreHistorySubstate.marvelouses" : "Marvelouses",
     "ScoreHistorySubstate.sicks" : "Sicks",
     "ScoreHistorySubstate.goods" : "Goods",
     "ScoreHistorySubstate.bads" : "Bads",
@@ -18,7 +19,8 @@
     "ScoreHistorySubstate.replayDataNo" : "Does not exist",
     "ScoreHistorySubstate.title": "Song History:",
     "ScoreHistorySubstate.emptyMsg" : "No saved scores.\nPlay without Practice/Botplay to record.",
-    "ScoreHistorySubstate.judgeWindows": "Judge Win S/G/B/SF",
+    "ScoreHistorySubstate.judgeWindows": "Judge Type / Windows",
+    "ScoreHistorySubstate.custom" : "Custom",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
     "ScoreHistorySubstate.instructions": "UP/DOWN: Select  |  ENTER: Play  |  RESET: Delete  |  ESC: Back"

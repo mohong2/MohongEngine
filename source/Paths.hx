@@ -81,6 +81,52 @@ class Paths
 	public static var allowGraphicAutoFree:Bool = false;
 
 	/// haya I love you for the base cache dump I took to the max
+	/**
+	 * Remove a FlxGraphic from every cache (FlxG bitmap cache + currentTrackedAssets)
+	 * before destroying it, so a "zombie" graphic with a null bitmap can never be
+	 * returned again by Paths.image() / cacheBitmap().
+	 */
+	static function isGraphicAlive(g:FlxGraphic):Bool
+	{
+		// A destroyed FlxGraphic keeps a stale (disposed) BitmapData in its
+		// `bitmap` field, but `frameCollections` is always nulled by destroy().
+		// Checking both catches every zombie reliably.
+		@:privateAccess
+		return g != null && g.frameCollections != null && g.bitmap != null;
+	}
+
+	static function purgeGraphicFromCaches(obj:FlxGraphic, ?fileKey:String):Void
+	{
+		var bitmapKeys:Array<String> = [];
+		@:privateAccess
+		for (k in FlxG.bitmap._cache.keys())
+			if (FlxG.bitmap._cache.get(k) == obj) bitmapKeys.push(k);
+		for (k in bitmapKeys)
+		{
+			@:privateAccess
+			FlxG.bitmap._cache.remove(k);
+			openfl.Assets.cache.removeBitmapData(k);
+		}
+
+		if (fileKey != null)
+		{
+			currentTrackedAssets.remove(fileKey);
+			MemoryMonitor.untrackGraphic(fileKey);
+		}
+		else
+		{
+			var fileKeys:Array<String> = [];
+			for (ck in currentTrackedAssets.keys())
+				if (currentTrackedAssets.get(ck) == obj) fileKeys.push(ck);
+			for (ck in fileKeys)
+			{
+				currentTrackedAssets.remove(ck);
+				MemoryMonitor.untrackGraphic(ck);
+			}
+		}
+		obj.destroy();
+	}
+
 	public static function clearUnusedMemory() {
 		// clear non local assets in the tracked assets list
 		var keysToRemove:Array<String> = [];
@@ -88,19 +134,19 @@ class Paths
 			// if it is not currently contained within the used local assets
 			if (!localTrackedAssets.contains(key)
 				&& !dumpExclusions.contains(key)) {
-				keysToRemove.push(key);
+				// Only drop graphics that no sprite is currently using.
+				// Destroying a graphic that is still referenced makes the
+				// sprite render blank until the asset is loaded again.
+				var obj = currentTrackedAssets.get(key);
+				if (obj == null || obj.useCount <= 0)
+					keysToRemove.push(key);
 			}
 		}
 		// Batch remove to avoid map modification during iteration
 		for (key in keysToRemove) {
 			var obj = currentTrackedAssets.get(key);
-			@:privateAccess
 			if (obj != null) {
-				openfl.Assets.cache.removeBitmapData(key);
-				FlxG.bitmap._cache.remove(key);
-				MemoryMonitor.untrackGraphic(key);
-				obj.destroy();
-				currentTrackedAssets.remove(key);
+				purgeGraphicFromCaches(obj, key);
 			}
 		}
 		// run the garbage collector for good measure lmfao
@@ -111,14 +157,16 @@ class Paths
 	public static var localTrackedAssets:Array<String> = [];
 	public static function clearStoredMemory(?cleanUnused:Bool = false) {
 		// clear anything not in the tracked assets list
+		var cacheKeys:Array<String> = [];
 		@:privateAccess
 		for (key in FlxG.bitmap._cache.keys())
+			cacheKeys.push(key);
+		@:privateAccess
+		for (key in cacheKeys)
 		{
 			var obj = FlxG.bitmap._cache.get(key);
-			if (obj != null && !currentTrackedAssets.exists(key)) {
-				openfl.Assets.cache.removeBitmapData(key);
-				FlxG.bitmap._cache.remove(key);
-				obj.destroy();
+			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key)) {
+				purgeGraphicFromCaches(obj);
 			}
 		}
 
@@ -126,14 +174,16 @@ class Paths
 		for (key in currentTrackedSounds.keys()) {
 			if (!localTrackedAssets.contains(key)
 			&& !dumpExclusions.contains(key) && key != null) {
-				//trace('test: ' + dumpExclusions, key);
-				Assets.cache.clear(key);
 				currentTrackedSounds.remove(key);
 			}
 		}
 		// flags everything to be cleared out next unused memory clear
 		localTrackedAssets = [];
-		openfl.Assets.cache.clear("songs");
+
+		// Clear atlas cache on mod/state change.
+		clearAtlasFramesCache();
+		// Clear per-note animation frame cache in sync with atlas cache.
+		Note.clearNoteAnimCache();
 	}
 
 	static public var currentModDirectory(get, set):String;
@@ -162,19 +212,20 @@ class Paths
 		if (library != null)
 			return getLibraryPath(file, library);
 
-		if (currentLevel != null)
+		// 当前关卡目录（如 week1 / week2 ...）
+		if (currentLevel != null && currentLevel != 'shared')
 		{
-			var levelPath:String = '';
-			if(currentLevel != 'shared') {
-				levelPath = getLibraryPathForce(file, currentLevel);
-				if (OpenFlAssets.exists(levelPath, type))
-					return levelPath;
-			}
-
-			levelPath = getLibraryPathForce(file, "shared");
+			var levelPath:String = getLibraryPathForce(file, currentLevel);
 			if (OpenFlAssets.exists(levelPath, type))
 				return levelPath;
 		}
+
+		// shared 是全局共享资源库（NOTE_assets / characters / controllertype 等都在这里）。
+		// 即使 currentLevel 为 null（例如从主菜单直接进入设置界面），也必须回退到这里，
+		// 否则这些图片会解析失败返回 null —— 这是“设置界面图片变成 null”的底层根因。
+		var sharedPath:String = getLibraryPathForce(file, "shared");
+		if (OpenFlAssets.exists(sharedPath, type))
+			return sharedPath;
 
 		return getPreloadPath(file);
 	}
@@ -306,11 +357,55 @@ class Paths
 		return voices;
 	}
 
-	inline static public function inst(song:String):Any
+	static public function inst(song:String):Any
 	{
 		var songKey:String = '${formatToSongPath(song)}/Inst';
-		var inst = returnSound('songs', songKey);
-		return inst;
+		// RAM-imported instrumental takes priority (session only)
+		if (ramInst.exists(songKey))
+			return ramInst.get(songKey);
+
+		#if MODS_ALLOWED
+		// SeiunEngine: imported charts may store Inst.mp3 / Inst.wav / Inst.m4a
+		// next to the usual Inst.ogg, so check those too before falling back.
+		var exts:Array<String> = ['ogg', 'mp3', 'wav', 'm4a'];
+		for (ext in exts)
+		{
+			var file:String = modFolders('songs/' + songKey + '.' + ext);
+			if (!FileSystem.exists(file)) continue;
+
+			var snd:Sound = null;
+			if (ext == 'mp3')
+			{
+				// lime has no native MP3 decoder on Windows/Android — decode to
+				// WAV via dr_mp3 and play from memory instead (cached per session).
+				#if cpp
+				try
+				{
+					var wav:haxe.io.Bytes = editors.content.DrMp3Tools.decodeFileToWav(file);
+					if (wav != null)
+					{
+						var buffer:lime.media.AudioBuffer = lime.media.AudioBuffer.fromBytes(lime.utils.Bytes.ofData(wav.getData()));
+						if (buffer != null) snd = Sound.fromAudioBuffer(buffer);
+					}
+				}
+				catch (e:Dynamic) snd = null;
+				#end
+			}
+			else
+			{
+				try { snd = Sound.fromFile(file); } catch (e:Dynamic) { snd = null; }
+			}
+
+			if (snd != null)
+			{
+				if (!currentTrackedSounds.exists(file))
+					currentTrackedSounds.set(file, snd);
+				localTrackedAssets.push(songKey);
+				return currentTrackedSounds.get(file);
+			}
+		}
+		#end
+		return returnSound('songs', songKey);
 	}
 	/*
 	inline static public function image(key:String, ?library:String):FlxGraphic
@@ -393,8 +488,13 @@ class Paths
 		file = modsImages(key);
 		if (currentTrackedAssets.exists(file))
 		{
-			localTrackedAssets.push(file);
-			return currentTrackedAssets.get(file);
+			var cached:FlxGraphic = currentTrackedAssets.get(file);
+			if (isGraphicAlive(cached))
+			{
+				localTrackedAssets.push(file);
+				return cached;
+			}
+			currentTrackedAssets.remove(file); // zombie — force a fresh load
 		}
 		else if (FileSystem.exists(file))
 			bitmap = BitmapData.fromFile(file);
@@ -402,13 +502,69 @@ class Paths
 		#end
 		{
 			file = getPath('images/$key.png', IMAGE, library);
+			// 兜底：getPath 在 currentLevel 为 null 时可能只回退到 preload，
+			// 这里显式再查一次 shared（NOTE_assets / characters / controllertype 等共享资源）。
+			if (!OpenFlAssets.exists(file, IMAGE))
+			{
+				var sharedTry:String = getLibraryPathForce('images/$key.png', 'shared');
+				if (OpenFlAssets.exists(sharedTry, IMAGE))
+					file = sharedTry;
+			}
 			if (currentTrackedAssets.exists(file))
 			{
-				localTrackedAssets.push(file);
-				return currentTrackedAssets.get(file);
+				var cached:FlxGraphic = currentTrackedAssets.get(file);
+				if (isGraphicAlive(cached))
+				{
+					localTrackedAssets.push(file);
+					return cached;
+				}
+				currentTrackedAssets.remove(file); // zombie — force a fresh load
 			}
-			else if (OpenFlAssets.exists(file, IMAGE))
-				bitmap = OpenFlAssets.getBitmapData(file);
+			else
+			{
+				// shared 资源可能以两种 key 进缓存（'shared:assets/shared/...' 或 'assets/shared/...'），
+				// 统一命中，避免同一张图被缓存两份。
+				var altKey:String = null;
+				if (file.startsWith('shared:assets/shared/'))
+					altKey = 'assets/shared/' + file.substr('shared:assets/shared/'.length);
+				else if (file.startsWith('assets/shared/'))
+					altKey = 'shared:assets/shared/' + file.substr('assets/shared/'.length);
+				if (altKey != null && currentTrackedAssets.exists(altKey))
+				{
+					var altCached:FlxGraphic = currentTrackedAssets.get(altKey);
+					if (isGraphicAlive(altCached))
+					{
+						localTrackedAssets.push(altKey);
+						return altCached;
+					}
+					currentTrackedAssets.remove(altKey);
+				}
+
+				if (OpenFlAssets.exists(file, IMAGE))
+					bitmap = OpenFlAssets.getBitmapData(file);
+			}
+			#if sys
+			// 直接文件系统兜底：完全不依赖 manifest 注册（覆盖 dev 运行、打包后 manifest 缺项、
+			// 或 currentLevel 为 null 时库前缀解析异常等情况）。游戏目录下资源文件是真实存在的。
+			if (bitmap == null)
+			{
+				var fsCandidates:Array<String> = [];
+				if (library != null && library != 'preload' && library != 'default')
+					fsCandidates.push('assets/$library/images/$key.png');
+				fsCandidates.push(getPreloadPath('images/$key.png'));
+				fsCandidates.push('assets/shared/images/$key.png');
+
+				for (candidate in fsCandidates)
+				{
+					if (FileSystem.exists(candidate))
+					{
+						file = candidate;
+						bitmap = BitmapData.fromFile(candidate);
+						break;
+					}
+				}
+			}
+			#end
 		}
 
 		if (bitmap != null)
@@ -417,8 +573,23 @@ class Paths
 			if(retVal != null) return retVal;
 		}
 
-		TraceManager.warn('trace.paths.nullReturn', 'oh no its returning null NOOOO ($file)');
-		return null;
+		// 最终兜底：返回占位图而不是 null。
+		// 设置界面的 Note 预览 / 角色 / 手柄键盘图等拿到 null graphic 后会空白甚至崩溃。
+		TraceManager.error('trace.paths.nullReturn', 'image not found: {} — using placeholder', [file]);
+		return getMissingPlaceholder();
+	}
+
+	/** 缺失图片占位图（16x16 品红），保证 sprite 永远不会拿到 null graphic。 */
+	static var _missingPlaceholder:FlxGraphic = null;
+	static function getMissingPlaceholder():FlxGraphic
+	{
+		if (_missingPlaceholder == null)
+		{
+			var bmp:BitmapData = new BitmapData(16, 16, true, 0xFFFF00FF);
+			_missingPlaceholder = FlxGraphic.fromBitmapData(bmp, false, '__missing_image_placeholder__');
+			_missingPlaceholder.persist = true;
+		}
+		return _missingPlaceholder;
 	}
 	static public function languageImage(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxGraphic
 	{
@@ -457,8 +628,13 @@ class Paths
 
 	static public function cacheBitmap(file: String, ?bitmap: BitmapData = null, ?allowGPU: Bool = true): FlxGraphic {
 			if (currentTrackedAssets.exists(file)) {
-				localTrackedAssets.push(file);
-				return currentTrackedAssets.get(file);
+				var cached:FlxGraphic = currentTrackedAssets.get(file);
+				if (isGraphicAlive(cached))
+				{
+					localTrackedAssets.push(file);
+					return cached;
+				}
+				currentTrackedAssets.remove(file); // zombie — force a fresh load
 			}
 
 			// Enforce cache size limit to prevent memory bloat
@@ -482,16 +658,12 @@ class Paths
 
 			localTrackedAssets.push(file);
 
-			if (allowGPU && ClientPrefs.data.cacheOnGPU && forceGPUUploadOnLoad) {
-				var texture: RectangleTexture = FlxG.stage.context3D.createRectangleTexture(bitmap.width, bitmap.height, BGRA, true);
-				texture.uploadFromBitmapData(bitmap);
-				// Track GPU texture allocation for VRAM monitoring
-				GPUTextureManager.trackTextureAllocation(texture, bitmap.width, bitmap.height);
-				bitmap.image.data = null;
-				bitmap.dispose();
-				bitmap.disposeImage();
-				bitmap = BitmapData.fromTexture(texture);
-			}
+			// NOTE: The old "cache on GPU" path uploaded bitmaps to a Stage3D
+			// RectangleTexture and then disposed the CPU bitmap, wrapping the
+			// texture with BitmapData.fromTexture(). That broke image rendering
+			// with the standard OpenFL/Flixel renderer (blank images until the
+			// graphic got re-loaded a few times). We always use the plain
+			// CPU-side FlxGraphic cache now — it is reliable and safe.
 			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file);
 		newGraphic.persist = !allowGraphicAutoFree;
 		newGraphic.destroyOnNoUse = allowGraphicAutoFree;
@@ -517,35 +689,83 @@ class Paths
 		if (FileSystem.exists(getPreloadPath(key)))
 			return File.getContent(getPreloadPath(key));
 
-		if (currentLevel != null)
+		// 与 getPath 一致：currentLevel 为 null（主菜单/设置）时也要能读 shared 资源
+		if (currentLevel != null && currentLevel != 'shared')
 		{
-			var levelPath:String = '';
-			if(currentLevel != 'shared') {
-				levelPath = getLibraryPathForce(key, currentLevel);
-				if (FileSystem.exists(levelPath))
-					return File.getContent(levelPath);
-			}
-
-			levelPath = getLibraryPathForce(key, 'shared');
+			var levelPath:String = getLibraryPathForce(key, currentLevel);
 			if (FileSystem.exists(levelPath))
 				return File.getContent(levelPath);
 		}
+
+		var sharedPath:String = 'assets/shared/$key';
+		if (FileSystem.exists(sharedPath))
+			return File.getContent(sharedPath);
 		#end
 		return Assets.getText(getPath(key, TEXT));
 	}
+	// FlxAtlasFrames cache: avoid re-parsing the same XML / re-creating frames for
+	// every note (critical for charts with tens of thousands of notes).
+	public static var atlasFramesCache:Map<String, FlxAtlasFrames> = [];
+
+	// Clear atlas cache on mod/state change to avoid stale frames across mods.
+	public static function clearAtlasFramesCache():Void {
+		atlasFramesCache = [];
+	}
+
 	inline static public function getSparrowAtlas(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
 	{
+		var cacheKey:String = key + '::' + (library != null ? library : '');
+		var cached:FlxAtlasFrames = atlasFramesCache.get(cacheKey);
+		if (cached != null) return cached;
+
 		var imageLoaded:FlxGraphic = image(key, library, allowGPU);
+		if (imageLoaded == null) return null;
+
+		try
+		{
+			var xmlContent:String = getSparrowXml(key, library);
+			if (xmlContent == null)
+			{
+				TraceManager.error('trace.paths.atlasError', 'Failed to find sparrow XML for {}', [key]);
+				return null;
+			}
+			var frames:FlxAtlasFrames = FlxAtlasFrames.fromSparrow(imageLoaded, xmlContent);
+			atlasFramesCache.set(cacheKey, frames);
+			return frames;
+		}
+		catch (e:Dynamic)
+		{
+			TraceManager.error('trace.paths.atlasError', 'Failed to build sparrow atlas for {}: {}', [key, e]);
+			return null;
+		}
+	}
+
+	/** 解析 Sparrow XML 内容：mods → manifest → 直接文件系统（与 image() 的兜底顺序一致）。 */
+	static function getSparrowXml(key:String, ?library:String):String
+	{
 		#if MODS_ALLOWED
-		var xmlExists:Bool = false;
-
-		var xml:String = modsXml(key);
-		if(FileSystem.exists(xml)) xmlExists = true;
-
-		return FlxAtlasFrames.fromSparrow(imageLoaded, (xmlExists ? File.getContent(xml) : getPath('images/$key.xml', library)));
-		#else
-		return FlxAtlasFrames.fromSparrow(imageLoaded, getPath('images/$key.xml', library));
+		var modXml:String = modsXml(key);
+		if (FileSystem.exists(modXml))
+			return File.getContent(modXml);
 		#end
+
+		var path:String = getPath('images/$key.xml', TEXT, library);
+		if (OpenFlAssets.exists(path, TEXT))
+			return OpenFlAssets.getText(path);
+
+		#if sys
+		var fsCandidates:Array<String> = [];
+		if (library != null && library != 'preload' && library != 'default')
+			fsCandidates.push('assets/$library/images/$key.xml');
+		fsCandidates.push(getPreloadPath('images/$key.xml'));
+		fsCandidates.push('assets/shared/images/$key.xml');
+		for (candidate in fsCandidates)
+		{
+			if (FileSystem.exists(candidate))
+				return File.getContent(candidate);
+		}
+		#end
+		return null;
 	}
 
 
@@ -588,7 +808,11 @@ class Paths
 	}
 	inline static public function localeMod(key:String)
 	{
+		#if MODS_ALLOWED
 		return modFolders('lang/$key');
+		#else
+		return null;
+		#end
 	}
 
 	static public function fileExists(key:String, type:AssetType, ?ignoreMods:Bool = false, ?library:String)
@@ -624,8 +848,20 @@ class Paths
 		}
 
 		return FlxAtlasFrames.fromSpriteSheetPacker((imageLoaded != null ? imageLoaded : image(key, library)), (txtExists ? File.getContent(modsTxt(key)) : file('images/$key.txt', library)));
-		#else
+		#elseif sys
 		return FlxAtlasFrames.fromSpriteSheetPacker(image(key, library), file('images/$key.txt', library));
+		#else
+		var txtContent:String = null;
+		var txtPath:String = file('images/$key.txt', library);
+		if (txtPath != null) txtContent = Assets.getText(txtPath);
+		if (txtContent == null) txtContent = '';
+		var lines:Array<String> = txtContent.split('\n');
+		var clean:Array<String> = [];
+		for (l in lines)
+			if (l != null && l.indexOf('=') >= 0) clean.push(l);
+		var packerText:String = clean.join('\n');
+		if (packerText.length < 1) packerText = 'placeholder = 0 0 1 1';
+		return FlxAtlasFrames.fromSpriteSheetPacker(image(key, library), packerText);
 		#end
 	}
 
@@ -670,6 +906,31 @@ class Paths
 	}
 
 	public static var currentTrackedSounds:Map<String, Sound> = [];
+
+	/**
+	 * Session-only instrumentals loaded straight into RAM (no file written).
+	 * Key: "<formatted song path>/Inst" — checked first by inst().
+	 */
+	public static var ramInst:Map<String, Sound> = [];
+	/** Raw audio bytes of the RAM-imported instrumental (for re-export). */
+	public static var ramInstBytes:Map<String, haxe.io.Bytes> = [];
+
+	public static function setRamInst(song:String, sound:Sound):Void
+	{
+		ramInst.set('${formatToSongPath(song)}/Inst', sound);
+	}
+
+	public static function setRamInstBytes(song:String, bytes:haxe.io.Bytes):Void
+	{
+		ramInstBytes.set('${formatToSongPath(song)}/Inst', bytes);
+	}
+
+	public static function clearRamInst(song:String):Void
+	{
+		ramInst.remove('${formatToSongPath(song)}/Inst');
+		ramInstBytes.remove('${formatToSongPath(song)}/Inst');
+	}
+
 	public static function returnSound(path:String, key:String, ?library:String) {
 		#if MODS_ALLOWED
 		var file:String = modsSounds(path, key);
@@ -796,7 +1057,7 @@ class Paths
 			for (i in list)
 			{
 				var dat = i.split("|");
-				if (dat[1] == "1")
+				if (dat.length >= 2 && dat[0] != null && dat[0].length > 0 && dat[1] == "1")
 				{
 					var folder = dat[0];
 					var path = Paths.mods(folder + '/pack.json');
@@ -805,8 +1066,8 @@ class Paths
 							var rawJson:String = File.getContent(path);
 							if(rawJson != null && rawJson.length > 0) {
 								var stuff:Dynamic = Json.parse(rawJson);
-								var global:Bool = Reflect.getProperty(stuff, "runsGlobally");
-								if(global)globalMods.push(dat[0]);
+								var global:Bool = Reflect.hasField(stuff, "runsGlobally") && Reflect.field(stuff, "runsGlobally") == true;
+								if(global && !globalMods.contains(dat[0])) globalMods.push(dat[0]);
 							}
 						} catch(e:Dynamic){
 							TraceManager.error('trace.error', 'Exception: {}', [e]);

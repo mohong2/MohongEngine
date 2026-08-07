@@ -6,7 +6,7 @@ enum abstract DialogType(Int) {
 	var Error = 2;
 }
 
-#if (cpp && !android)
+#if (cpp && windows)
 @:headerCode('
 #ifndef NOMINMAX
 #define NOMINMAX
@@ -26,7 +26,7 @@ class Windows
 {
 	public static function enableDarkMode():Void
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		untyped __cpp__('
 		{
 			HMODULE dwmapi = LoadLibraryA("dwmapi.dll");
@@ -53,7 +53,7 @@ class Windows
 
 	public static function allocConsole():Bool
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		return untyped __cpp__('AllocConsole() != 0');
 		#else
 		return false;
@@ -63,7 +63,7 @@ class Windows
 	
 	public static function freeConsole():Bool
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		return untyped __cpp__('FreeConsole() != 0');
 		#else
 		return false;
@@ -71,7 +71,7 @@ class Windows
 	}
 	public static function writeConsole(text:String):Void
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		untyped __cpp__('
 		{
 			HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -93,7 +93,7 @@ class Windows
 
 	public static function hasConsole():Bool
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		return untyped __cpp__('GetConsoleWindow() != NULL');
 		#else
 		return false;
@@ -102,7 +102,7 @@ class Windows
 
 	public static function reopenConsole():Bool
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		freeConsole();
 		return allocConsole();
 		#else
@@ -112,7 +112,7 @@ class Windows
 
 	public static function enableAnsiColors():Void
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		untyped __cpp__('
 		{
 			HANDLE hOut = GetStdHandle(STD_OUTPUT_HANDLE);
@@ -132,7 +132,7 @@ class Windows
 
 	public static function showDialog(title:String, message:String, type:DialogType):Void
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		untyped __cpp__('
 		{
 			HWND hwnd = GetActiveWindow();
@@ -197,7 +197,7 @@ class Windows
 	 */
 	public static function showYesNoMessageBox(title:String, message:String):Bool
 	{
-		#if (cpp && !android)
+		#if (cpp && windows)
 		var result:Bool = false;
 		untyped __cpp__('
 		{

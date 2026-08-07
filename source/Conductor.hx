@@ -164,7 +164,8 @@ class Rating
 	public var name:String = '';
 	public var image:String = '';
 	public var counter:String = '';
-	public var hitWindow:Null<Int> = 0; //ms
+	// 实时读取 ClientPrefs 的窗口, 保证回放恢复/判定预设切换后立即生效
+	public var hitWindow(get, null):Null<Int> = 0; //ms
 	public var ratingMod:Float = 1;
 	public var noteSplash:Bool = true;
 	public var score:Int = 350;
@@ -172,12 +173,15 @@ class Rating
 	{
 		this.name = name;
 		this.image = name;
-		this.counter = name + 's';
-		this.hitWindow = Reflect.field(ClientPrefs.data, name + 'Window');
-		if(hitWindow == null)
-		{
-			hitWindow = 0;
-		}
+		// 'marvelous' 的复数不是 'marvelouss', 单独处理, 对应 PlayState.marvelouses
+		this.counter = (name == 'marvelous') ? 'marvelouses' : name + 's';
+	}
+
+	function get_hitWindow():Null<Int>
+	{
+		var w:Null<Int> = Reflect.field(ClientPrefs.data, name + 'Window');
+		if (w == null) w = 0;
+		return w;
 	}
 
 	public function increase(blah:Int = 1)

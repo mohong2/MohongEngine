@@ -90,9 +90,9 @@ class ModsMenuState extends MusicBeatState
 			var leMods:Array<String> = CoolUtil.coolTextFile(path);
 			for (i in 0...leMods.length)
 			{
-				if(leMods.length > 1 && leMods[0].length > 0) {
+				if(leMods[i].length > 0) {
 					var modSplit:Array<String> = leMods[i].split('|');
-					if(!Paths.ignoreModFolders.contains(modSplit[0].toLowerCase()))
+					if(modSplit.length >= 2 && modSplit[0].length > 0 && !Paths.ignoreModFolders.contains(modSplit[0].toLowerCase()))
 					{
 						modsList.push([modSplit[0], (modSplit[1] == '1')]);
 					}
@@ -338,7 +338,7 @@ class ModsMenuState extends MusicBeatState
 
 		add(modsGroup);
 						 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, B);
 		#end
 

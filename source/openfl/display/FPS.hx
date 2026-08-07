@@ -13,6 +13,7 @@ import openfl.text.TextFormat;
 import openfl.text.TextFormatAlign;
 import openfl.geom.Matrix;
 import states.MainMenuState;
+import backend.DeviceInfo;
 #if gl_stats
 import openfl.display._internal.stats.Context3DStats;
 import openfl.display._internal.stats.DrawCallContext;
@@ -58,6 +59,7 @@ class FPS extends Sprite
 	var memMax:TextField;
 	var verText:TextField;
 	var dcText:TextField;
+	var devText:TextField;
 
 	var fpsChart:Shape;
 	var memChart:Shape;
@@ -102,6 +104,7 @@ class FPS extends Sprite
 		memMax   = mkField();
 		verText  = mkField();
 		dcText   = mkField();
+		devText  = mkField();
 
 		fpsChart = new Shape();
 		memChart = new Shape();
@@ -209,7 +212,8 @@ class FPS extends Sprite
 		setFmt(memNum,  fn, 15, 0xDDDDDD,  1.0, mp[0],  fpsLbl.x + fpsLbl.width + 12, y0);
 		setFmt(memUnit, fn, 12, 0xAAAAAA,  0,   mp[1],  memNum.x + memNum.width + 4, y0 + 1);
 
-		setFmt(verText, fn, 10, 0x999999, 0, "v" + MainMenuState.seiunengineVersion,
+		setFmt(verText, fn, 10, 0x999999, 0, "v" + MainMenuState.seiunengineVersion
+			+ " | " + DeviceInfo.osName() + " " + DeviceInfo.architecture(),
 			P, y0 + fpsNum.height + 2);
 	}
 
@@ -272,6 +276,11 @@ class FPS extends Sprite
 		#end
 
 		setFmt(verText, fn, 12, 0x999999, 0, "SeiunEngine v" + ver, P, fy);
+		fy += verText.height + 4;
+		setFmt(devText, fn, 10, 0x666666, 0,
+			DeviceInfo.shortSummary(48),
+			P, fy);
+		devText.visible = true;
 	}
 
 	function layoutYLabels(labels:Array<TextField>, chartY:Float, maxVal:Float,
@@ -306,6 +315,7 @@ class FPS extends Sprite
 		memPre.visible   = false;
 		memMax.visible   = false;
 		dcText.visible   = false;
+		devText.visible  = false;
 		fpsChart.visible = false;
 		memChart.visible = false;
 		div1.visible     = false;
@@ -372,9 +382,19 @@ class FPS extends Sprite
 
 		if (mode == 1)
 		{
+			// Dynamic size: charts give the minimum width, but long lines
+			// (device info / draw calls) may be wider - measure every visible
+			// debug text so nothing overflows the rounded box.
 			w = CH_W + LABEL_W + P * 2;
-			var bot = verText.y + verText.height;
-			if (dcText.visible) bot = max(bot, dcText.y + dcText.height);
+			var bot = P;
+			for (k in [fpsNum, fpsLbl, memPre, memNum, memUnit, memMax,
+				fpsCVal, memCVal, dcText, verText, devText])
+			{
+				if (k == null || !k.visible) continue;
+				var right = k.x + k.width;
+				if (right > w) w = right + P;
+				if (k.y + k.height > bot) bot = k.y + k.height;
+			}
 			h = bot + P;
 		}
 		else

@@ -10,15 +10,11 @@ import flixel.util.FlxTimer;
 import flixel.util.FlxColor;
 import flixel.tweens.FlxTween;
 
-#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 import script.lua.FunkinLua;
-#end
 
-#if LUA_ALLOWED
 import script.lua.ModchartSprite;
 import script.lua.ModchartText;
 import script.lua.DebugLuaText;
-#end
 #if HSCRIPT_ALLOWED
 import script.hscript.HScript;
 #end
@@ -29,7 +25,7 @@ import flixel.addons.display.FlxRuntimeShader;
 
 import flixel.input.actions.FlxActionInput;
 import flixel.util.FlxDestroyUtil;
-#if android
+#if TOUCH_CONTROLS
 import android.flixel.FlxVirtualPad;
 #end
 import mohong.TraceManager;
@@ -57,7 +53,6 @@ class MusicBeatSubstate extends FlxSubState
 	public var hscriptArray:Array<HScript> = [];
 	#end
 
-	#if LUA_ALLOWED
 	public var luaArray:Array<FunkinLua> = [];
 	public var modchartTweens:Map<String, FlxTween> = new Map<String, FlxTween>();
 	public var modchartSprites:Map<String, ModchartSprite> = new Map<String, ModchartSprite>();
@@ -68,7 +63,6 @@ class MusicBeatSubstate extends FlxSubState
 	public var luaDebugGroup:FlxTypedGroup<DebugLuaText>;
 	#if (!flash && sys)
 	public var runtimeShaders:Map<String, Array<String>> = new Map<String, Array<String>>();
-	#end
 	#end
 
 	public function new(?scriptName:String) {
@@ -83,14 +77,14 @@ class MusicBeatSubstate extends FlxSubState
 	public function getCurStep():Int return curStep;
 	public function getCurBeat():Int return curBeat;
 
-	#if android
+	#if TOUCH_CONTROLS
 	var virtualPad:FlxVirtualPad;
 	#else
 	var virtualPad:Dynamic;
 	#end
 	var trackedinputsUI:Array<FlxActionInput> = [];
 
-	#if android
+	#if TOUCH_CONTROLS
 	public function addVirtualPad(DPad:FlxDPadMode, Action:FlxActionMode) {
 		virtualPad = new FlxVirtualPad(DPad, Action);
 		add(virtualPad);
@@ -238,13 +232,16 @@ class MusicBeatSubstate extends FlxSubState
 
 	// ==================== PATH HELPERS ====================
 
+	/**
+	 * Collects all base paths ordered by priority: currentMod > mods/ > assets/.
+	 * 只收集“当前激活 mod”的 substate 脚本，不再遍历其它（未激活的）全局 mod，
+	 * 避免整包 mod 的 hscripts/substates/ 泄漏进原生 substate。
+	 */
 	static function collectSubPaths(subPath:String):Array<String> {
 		var paths:Array<String> = [];
 		paths.push(Paths.getPreloadPath(subPath));
 		#if MODS_ALLOWED
 		paths.insert(0, Paths.mods(subPath));
-		for (mod in Paths.getGlobalMods())
-			paths.insert(0, Paths.mods(mod + '/' + subPath));
 		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
 			paths.insert(0, Paths.mods(Paths.currentModDirectory + '/' + subPath));
 		#end
@@ -301,7 +298,7 @@ class MusicBeatSubstate extends FlxSubState
 	}
 	#else
 	public function callOnHscript(event:String, args:Array<Dynamic> = null, ignoreStops:Bool = false, exclusions:Array<String> = null):Dynamic {
-		return FunkinLua.Function_Continue;
+		return 0;
 	}
 	public function setOnHscript(variable:String, arg:Dynamic):Void {}
 	#end
@@ -358,6 +355,7 @@ class MusicBeatSubstate extends FlxSubState
 			script.set(variable, arg);
 		}
 	}
+	#end
 
 	/** Get a Lua-created object (modchart sprite/text, or shared variable) */
 	public function getLuaObject(tag:String, text:Bool = true):FlxSprite {
@@ -381,6 +379,7 @@ class MusicBeatSubstate extends FlxSubState
 		luaDebugGroup.insert(0, new DebugLuaText(text, luaDebugGroup, color));
 	}
 
+	#if LUA_ALLOWED
 	#if (!flash && sys)
 	public function createRuntimeShader(name:String):FlxRuntimeShader {
 		if (!ClientPrefs.data.shaders) return new FlxRuntimeShader();
@@ -432,7 +431,7 @@ class MusicBeatSubstate extends FlxSubState
 	// ==================== DESTROY ====================
 
 	override function destroy():Void {
-		#if android
+		#if TOUCH_CONTROLS
 		if (trackedinputsUI.length > 0) controls.removeVirtualControlsInput(trackedinputsUI);
 		#end
 		#if HSCRIPT_ALLOWED
@@ -453,7 +452,7 @@ class MusicBeatSubstate extends FlxSubState
 		#end
 
 		super.destroy();
-		#if android
+		#if TOUCH_CONTROLS
 		if (virtualPad != null) virtualPad = FlxDestroyUtil.destroy(virtualPad);
 		#end
 	}

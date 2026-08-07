@@ -413,10 +413,22 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 
 	override function destroy():Void
 	{
-		for (item in _items) { _panel.remove(item); }
-		for (item in _itemPool) { item.kill(); }
-		_items = null;
-		_itemPool = null;
+		// Guard against double-destroy: BasePrompt destroys its members once
+		// explicitly and again through the super() chain, so _items may
+		// already be null (or the panel already gone) on the second pass.
+		if (_items != null)
+		{
+			if (_panel != null)
+			{
+				for (item in _items) _panel.remove(item);
+			}
+			if (_itemPool != null)
+			{
+				for (item in _itemPool) item.kill();
+			}
+			_items = null;
+			_itemPool = null;
+		}
 		super.destroy();
 	}
 }

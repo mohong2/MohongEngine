@@ -46,15 +46,13 @@ import llua.LuaL;
 #end
 
 #if VIDEOS_ALLOWED
-#if (hxCodec >= "3.0.0")
-import hxcodec.flixel.FlxVideo;
-#elseif (hxCodec >= "2.6.1")
-import hxcodec.VideoHandler;
-#elseif (hxCodec == "2.6.0")
-import VideoHandler;
-#else
+// hxvlc-backed hxCodec compatibility layer (see source/objects/hxcodec)
 import vlc.MP4Handler;
-#end
+import vlc.MP4Sprite;
+import hxcodec.VideoHandler;
+import hxcodec.VideoSprite;
+import hxcodec.flixel.FlxVideo;
+import hxcodec.flixel.FlxVideoSprite;
 #end
 
 #if HSCRIPT_ALLOWED
@@ -69,6 +67,9 @@ class HScript
 	public var scriptName:String = '';
 	public var scriptDir:String = '';
 	public var closed:Bool = false;
+
+	/** 连续报错计数：脚本在 update 循环里连续报错达到上限时会被静默忽略。 */
+	public var errorLoopCount:Int = 0;
 
 	public var variables(get, never):Map<String, Dynamic>;
 	public var __importedPaths:Array<String> = [];
@@ -117,11 +118,14 @@ class HScript
 		for (folder in foldersToCheck) {
 			if (!FileSystem.exists(folder)) continue;
 			for (file in FileSystem.readDirectory(folder)) {
-				if (!isHscriptFile(file) || filesPushed.contains(file)) continue;
+				// Same filenames in different mods are distinct scripts. The path,
+				// not the basename, defines identity; priority is folder order.
+				var scriptPath:String = folder + file;
+				if (!isHscriptFile(file) || filesPushed.contains(scriptPath)) continue;
 				try {
-					var script = new HScript(folder + file);
+					var script = new HScript(scriptPath);
 					globalScripts.push(script);
-					filesPushed.push(file);
+					filesPushed.push(scriptPath);
 				} catch (e:Dynamic) {
 					TraceManager.error('trace.hscript.globalFailed', 'Failed to load global hscript: {} - {}', [file, e]);
 				}
@@ -168,28 +172,9 @@ class HScript
 			}
 		}
 
-		// 全局 mods 目录
-		for (mod in Paths.getGlobalMods())
-		{
-			var modRoot:String = Paths.mods(mod + '/');
-			if (searched.contains(modRoot)) continue;
-			searched.push(modRoot);
-			for (bootName in bootNames)
-			{
-				var bootPath:String = modRoot + bootName;
-				if (FileSystem.exists(bootPath))
-				{
-					try {
-						var script = new HScript(bootPath);
-						globalScripts.push(script);
-						TraceManager.info('trace.hscript.bootLoaded', 'Loaded boot script: {}', [bootPath]);
-					} catch (e:Dynamic) {
-						TraceManager.error('trace.hscript.bootFailed', 'Failed to load boot script: {} - {}', [bootPath, e]);
-					}
-					break;
-				}
-			}
-		}
+		// Do NOT load Main.hx/boot from every global mod: that leaked other mods'
+		// boot scripts even on vanilla/other mods. Boot script belongs to the
+		// currently selected mod only; global mods inject via hscripts/ instead.
 
 		// 内置 preload 路径
 		var preloadRoot:String = Paths.getPreloadPath('');
@@ -355,6 +340,7 @@ class HScript
 			// Engine
 			"Paths" => Paths, "Conductor" => Conductor, "ClientPrefs" => ClientPrefs,
 			"Dialog" => backend.Dialog,
+			"SeiunOverlay" => backend.SeiunOverlay,
 			"Character" => Character, "Alphabet" => Alphabet,
 			"FunkinText" => FunkinText,
 			"FunkinSprite" => FunkinSprite,
@@ -372,7 +358,9 @@ class HScript
 			// Shaders
 			"ShaderFilter" => ShaderFilter, "ColorMatrixFilter" => ColorMatrixFilter,
 			#if (!flash && sys) "FlxRuntimeShader" => FlxRuntimeShader, #end
+			#if VIDEOS_ALLOWED
 			"VideoSpriteManager" => backend.VideoSpriteManager,
+			#end
 
 			// Video playback classes (for LUA addHaxeLibrary / runHaxeCode compatibility)
 			"Event" => openfl.events.Event,
@@ -428,6 +416,28 @@ class HScript
 		vars.set("Highscore", Highscore);
 		vars.set("ClientPrefs", ClientPrefs);
 		vars.set("ModConfig", ModConfig);
+
+		// 多k API (hscript)
+		vars.set("getMania", function():Int return (PlayState.instance != null) ? PlayState.instance.getManiaK() : -1);
+		vars.set("setMania", function(k:Int, ?skipTween:Bool = false, ?animStyle:String = null):Bool {
+			if (PlayState.instance == null || k < 1) return false;
+			PlayState.instance.changeMania(k - 1, skipTween, animStyle);
+			return true;
+		});
+		vars.set("changeMania", function(k:Int, ?skipTween:Bool = false, ?animStyle:String = null):Bool {
+			if (PlayState.instance == null || k < 1) return false;
+			PlayState.instance.changeMania(k - 1, skipTween, animStyle);
+			return true;
+		});
+		vars.set("setNoteTexture", function(noteIndex:Int, texture:String):Bool {
+			return (PlayState.instance != null) ? PlayState.instance.setNoteTextureByIndex(noteIndex, texture) : false;
+		});
+		vars.set("setNoteCharAnim", function(noteIndex:Int, anim:String):Bool {
+			return (PlayState.instance != null) ? PlayState.instance.setNoteCharAnimByIndex(noteIndex, anim) : false;
+		});
+		vars.set("setNoteColor", function(noteIndex:Int, hue:Float, sat:Float, brt:Float):Bool {
+			return (PlayState.instance != null) ? PlayState.instance.setNoteColorByIndex(noteIndex, hue, sat, brt) : false;
+		});
 
 		// Convenience: change the OS window icon from any script
 		#if (desktop && MODS_ALLOWED)
@@ -635,21 +645,18 @@ class HScript
 		// Self reference
 		set('this', this);
 
-		// Pre-register MP4Handler/VideoHandler so LUA addHaxeLibrary/runHaxeCode works.
+		// Pre-register the hxCodec-compatible video classes so LUA addHaxeLibrary/runHaxeCode works.
 		// Use direct compiled references (not Type.resolveClass) to guarantee the class is available.
 		#if VIDEOS_ALLOWED
 		try {
-		#if (hxCodec >= "3.0.0")
-		set('MP4Handler', hxcodec.flixel.FlxVideo);
-		#elseif (hxCodec >= "2.6.1")
-		set('MP4Handler', hxcodec.VideoHandler);
-		#elseif (hxCodec == "2.6.0")
-		set('MP4Handler', VideoHandler);
-		#else
-		set('MP4Handler', vlc.MP4Handler);
-		#end
+			set('MP4Handler', vlc.MP4Handler);
+			set('MP4Sprite', vlc.MP4Sprite);
+			set('VideoHandler', hxcodec.VideoHandler);
+			set('VideoSprite', hxcodec.VideoSprite);
+			set('FlxVideo', hxcodec.flixel.FlxVideo);
+			set('FlxVideoSprite', hxcodec.flixel.FlxVideoSprite);
 		} catch (e:Dynamic) {
-			handleError('setupVariables → MP4Handler: $e');
+			handleError('setupVariables → Video classes: $e');
 			return;
 		}
 		#end
@@ -883,8 +890,11 @@ class HScript
 		try {
 			if (interp.variables.exists(func)) {
 				var f = interp.variables.get(func);
-				if (Reflect.isFunction(f))
+				if (Reflect.isFunction(f)) {
+					// Successful call resets the consecutive-error counter.
+					errorLoopCount = 0;
 					return Reflect.callMethod(null, f, args);
+				}
 			}
 			return FunkinLua.Function_Continue;
 		} catch (e:Dynamic) {
@@ -951,9 +961,24 @@ class HScript
 		var fullMessage:String = scriptDir + '/' + scriptName + '\n' + message;
 		TraceManager.error('trace.hscript.error', fullMessage);
 
-		if (ClientPrefs.data == null || !ClientPrefs.data.hscriptErrorHandling) return;
-		closed = true;
+		if (ClientPrefs.data == null) return;
 
+		// Error-loop protection (default): count consecutive errors, silently ignore the
+		// script once it hits the limit instead of spamming a dialog every frame.
+		if (ClientPrefs.data.ignoreErrorLoopScripts) {
+			errorLoopCount++;
+			if (errorLoopCount >= ClientPrefs.data.scriptErrorLimit) {
+				closed = true;
+				TraceManager.warn('trace.script.ignoredAfterErrors', 'Script ignored after {} repeated errors: {}', [errorLoopCount, scriptName]);
+				interp = null;
+				parser = null;
+			}
+			return;
+		}
+
+		// Legacy behavior: show a dialog and stop the script on the first error.
+		if (!ClientPrefs.data.hscriptErrorHandling) return;
+		closed = true;
 		var dialogMessage:String = Language.get('script_hscript_error_in', 'HScript Error in') + ' ' + scriptDir + '/' + scriptName + '\n' + message;
         backend.Dialog.show(Language.get('script_hscript_error', 'HScript Error'), dialogMessage, 'Error');
 		interp = null;

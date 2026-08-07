@@ -23,15 +23,11 @@ import flixel.group.FlxGroup.FlxTypedGroup;
 import script.hscript.HScript;
 #end
 
-#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
 import script.lua.FunkinLua;
-#end
 
-#if LUA_ALLOWED
 import script.lua.ModchartSprite;
 import script.lua.ModchartText;
 import script.lua.DebugLuaText;
-#end
 
 #if (!flash && sys)
 import flixel.addons.display.FlxRuntimeShader;
@@ -39,7 +35,7 @@ import flixel.addons.display.FlxRuntimeShader;
 
 import flixel.input.actions.FlxActionInput;
 import flixel.util.FlxDestroyUtil;
-#if android
+#if TOUCH_CONTROLS
 import android.AndroidControls;
 import android.flixel.FlxVirtualPad;
 #end
@@ -58,6 +54,9 @@ class MusicBeatState extends FlxUIState
 
 	public static var camBeat:FlxCamera;
 
+	/** When true, the next state switch uses a snappier menu transition fade. */
+	public static var quickMenuTransition:Bool = false;
+
 	public var scriptName:String = null;
 
 	public function new(?scriptName:String) {
@@ -70,7 +69,6 @@ class MusicBeatState extends FlxUIState
 	public var hscriptArray:Array<HScript> = [];
 	#end
 
-	#if LUA_ALLOWED
 	public var luaArray:Array<FunkinLua> = [];
 	public var variables:Map<String, Dynamic> = new Map<String, Dynamic>();
 	public var modchartTweens:Map<String, FlxTween> = new Map<String, FlxTween>();
@@ -83,13 +81,12 @@ class MusicBeatState extends FlxUIState
 	#if (!flash && sys)
 	public var runtimeShaders:Map<String, Array<String>> = new Map<String, Array<String>>();
 	#end
-	#end
 
 	inline function get_controls():Controls
 		return PlayerSettings.player1.controls;
 
 
-	#if android
+	#if TOUCH_CONTROLS
 	var androidControls:AndroidControls;
 	var virtualPad:FlxVirtualPad;
 	#else
@@ -99,7 +96,7 @@ class MusicBeatState extends FlxUIState
 	var trackedinputsUI:Array<FlxActionInput> = [];
 	var trackedinputsNOTES:Array<FlxActionInput> = [];
 
-	#if android
+	#if TOUCH_CONTROLS
 	public function addVirtualPad(DPad:FlxDPadMode, Action:FlxActionMode)
 	{
 		if (virtualPad != null) removeVirtualPad();
@@ -167,7 +164,9 @@ class MusicBeatState extends FlxUIState
 		Language.load();
 		var skip:Bool = FlxTransitionableState.skipNextTransOut;
 		super.create();
-		if(!skip) openSubState(new CustomFadeTransition(0.7, true));
+		var fadeTime:Float = quickMenuTransition ? 0.35 : 0.7;
+		if(!skip) openSubState(new CustomFadeTransition(fadeTime, true));
+		quickMenuTransition = false;
 		FlxTransitionableState.skipNextTransOut = false;
 
 		#if HSCRIPT_ALLOWED
@@ -303,7 +302,8 @@ class MusicBeatState extends FlxUIState
 		var curState:Dynamic = FlxG.state;
 		var leState:MusicBeatState = curState;
 		if(!FlxTransitionableState.skipNextTransIn) {
-			leState.openSubState(new CustomFadeTransition(0.6, false));
+			var transitionTime:Float = quickMenuTransition ? 0.25 : 0.6;
+			leState.openSubState(new CustomFadeTransition(transitionTime, false));
 			if(nextState == FlxG.state)
 				CustomFadeTransition.finishCallback = function() { FlxG.resetState(); }
 			else
@@ -343,14 +343,19 @@ class MusicBeatState extends FlxUIState
 
 	// ==================== PATH HELPERS ====================
 
-	/** Collects all base paths ordered by priority: currentMod > globalMods > mods/ > assets/ */
+	/**
+	 * Collects all base paths ordered by priority: currentMod > mods/ > assets/.
+	 *
+	 * 只收集“当前激活 mod”的 state 脚本，不再遍历 runsGlobally 的其它全局 mod。
+	 * 否则未选中的整包 mod 会把它的 hscripts/<state>/、data/states/<Name> 脚本
+	 * 泄漏进原生 state（滤镜/位移/黑屏等渗透到其它 state）。全局 mod 的全局
+	 * 注入仍走 HScript.loadGlobalScripts()（根 hscripts/*.hx），与该函数正交。
+	 */
 	static function collectPaths(subPath:String):Array<String> {
 		var paths:Array<String> = [];
 		paths.push(Paths.getPreloadPath(subPath));
 		#if MODS_ALLOWED
 		paths.insert(0, Paths.mods(subPath));
-		for (mod in Paths.getGlobalMods())
-			paths.insert(0, Paths.mods(mod + '/' + subPath));
 		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
 			paths.insert(0, Paths.mods(Paths.currentModDirectory + '/' + subPath));
 		#end
@@ -407,7 +412,7 @@ class MusicBeatState extends FlxUIState
 	}
 	#else
 	public function callOnHscript(event:String, args:Array<Dynamic> = null, ignoreStops:Bool = false, exclusions:Array<String> = null):Dynamic {
-		return FunkinLua.Function_Continue;
+		return 0;
 	}
 	public function setOnHscript(variable:String, arg:Dynamic):Void {}
 	#end
@@ -464,6 +469,7 @@ class MusicBeatState extends FlxUIState
 			script.set(variable, arg);
 		}
 	}
+	#end
 
 	/** Get a Lua-created object (modchart sprite/text, or shared variable) */
 	public function getLuaObject(tag:String, text:Bool = true):FlxSprite {
@@ -488,6 +494,7 @@ class MusicBeatState extends FlxUIState
 		luaDebugGroup.insert(0, new DebugLuaText(text, luaDebugGroup, color));
 	}
 
+	#if LUA_ALLOWED
 	#if (!flash && sys)
 	public function createRuntimeShader(name:String):FlxRuntimeShader {
 		if (!ClientPrefs.data.shaders) return new FlxRuntimeShader();
@@ -556,7 +563,7 @@ class MusicBeatState extends FlxUIState
 	// ==================== DESTROY ====================
 
 	override function destroy():Void {
-		#if android
+		#if TOUCH_CONTROLS
 		if (trackedinputsNOTES != []) controls.removeVirtualControlsInput(trackedinputsNOTES);
 		if (trackedinputsUI != []) controls.removeVirtualControlsInput(trackedinputsUI);
 		#end
@@ -578,9 +585,10 @@ class MusicBeatState extends FlxUIState
 		#end
 
 		super.destroy();
-		#if android
+		#if TOUCH_CONTROLS
 		if (virtualPad != null) { virtualPad = FlxDestroyUtil.destroy(virtualPad); virtualPad = null; }
 		if (androidControls != null) { androidControls = FlxDestroyUtil.destroy(androidControls); androidControls = null; }
 		#end
+
 	}
 }

@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HScript ↔ Lua Interop — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="hi.badge">HScript ↔ Lua</div>
+  <h1 data-i18n="hi.title">HScript ↔ Lua Interop</h1>
+  <p class="sub" data-i18n="hi.sub">The LuaApi bridge.</p>
+  <div class="note" data-i18n="hi.note_req">Requires LUA_ALLOWED.</div>
+
+  <h2 data-i18n="hi.h_run">Run Lua from HScript</h2>
+<pre><code>runLuaCode([[setProperty(<span class="st">'health'</span>, <span class="nu">1</span>)]]);
+FunkinLua;   <span class="cm">// Lua core class</span>
+LuaUtils;    <span class="cm">// Lua utilities</span>
+LuaApi;      <span class="cm">// Interop bridge</span></code></pre>
+
+  <h2 data-i18n="hi.h_add">Add · override · restore</h2>
+<pre><code><span class="cm">// Add a new global Lua function callable from any Lua script</span>
+LuaApi.addLuaFunction(<span class="st">"myFunc"</span>, <span class="kw">function</span>(x, y) <span class="kw">return</span> x + y; <span class="kw">end</span>);
+
+<span class="cm">// Override an existing function (wrapper's 1st arg = original)</span>
+LuaApi.overrideLuaFunction(<span class="st">"getProperty"</span>, <span class="kw">function</span>(original, variable, allowMaps) {
+    <span class="kw">return</span> original(variable, allowMaps);
+});
+
+LuaApi.restoreLuaFunction(<span class="st">"getProperty"</span>);   <span class="cm">// restore original</span></code></pre>
+
+  <h2 data-i18n="hi.h_ref">LuaApi method reference</h2>
+  <div class="table-wrap">
+    <table>
+      <thead><tr><th data-i18n="hi.col_method">Method</th><th data-i18n="hi.col_purpose">Purpose</th></tr></thead>
+      <tbody>
+        <tr><td class="fn">initialize():Void</td><td data-i18n="hi.init.desc">Init.</td></tr>
+        <tr><td class="fn">addLuaFunction(name, func, overrideExisting=false):Bool</td><td data-i18n="hi.add.desc">Add.</td></tr>
+        <tr><td class="fn">overrideLuaFunction(name, wrapperFunc):Bool</td><td data-i18n="hi.override.desc">Override.</td></tr>
+        <tr><td class="fn">restoreLuaFunction(name):Bool</td><td data-i18n="hi.restore.desc">Restore.</td></tr>
+        <tr><td class="fn">removeLuaFunction(name):Bool</td><td data-i18n="hi.remove.desc">Remove.</td></tr>
+        <tr><td class="fn">luaFunctionExists(name):Bool</td><td data-i18n="hi.exists.desc">Exists.</td></tr>
+        <tr><td class="fn">getLuaFunction(name):Dynamic</td><td data-i18n="hi.get.desc">Get.</td></tr>
+        <tr><td class="fn">getCustomFunctions():Array&lt;String&gt;</td><td data-i18n="hi.custom.desc">Custom list.</td></tr>
+        <tr><td class="fn">getOverriddenFunctions():Array&lt;String&gt;</td><td data-i18n="hi.ovlist.desc">Overridden list.</td></tr>
+        <tr><td class="fn">getOriginalFunction(name):Dynamic</td><td data-i18n="hi.orig.desc">Original.</td></tr>
+        <tr><td class="fn">batchOverrideLuaFunctions(map):Int</td><td data-i18n="hi.batchov.desc">Batch override.</td></tr>
+        <tr><td class="fn">batchAddLuaFunctions(map, overrideExisting=false):Int</td><td data-i18n="hi.batchadd.desc">Batch add.</td></tr>
+        <tr><td class="fn">restoreAllLuaFunctions():Int</td><td data-i18n="hi.restoreall.desc">Restore all.</td></tr>
+        <tr><td class="fn">clearAll():Void</td><td data-i18n="hi.clear.desc">Clear all.</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2 data-i18n="hi.h_rev">Lua → HScript</h2>
+<pre><code><span class="cm">-- Set a variable on all / specific HScript (engine-specific, SEIUN)</span>
+setOnHScript(<span class="st">'someVar'</span>, <span class="nu">42</span>)
+setOnLuas(<span class="st">'onlyLua'</span>, <span class="nu">42</span>)
+setOnScripts(<span class="st">'both'</span>, <span class="nu">42</span>)
+callOnHScript(<span class="st">'someHook'</span>, {arg1, arg2}, stop, self, excl)</code></pre>
+
+  <h2 data-i18n="hi.h_order">Event dispatch order</h2>
+<pre><code>callOnScripts(event, args)
+  ├─ callOnLuas(event, args)      <span class="cm">← Lua first</span>
+  └─ callOnHScript(event, args)   <span class="cm">← then HScript</span></code></pre>
+
+  <h2 data-i18n="hi.h_notes">Notes</h2>
+  <div class="note">
+    1. <span data-i18n="hi.note1"></span><br>
+    2. <span data-i18n="hi.note2"></span><br>
+    3. <span data-i18n="hi.note3"></span><br>
+    4. <span data-i18n="hi.note4"></span>
+  </div>
+
+  <div class="btns">
+    <a class="btn ghost" href="hscript-environment.html" data-i18n="module.he.title">← Environment</a>
+    <a class="btn primary" href="modding-advanced.html" data-i18n="module.ma.title">Next: Modding</a>
+  </div>
+</div>
+</body>
+</html>

@@ -1,8 +1,10 @@
 package backend;
 
 import haxe.Json;
+#if sys
 import sys.io.File;
 import sys.FileSystem;
+#end
 import haxe.io.Bytes;
 import haxe.io.BytesInput;
 import haxe.io.BytesOutput;
@@ -261,6 +263,7 @@ class BackupUtil
 		var entries:Array<Dynamic> = [];
 		try
 		{
+			#if sys
 			// Read unified encrypted score files
 			var scoreDir:String = "./.scores/";
 			if (FileSystem.exists(scoreDir))
@@ -285,6 +288,7 @@ class BackupUtil
 					}
 				}
 			}
+			#end
 		}
 		catch (e:Dynamic)
 		{
@@ -417,6 +421,7 @@ class BackupUtil
 	{
 		try
 		{
+			#if sys
 			var scoreDir:String = "./.scores/";
 			if (!FileSystem.exists(scoreDir))
 				FileSystem.createDirectory(scoreDir);
@@ -437,6 +442,7 @@ class BackupUtil
 					TraceManager.error('trace.backup.restoreEntryFailed', 'BackupUtil: Failed to restore entry: {}', [e]);
 				}
 			}
+			#end
 
 			// Reload Allscore data
 			Allscore.load();

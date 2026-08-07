@@ -1,5 +1,6 @@
-package states;
+﻿package states;
 
+import backend.seiun.ui.*;
 import substates.ResetScoreSubState;
 import substates.GameplayChangersSubstate;
 import substates.ModSelectSubstate;
@@ -10,14 +11,16 @@ import flixel.FlxSubState;
 import flixel.addons.transition.FlxTransitionableState;
 import flixel.graphics.frames.FlxAtlasFrames;
 import flixel.group.FlxGroup;
+import flixel.group.FlxGroup.FlxTypedGroup;
 import lime.net.curl.CURLCode;
 import flixel.graphics.FlxGraphic;
+import flixel.util.FlxTimer;
 import WeekData;
 import flixel.input.keyboard.FlxKey;
 
 using StringTools;
 
-class StoryMenuState extends MusicBeatState
+class StoryMenuState extends SeiunMenuState
 {
 	public static var weekCompleted:Map<String, Bool> = new Map<String, Bool>();
 
@@ -51,6 +54,14 @@ class StoryMenuState extends MusicBeatState
 	static var lastSelectedModFolder:String = '';
 	var pendingModIndex:Int = -1;
 
+	// === Seiun menu animation layers ===
+	var particleGroup:FlxTypedGroup<FlxSprite>;
+	var auroraGlowA:FlxSprite;
+	var auroraGlowB:FlxSprite;
+	var weekGlows:FlxTypedGroup<FlxSprite>;
+	var charKick:Float = 0;
+	var ambientTimer:Float = 0;
+
 	override function create()
 	{
 		Paths.clearStoredMemory();
@@ -82,6 +93,25 @@ class StoryMenuState extends MusicBeatState
 		grpWeekText = new FlxTypedGroup<MenuItem>();
 		add(grpWeekText);
 
+		if (MenuFX.enabled())
+		{
+			// ── Seiun aurora: warm gold glows behind the week list ──
+			auroraGlowA = MenuFX.makeGlow(880, 0xFFF9CF51, 0.28);
+			auroraGlowA.blend = ADD;
+			auroraGlowA.scrollFactor.set(0, 0);
+			auroraGlowA.screenCenter();
+			add(auroraGlowA);
+
+			auroraGlowB = MenuFX.makeGlow(720, 0xFFFF8A5C, 0.22);
+			auroraGlowB.blend = ADD;
+			auroraGlowB.scrollFactor.set(0, 0);
+			auroraGlowB.screenCenter();
+			add(auroraGlowB);
+
+			weekGlows = new FlxTypedGroup<FlxSprite>();
+			add(weekGlows);
+		}
+
 		var blackBarThingie:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, 56, FlxColor.BLACK);
 		add(blackBarThingie);
 
@@ -102,8 +132,7 @@ class StoryMenuState extends MusicBeatState
 		// Restore Paths to the persisted mod selection
 		var modFolder:String = modList[curSelectedMod];
 		Paths.currentModDirectory = modFolder;
-		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
+		MenuFX.ensureMenuMusic(1);
 
 		// Create mod filter header
 		createModFilterUI();
@@ -157,10 +186,40 @@ class StoryMenuState extends MusicBeatState
 		// add(rankText);
 		add(scoreText);
 		add(txtWeekTitle);
+
+		// ── Particles: selection bursts + ambient sparkles ──
+		if (MenuFX.enabled())
+		{
+			particleGroup = new FlxTypedGroup<FlxSprite>();
+			add(particleGroup);
+		}
+
+		MenuFX.accentColor = 0xFFF9CF51;
 		changeWeek();
 		changeDifficulty();
 		updateArrowVisibility();
-		#if android
+
+		// ── Entry animation: week items cascade in ──
+		for (i in 0...grpWeekText.length)
+		{
+			var it:MenuItem = grpWeekText.members[i];
+			var targetX:Float = it.x;
+			var delay:Float = Math.min(Math.abs(i - curWeek) * 0.04, 0.4);
+			it.x -= 140;
+			it.alpha = 0;
+			FlxTween.tween(it, {x: targetX, alpha: (i == curWeek) ? 1 : 0.6}, 0.4, {startDelay: delay, ease: FlxEase.backOut});
+		}
+		for (char in grpWeekCharacters.members)
+		{
+			if (char.character == '') continue;
+			var bx:Float = char.scale.x;
+			var by:Float = char.scale.y;
+			char.alpha = 0;
+			char.scale.set(bx * 0.8, by * 0.8);
+			FlxTween.tween(char, {alpha: 1}, 0.35, {ease: FlxEase.sineOut});
+			FlxTween.tween(char.scale, {x: bx, y: by}, 0.5, {ease: FlxEase.backOut});
+		}
+		#if TOUCH_CONTROLS
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
@@ -206,7 +265,7 @@ class StoryMenuState extends MusicBeatState
 	{
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 30, 0,
-			#if android
+			#if TOUCH_CONTROLS
 			Language.get('Mod.hint.android', '[G] Switch Mod'),
 			#else
 			Language.get('Mod.hint', '[TAB] Switch Mod'),
@@ -256,8 +315,7 @@ class StoryMenuState extends MusicBeatState
 		Paths.currentModDirectory = modFolder;
 
 		// Reload menu music from the mod
-		FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
-		FlxTween.tween(FlxG.sound.music, {volume: 1}, 0.5);
+		MenuFX.playMenuMusic(1);
 
 		rebuildFilteredWeeks();
 		// changeWeek(0) will reload the background based on the current week
@@ -274,6 +332,7 @@ class StoryMenuState extends MusicBeatState
 		grpWeekText.clear();
 		grpLocks.clear();
 		grpWeekCharacters.clear();
+		if (weekGlows != null) weekGlows.clear();
 		loadedWeeks = [];
 
 		// Collect weeks from WeekData that belong to this mod folder
@@ -298,6 +357,18 @@ class StoryMenuState extends MusicBeatState
 
 				weekThing.screenCenter(X);
 				weekThing.antialiasing = ClientPrefs.data.globalAntialiasing;
+
+				if (weekGlows != null)
+				{
+					// Soft glow behind every week item (selected one pulses)
+					var glow:FlxSprite = MenuFX.makeGlow(300, 0xFFFFE9A0, 0.45);
+					glow.scale.set(1.45, 0.85);
+					glow.updateHitbox();
+					glow.blend = ADD;
+					glow.visible = false;
+					glow.ID = grpWeekText.members.indexOf(weekThing);
+					weekGlows.add(glow);
+				}
 
 				if (isLocked)
 				{
@@ -341,7 +412,7 @@ class StoryMenuState extends MusicBeatState
 		changeWeek();
 		changeDifficulty();
 		refreshModFilterUI();
-		#if android
+		#if TOUCH_CONTROLS
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
@@ -370,7 +441,7 @@ class StoryMenuState extends MusicBeatState
 		{
 			// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
 			if (FlxG.keys.justPressed.TAB
-				#if android || virtualPad.buttonEx.justPressed #end)
+				#if TOUCH_CONTROLS || virtualPad.buttonEx.justPressed #end)
 			{
 				openModSelect();
 			}
@@ -420,12 +491,12 @@ class StoryMenuState extends MusicBeatState
 			else if (upP || downP)
 				changeDifficulty();
 
-			if(#if android virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.CONTROL)
+			if(#if TOUCH_CONTROLS virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.CONTROL)
 			{
 				persistentUpdate = false;
 				openSubState(new GameplayChangersSubstate());
 			}
-			else if(#if android virtualPad.buttonY.justPressed || #end controls.RESET)
+			else if(#if TOUCH_CONTROLS virtualPad.buttonY.justPressed || #end controls.RESET)
 			{
 				persistentUpdate = false;
 				openSubState(new ResetScoreSubState('', curDifficulty, '', curWeek));
@@ -441,7 +512,19 @@ class StoryMenuState extends MusicBeatState
 		{
 			FlxG.sound.play(Paths.sound('cancelMenu'));
 			movedBack = true;
-			MusicBeatState.switchState(new MainMenuState());
+			// Seamless exit: week items fly out, then switch without a black fade
+			for (i in 0...grpWeekText.length)
+			{
+				var it:MenuItem = grpWeekText.members[i];
+				var delay:Float = (grpWeekText.length - 1 - i) * 0.03;
+				FlxTween.tween(it, {alpha: 0, x: it.x - 300}, 0.28, {startDelay: delay, ease: FlxEase.quadIn});
+			}
+			for (char in grpWeekCharacters.members)
+				FlxTween.tween(char, {alpha: 0}, 0.24, {ease: FlxEase.quadIn});
+			new FlxTimer().start(0.42, function(tmr:FlxTimer)
+			{
+				MenuFX.menuSwitch(new MainMenuState());
+			});
 		}
 
 		#if LUA_ALLOWED
@@ -452,6 +535,50 @@ class StoryMenuState extends MusicBeatState
 		#end
 		super.update(elapsed);
 
+		// ── Seiun menu animations ──
+		if (auroraGlowA != null)
+		{
+			var t:Float = MenuFX.time;
+			auroraGlowA.x = FlxG.width * 0.45 + Math.sin(t * 0.32) * 130 - auroraGlowA.width * 0.5;
+			auroraGlowA.y = FlxG.height * 0.4 + Math.cos(t * 0.26) * 60 - auroraGlowA.height * 0.5;
+			auroraGlowA.alpha = 0.24 + Math.sin(t * 0.46) * 0.07;
+			auroraGlowA.color = MenuFX.cycleHue(0xFFF9CF51, 0.05);
+
+			auroraGlowB.x = FlxG.width * 0.75 + Math.sin(t * 0.21 + 1.8) * 115 - auroraGlowB.width * 0.5;
+			auroraGlowB.y = FlxG.height * 0.62 + Math.cos(t * 0.3 + 0.9) * 60 - auroraGlowB.height * 0.5;
+			auroraGlowB.alpha = 0.18 + Math.sin(t * 0.4 + 0.8) * 0.06;
+			auroraGlowB.color = MenuFX.cycleHue(0xFFFF8A5C, 0.04);
+		}
+
+		// Week item glows follow the (lerped) item positions
+		if (weekGlows != null)
+		{
+			for (i in 0...weekGlows.length)
+			{
+				var glow:FlxSprite = weekGlows.members[i];
+				if (i >= grpWeekText.length) continue;
+				var item:MenuItem = grpWeekText.members[i];
+				var isSel:Bool = (i == curWeek);
+				glow.visible = isSel;
+				if (isSel)
+				{
+					glow.x = item.x + item.width * 0.5 - glow.width * glow.scale.x * 0.5;
+					glow.y = item.y + item.height * 0.5 - glow.height * glow.scale.y * 0.5;
+				}
+			}
+		}
+
+		// Ambient sparkles drifting in the background
+		ambientTimer += elapsed;
+		if (ambientTimer > 0.18)
+		{
+			ambientTimer = 0;
+			MenuFX.ambientSparkle(particleGroup,
+				FlxG.random.float(0, FlxG.width),
+				FlxG.random.float(FlxG.height * 0.1, FlxG.height * 0.9),
+				FlxColor.fromRGB(255, 240, 200),
+				FlxG.random.float(3, 6));
+		}
 
 		grpLocks.forEach(function(lock:FlxSprite)
 		{
@@ -474,6 +601,10 @@ class StoryMenuState extends MusicBeatState
 			if (stopspamming == false)
 			{
 				FlxG.sound.play(Paths.sound('confirmMenu'));
+				MenuFX.screenFlash(FlxG.camera, 0xFFFFFFFF, 0.42, 0.5);
+				MenuFX.punchZoom(0.06);
+				var selItem:MenuItem = grpWeekText.members[curWeek];
+				MenuFX.burstParticles(particleGroup, selItem.x + selItem.width * 0.5, selItem.y + selItem.height * 0.5, 0xFFFFE9A0, 24, 340);
 
 				grpWeekText.members[curWeek].startFlashing();
 
@@ -641,6 +772,22 @@ class StoryMenuState extends MusicBeatState
 			curDifficulty = newPos;
 		}
 		updateText();
+
+		// ── Seiun selection juice: camera kick, gold burst, character pop-in ──
+		MenuFX.punchZoom(0.02);
+		if (curWeek < grpWeekText.length && particleGroup != null)
+		{
+			var item:MenuItem = grpWeekText.members[curWeek];
+			MenuFX.burstParticles(particleGroup, item.x + item.width * 0.5, item.y + item.height * 0.5, 0xFFFFE9A0, 10, 180);
+		}
+		for (char in grpWeekCharacters.members)
+		{
+			if (char.character == '') continue;
+			var bx:Float = char.scale.x;
+			var by:Float = char.scale.y;
+			char.scale.set(bx * 0.85, by * 0.85);
+			FlxTween.tween(char.scale, {x: bx, y: by}, 0.35, {ease: FlxEase.backOut});
+		}
 	}
 
 	function weekIsLocked(name:String):Bool {
@@ -675,5 +822,34 @@ class StoryMenuState extends MusicBeatState
 		#if !switch
 		intendedScore = Highscore.getWeekScore(loadedWeeks[curWeek].fileName, curDifficulty);
 		#end
+	}
+
+	override function onMenuBeat(beat:Int):Void
+	{
+		if (selectedWeek || movedBack || grpWeekText == null || grpWeekText.length == 0) return;
+
+		if (curWeek >= 0 && curWeek < grpWeekText.length)
+		{
+			MenuFX.pulse(grpWeekText.members[curWeek], 0.08, 0.16);
+			if (weekGlows != null && curWeek < weekGlows.length)
+			{
+				var glow:FlxSprite = weekGlows.members[curWeek];
+				FlxTween.cancelTweensOf(glow, ['alpha']);
+				glow.alpha = 0.9;
+				FlxTween.tween(glow, {alpha: 0.45}, 0.4, {ease: FlxEase.sineOut});
+			}
+		}
+		for (char in grpWeekCharacters.members)
+		{
+			if (char.character != '') MenuFX.pulse(char, 0.07, 0.18);
+		}
+		MenuFX.punchZoom(0.012);
+	}
+
+	override function destroy()
+	{
+		if (particleGroup != null)
+			for (p in particleGroup) FlxTween.cancelTweensOf(p);
+		super.destroy();
 	}
 }

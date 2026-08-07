@@ -217,7 +217,7 @@ class GameplayChangersSubstate extends MusicBeatSubstate
 
 		changeSelection();
 		reloadCheckboxes();
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(LEFT_FULL, A_B_C);
 		addPadCamera();
 		#end
@@ -357,7 +357,7 @@ class GameplayChangersSubstate extends MusicBeatSubstate
 				}
 			}
 
-			if(#if android virtualPad.buttonC.justPressed || #end controls.RESET)
+			if(#if TOUCH_CONTROLS virtualPad.buttonC.justPressed || #end controls.RESET)
 			{
 				for (i in 0...optionsArray.length)
 				{

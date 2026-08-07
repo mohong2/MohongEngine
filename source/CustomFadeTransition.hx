@@ -1,7 +1,7 @@
 package;
 
 import Conductor.BPMChangeEvent;
- 
+import backend.MusicBeatState;
 import flixel.addons.ui.FlxUIState;
 import flixel.math.FlxRect;
 import flixel.addons.transition.FlxTransitionableState;
@@ -23,11 +23,12 @@ class CustomFadeTransition extends MusicBeatSubstate {
 		var zoom:Float = CoolUtil.boundTo(FlxG.camera.zoom, 0.05, 1);
 		var width:Int = Std.int(FlxG.width / zoom);
 		var height:Int = Std.int(FlxG.height / zoom);
-		transGradient = FlxGradient.createGradientFlxSprite(width, height, (isTransIn ? [0x0, FlxColor.BLACK] : [FlxColor.BLACK, 0x0]));
+		var fadeColor:FlxColor = MusicBeatState.quickMenuTransition ? 0xFF190B30 : FlxColor.BLACK;
+		transGradient = FlxGradient.createGradientFlxSprite(width, height, (isTransIn ? [0x0, fadeColor] : [fadeColor, 0x0]));
 		transGradient.scrollFactor.set();
 		add(transGradient);
 
-		transBlack = new FlxSprite().makeGraphic(width, height + 400, FlxColor.BLACK);
+		transBlack = new FlxSprite().makeGraphic(width, height + 400, fadeColor);
 		transBlack.scrollFactor.set();
 		add(transBlack);
 

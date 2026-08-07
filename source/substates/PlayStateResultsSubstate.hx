@@ -74,6 +74,12 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	var closeCheck:Bool = false;
 	var confirmContinue:Bool = false;
 	var confirmReplay:Bool = false;
+
+	// Button hover (jelly) animation state
+	var continueHovered:Bool = false;
+	var replayHovered:Bool = false;
+	var cHoverTween:FlxTween = null;
+	var rHoverTween:FlxTween = null;
 	var ratingIcon:FlxSprite;
 	var ratingIconTween:FlxTween;
 
@@ -219,7 +225,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		instructions.alpha = 0;
 		add(instructions);
 
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(LEFT_RIGHT, A_B);
 		addPadCamera();
 		#end
@@ -284,36 +290,93 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 	function startIntroTween(subtitleTxt:FlxText, instructions:FlxText)
 	{
-		FlxTween.tween(bg, {alpha: 1}, 0.5, {ease: FlxEase.quartOut});
-		FlxTween.tween(titleTxt, {alpha: 1}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.15});
-		FlxTween.tween(subtitleTxt, {alpha: 1}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.25});
-		FlxTween.tween(titleUnderline.scale, {x: 1}, 0.55, {ease: FlxEase.quartOut, startDelay: 0.35});
+		FlxTween.tween(bg, {alpha: 1}, 0.4, {ease: FlxEase.sineOut});
 
-		FlxTween.tween(leftPanel, {alpha: 0.78}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.3});
-		FlxTween.tween(graphPanel, {alpha: 0.78}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.35});
-		FlxTween.tween(statsPanel, {alpha: 0.78}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.4});
+		// Title: gentle spring (jelly) scale-in
+		titleTxt.alpha = 0;
+		titleTxt.scale.set(0.8, 0.8);
+		FlxTween.tween(titleTxt, {alpha: 1}, 0.32, {ease: FlxEase.sineOut, startDelay: 0.1});
+		FlxTween.tween(titleTxt.scale, {x: 1, y: 1}, 0.6, {ease: FlxEase.backOut, startDelay: 0.1});
 
-		FlxTween.tween(graphNote, {alpha: 1}, 0.45, {ease: FlxEase.quartOut, startDelay: 0.45});
+		FlxTween.tween(subtitleTxt, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.2});
+		FlxTween.tween(titleUnderline.scale, {x: 1}, 0.6, {ease: FlxEase.quartOut, startDelay: 0.3});
 
+		// Panels: pop in with a jelly bounce
+		jellyPopIn(leftPanel, 0.25);
+		jellyPopIn(graphPanel, 0.30);
+		jellyPopIn(statsPanel, 0.35);
+
+		FlxTween.tween(graphNote, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.4});
+
+		// Text rows: staggered lift-in with a subtle spring
 		for (i in 0...leftTextGroup.members.length)
-			FlxTween.tween(leftTextGroup.members[i], {alpha: 1}, 0.25, {startDelay: 0.5 + i * 0.025, ease: FlxEase.quartOut});
+		{
+			var t:FlxText = leftTextGroup.members[i];
+			t.alpha = 0;
+			t.y += 6;
+			t.scale.set(0.96, 0.96);
+			FlxTween.tween(t, {y: t.y - 6, alpha: 1}, 0.3, {startDelay: 0.45 + i * 0.03, ease: FlxEase.sineOut});
+			FlxTween.tween(t.scale, {x: 1, y: 1}, 0.35, {startDelay: 0.45 + i * 0.03, ease: FlxEase.backOut});
+		}
 
-		new FlxTimer().start(0.7, function(_) {
+		new FlxTimer().start(0.6, function(_) {
 			for (i in 0...barBGGroup.members.length)
-				FlxTween.tween(barBGGroup.members[i], {alpha: 1}, 0.2);
+				FlxTween.tween(barBGGroup.members[i], {alpha: 1}, 0.25);
 			for (i in 0...barGroup.members.length)
 				barTween(barGroup.members[i], i);
 			for (i in 0...barTextGroup.members.length)
-				FlxTween.tween(barTextGroup.members[i], {alpha: 1}, 0.25, {startDelay: i * 0.05});
+				FlxTween.tween(barTextGroup.members[i], {alpha: 1}, 0.25, {startDelay: i * 0.06});
 		});
 
-		new FlxTimer().start(0.9, function(_) {
-			FlxTween.tween(continueBtn, {alpha: 1}, 0.35);
-			FlxTween.tween(continueTxt, {alpha: 1}, 0.35);
-			FlxTween.tween(replayBtn, {alpha: 1}, 0.35);
-			FlxTween.tween(replayTxt, {alpha: 1}, 0.35);
-			FlxTween.tween(instructions, {alpha: 1}, 0.35);
+		new FlxTimer().start(0.85, function(_) {
+			buttonPopIn(continueBtn);
+			FlxTween.tween(continueTxt, {alpha: 1}, 0.3, {ease: FlxEase.sineOut});
+			buttonPopIn(replayBtn);
+			FlxTween.tween(replayTxt, {alpha: 1}, 0.3, {ease: FlxEase.sineOut});
+			FlxTween.tween(instructions, {alpha: 1}, 0.3, {ease: FlxEase.sineOut});
 		});
+	}
+
+	/** Jelly pop-in for panels: shrink then spring back with backOut ease. */
+	function jellyPopIn(spr:FlxSprite, delay:Float):Void
+	{
+		spr.alpha = 0;
+		spr.scale.set(0.82, 0.82);
+		FlxTween.tween(spr, {alpha: 0.78}, 0.3, {ease: FlxEase.sineOut, startDelay: delay});
+		FlxTween.tween(spr.scale, {x: 1, y: 1}, 0.55, {ease: FlxEase.backOut, startDelay: delay});
+	}
+
+	/** Jelly pop-in for buttons. */
+	function buttonPopIn(btn:FlxSprite):Void
+	{
+		btn.alpha = 0;
+		btn.scale.set(0.9, 0.9);
+		FlxTween.tween(btn, {alpha: 1}, 0.3, {ease: FlxEase.sineOut});
+		FlxTween.tween(btn.scale, {x: 1, y: 1}, 0.5, {ease: FlxEase.backOut});
+	}
+
+	/** Smooth jelly hover on buttons (desktop mouse). */
+	function updateButtonHover():Void
+	{
+		if (closeCheck) return;
+
+		var overC:Bool = overlapsInSubstateCam(continueBtn, FlxG.mouse.x, FlxG.mouse.y);
+		var overR:Bool = overlapsInSubstateCam(replayBtn, FlxG.mouse.x, FlxG.mouse.y);
+
+		if (overC != continueHovered)
+		{
+			continueHovered = overC;
+			if (cHoverTween != null) cHoverTween.cancel();
+			cHoverTween = FlxTween.tween(continueBtn.scale, {x: continueHovered ? 1.06 : 1, y: continueHovered ? 1.06 : 1},
+				0.15, {ease: FlxEase.backOut, onComplete: function(_) { cHoverTween = null; }});
+		}
+		if (overR != replayHovered)
+		{
+			replayHovered = overR;
+			if (rHoverTween != null) rHoverTween.cancel();
+			rHoverTween = FlxTween.tween(replayBtn.scale, {x: replayHovered ? 1.06 : 1, y: replayHovered ? 1.06 : 1},
+				0.15, {ease: FlxEase.backOut, onComplete: function(_) { rHoverTween = null; }});
+		}
 	}
 
 	function createRoundedPanel(x:Float, y:Float, width:Int, height:Int, color:FlxColor):FlxSprite
@@ -370,6 +433,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 		items.push({label: "", value: "", color: FlxColor.WHITE});
 
+		if (ClientPrefs.data.marvelousRatings)
+			items.push({label: Language.get("ResultsScreen.marvelouses", "Marvelouses"), value: fmtDev(game.marvelouses, best != null ? (best.marvelouses != null ? best.marvelouses : 0) : 0), color: FlxColor.fromRGB(255, 215, 0)});
 		items.push({label: Language.get("ResultsScreen.sicks", "Sicks"), value: fmtDev(game.sicks, best != null ? best.sicks : 0), color: FlxColor.fromRGB(0, 255, 255)});
 		items.push({label: Language.get("ResultsScreen.goods", "Goods"), value: fmtDev(game.goods, best != null ? best.goods : 0), color: FlxColor.WHITE});
 		items.push({label: Language.get("ResultsScreen.bads", "Bads"), value: fmtDev(game.bads, best != null ? best.bads : 0), color: FlxColor.GRAY});
@@ -395,50 +460,81 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		items.push({label: Language.get("ResultsScreen.practice", "Practice"), value: practiceStr, color: game.practiceMode ? FlxColor.GREEN : FlxColor.GRAY});
 		items.push({label: Language.get("ResultsScreen.instakill", "Instakill"), value: instakillStr, color: game.instakillOnMiss ? FlxColor.RED : FlxColor.GRAY});
 
-		// --- Build left column text ---
-		var startY:Float = leftPanel.y + 16;
+		// --- Status header (moved to the top so it never overlaps the rating icon) ---
+		var statusLineH:Float = 15;
+		var statusCount:Int = 3 + (isReplay ? 1 : 0) + (best != null ? 1 : 0);
+		// LeatherEngine 移植: 回放判定被还原时多一行提示
+		if (isReplay && game.replayExam != null && game.replayExam.judgementRestoredDifferent) statusCount++;
+		var statusY:Float = leftPanel.y + 14;
+
+		// --- Build left column text (dynamic label widths to prevent overlap across languages) ---
 		var lineH:Float = 22;
+		var labelX:Float = leftPanel.x + 18;
+		var startY:Float = statusY + statusCount * statusLineH + 12;
+
+		// Pass 1: measure the widest label so the value column never overlaps it,
+		// regardless of language text length.
+		var maxLabelW:Float = 0;
 		for (i in 0...items.length)
 		{
 			var item = items[i];
-			if (item.label == "" && item.value == "")
-				continue;
+			if (item.label == "" && item.value == "") continue;
+			var probe:FlxText = new FlxText(0, 0, 0, item.label + ":", 16);
+			probe.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, LEFT);
+			if (probe.width > maxLabelW) maxLabelW = probe.width;
+			probe.destroy();
+		}
+		var valueX:Float = labelX + maxLabelW + 12;
+		var valueW:Float = Math.max(80, leftPanel.width - (valueX - leftPanel.x) - 16);
 
-			var labelX:Float = leftPanel.x + 18;
-			var y:Float = startY + i * lineH;
+		var gIdx:Int = 0;
+		for (i in 0...items.length)
+		{
+			var item = items[i];
+			if (item.label == "" && item.value == "") continue;
 
-			var labelTxt = new FlxText(labelX, y, 145, item.label + ":", 16);
+			var y:Float = startY + gIdx * lineH;
+			gIdx++;
+
+			var labelTxt = new FlxText(labelX, y, maxLabelW + 4, item.label + ":", 16);
 			labelTxt.setFormat(Paths.languageFont(), 16, FlxColor.fromRGB(140, 150, 160), LEFT);
+			labelTxt.textField.wordWrap = false;
 			labelTxt.alpha = 0;
 			leftTextGroup.add(labelTxt);
 
-			var valTxt = new FlxText(labelX + 150, y, 400, item.value, 16);
+			var valTxt = new FlxText(valueX, y, valueW, item.value, 16);
 			valTxt.setFormat(Paths.languageFont(), 16, item.color, LEFT);
+			valTxt.textField.wordWrap = false;
 			valTxt.alpha = 0;
 			leftTextGroup.add(valTxt);
 		}
 
-		// --- Status footer: starts at second column (value column) x ---
-		var statusY:Float = leftPanel.y + leftPanel.height - 95;
-		var statusX:Float = leftPanel.x + 290; // third column, separate from label/value grid
-		var statusLineH:Float = 15;
+		// --- Status header: placed at the top of the panel, left-aligned with the stat grid ---
+		var statusX:Float = leftPanel.x + 18;
+		var statusW:Float = Math.max(120, leftPanel.width - (statusX - leftPanel.x) - 16);
 
 		function addStatusLine(idx:Int, text:String, color:FlxColor)
 		{
 			var y = statusY + idx * statusLineH;
-			var t = new FlxText(statusX, y, 390, text, 13);
+			var t = new FlxText(statusX, y, statusW, text, 13);
 			t.setFormat(Paths.languageFont(), 13, color, LEFT);
+			t.textField.wordWrap = false; // never wrap (e.g. "Judge: 45 / 90 / 135 / 10f")
 			t.alpha = 0;
 			leftTextGroup.add(t);
 		}
 
 		var si:Int = 0;
 
-		// Judgment window info (always shown)
-		var judgeInfo = Language.get("ResultsScreen.judgeWindows", "Judge") + ": "
-			+ Std.string(ClientPrefs.data.sickWindow) + " / "
+		// Judgment window info (always shown) — LeatherEngine 移植: 显示判定类型 + 窗口区间
+		var judgePresetName:String = ClientPrefs.data.judgementPreset;
+		if (judgePresetName == null || judgePresetName.length == 0)
+			judgePresetName = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
+		var judgeInfo = Language.get("ResultsScreen.judgeWindows", "Judge") + ": " + judgePresetName + " (";
+		if (ClientPrefs.data.marvelousRatings)
+			judgeInfo += Std.string(ClientPrefs.data.marvelousWindow) + " / ";
+		judgeInfo += Std.string(ClientPrefs.data.sickWindow) + " / "
 			+ Std.string(ClientPrefs.data.goodWindow) + " / "
-			+ Std.string(ClientPrefs.data.badWindow) + " / "
+			+ Std.string(ClientPrefs.data.badWindow) + ") / "
 			+ Std.string(ClientPrefs.data.safeFrames) + "f";
 		addStatusLine(si++, judgeInfo, FlxColor.fromRGB(180, 180, 200));
 
@@ -458,6 +554,15 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			addStatusLine(si++, Language.get("ResultsScreen.mode", "Mode") + ": "
 				+ Language.get("ResultsScreen.replayMode", "REPLAY"),
 				FlxColor.fromRGB(255, 200, 100));
+
+			// LeatherEngine 移植: 仅在回放判定与当前设置不同时提醒
+			if (game.replayExam != null && game.replayExam.judgementRestoredDifferent)
+			{
+				var jInfo:String = game.replayExam.judgementRestoreInfo;
+				if (jInfo == null) jInfo = "";
+				addStatusLine(si++, Language.get("ResultsScreen.replayJudgeRestored", "Replay Judgement Restored") + ": " + jInfo,
+					FlxColor.fromRGB(255, 200, 100));
+			}
 		}
 
 		if (best != null)
@@ -578,6 +683,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		var sickWindow = ClientPrefs.data.sickWindow;
 		var goodWindow = ClientPrefs.data.goodWindow;
 		var badWindow = ClientPrefs.data.badWindow;
+		var marvelousWindow = ClientPrefs.data.marvelousWindow;
+		var hasMarvelous = ClientPrefs.data.marvelousRatings;
 
 		var drawX:Float = 0;
 		var drawW:Float = graphNote.width;
@@ -602,7 +709,9 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 				var msAbs = Math.abs(noteMs[i]);
 				var color:FlxColor;
 
-				if (msAbs <= sickWindow)
+				if (hasMarvelous && msAbs <= marvelousWindow)
+					color = 0xFFFFD700;
+				else if (msAbs <= sickWindow)
 					color = 0xFF00FFFF;
 				else if (msAbs <= goodWindow)
 					color = 0xFF00FF00;
@@ -630,6 +739,14 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 			// center line
 			FlxSpriteUtil.drawRect(graphNote, drawX, drawH * 0.5 - 1, drawW, 2, 0x7FFFFFFF);
+
+			// marvelous window (LeatherEngine 移植)
+			if (hasMarvelous && marvelousWindow <= sickWindow)
+			{
+				var my = drawH * 0.5 + drawH * 0.5 * moveSize * (marvelousWindow / safeZoneOffset) - 1;
+				FlxSpriteUtil.drawRect(graphNote, drawX, my, drawW, 2, 0x7FFFD700);
+				FlxSpriteUtil.drawRect(graphNote, drawX, drawH * 0.5 - (my - drawH * 0.5) - 1, drawW, 2, 0x7FFFD700);
+			}
 
 			// sick window
 			var sy = drawH * 0.5 + drawH * 0.5 * moveSize * (sickWindow / safeZoneOffset) - 1;
@@ -703,6 +820,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		}
 
 		if (closeCheck) return;
+
+		updateButtonHover();
 
 		if (FlxG.keys.justPressed.ESCAPE #if android || FlxG.android.justReleased.BACK #end)
 		{
@@ -918,6 +1037,10 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 						goodWindow: details != null && details.length > 21 ? details[21] : 90,
 						badWindow: details != null && details.length > 22 ? details[22] : 135,
 						safeFrames: details != null && details.length > 23 ? details[23] : 10,
+						// LeatherEngine 移植: 从成绩详情恢复判定手感
+						judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
+						judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
+						marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
 						replayVersion: 2
 					};
 

@@ -73,6 +73,7 @@ class TitleState extends MusicBeatState
 	public static var locatedFiles:Array<String> = [];
 	public static var maxLoopTimes:Int = 0;
 	public static final IGNORE_FOLDER_FILE_NAME:String = "ignore.txt";
+	public static final EXTRACTION_ASSET_ROOTS:Array<String> = ['assets', 'mods'];
 
 	public var copyLoadingImage:FlxSprite;
 	public var copyBottomBG:FlxSprite;
@@ -85,6 +86,11 @@ class TitleState extends MusicBeatState
 	var copyCanUpdate:Bool = true;
 	var isCopying:Bool = false;
 	var copyCompleted:Bool = false;
+
+	#if android
+	var extractionDone:Bool = false;
+	var extractionResult:Dynamic = null;
+	#end
 
 	private static final textFilesExtensions:Array<String> = ['ini', 'txt', 'xml', 'hxs', 'hx', 'lua', 'json', 'frag', 'vert'];
 	#end
@@ -138,6 +144,9 @@ class TitleState extends MusicBeatState
 
 		// ── Apply new mod's pack.json config ──
 		ModState.applyModPackConfig(MainMenuState.selectedModFolder);
+		#if HSCRIPT_ALLOWED
+		HScript.loadModBootScript();
+		#end
 		#else
 		// Non-MODS_ALLOWED: still clear caches so we don't hold stale data
 		Paths.clearStoredMemory();
@@ -281,6 +290,10 @@ class TitleState extends MusicBeatState
 		copyFailedFilesStack = [];
 		copyCanUpdate = true;
 		copyCompleted = false;
+		#if android
+		extractionDone = false;
+		extractionResult = null;
+		#end
 
 		SUtil.showPopUp(
 			Language.get("TitleState.extractNotice", "Seems like you have some missing files that are necessary to run the game\nPress OK to begin the copy process"),
@@ -302,6 +315,11 @@ class TitleState extends MusicBeatState
 		copyLoadedText.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, CENTER);
 		add(copyLoadedText);
 
+		#if android
+		// Streamed natively from the APK on a background thread (no OOM, atomic
+		// writes, resume after crashes, progress via listener).
+		startNativeExtraction();
+		#else
 		var ticks:Int = 15;
 		if (maxLoopTimes <= 15)
 			ticks = 1;
@@ -309,10 +327,76 @@ class TitleState extends MusicBeatState
 		copyLoop = new FlxAsyncLoop(maxLoopTimes, copyAsset, ticks);
 		add(copyLoop);
 		copyLoop.start();
+		#end
 	}
+
+	#if android
+	function startNativeExtraction():Void
+	{
+		var listener = new android.Tools.ExtractionListener();
+		listener.progressHandler = function(file:String, done:Int, total:Int)
+		{
+			if (copyLoadedText != null)
+				copyLoadedText.text = (total > 0) ? '$done/$total' : 'Completed!';
+		};
+		listener.completeHandler = function(resultJson:String)
+		{
+			extractionResult = null;
+			try
+			{
+				if (resultJson != null && resultJson.length > 0)
+					extractionResult = Json.parse(resultJson);
+			}
+			catch (e:Dynamic) {}
+			extractionDone = true;
+		};
+
+		android.Tools.extractAssets(EXTRACTION_ASSET_ROOTS, SUtil.getStorageDirectory(), listener);
+	}
+
+	function handleNativeExtractionFinished():Void
+	{
+		copyCanUpdate = false;
+
+		if (extractionResult != null)
+		{
+			var failures:Array<Dynamic> = Reflect.field(extractionResult, 'failures');
+			if (failures != null)
+			{
+				for (f in failures)
+				{
+					var file:String = Reflect.field(f, 'file');
+					var error:String = Reflect.field(f, 'error');
+					copyFailedFiles.push('$file ($error)');
+					copyFailedFilesStack.push('$file -> $error');
+				}
+			}
+		}
+
+		if (copyFailedFiles.length > 0)
+		{
+			SUtil.showPopUp(copyFailedFiles.join('\n'), 'Failed To Copy ${copyFailedFiles.length} File.');
+			if (!FileSystem.exists('logs'))
+				FileSystem.createDirectory('logs');
+			File.saveContent('logs/' + Date.now().toString().replace(' ', '-').replace(':', "'") + '-CopyState' + '.txt', copyFailedFilesStack.join('\n'));
+		}
+		copyCompleted = true;
+		FlxG.sound.play(Paths.sound('confirmMenu'));
+
+		// Copy completed, proceed with normal flow
+		isCopying = false;
+		continueNormalFlow();
+	}
+	#end
 
 	function checkExistingFiles():Void
 	{
+		#if android
+		// Native scan: enumerates the real APK assets and stats the filesystem
+		// directly — no OpenFL asset-cache dependency, no per-file Haxe overhead,
+		// consistent behavior across every Android version.
+		maxLoopTimes = android.Tools.countMissingAssets(EXTRACTION_ASSET_ROOTS, SUtil.getStorageDirectory());
+		#else
 		locatedFiles = OpenFLAssets.list();
 
 		// Normalize paths: strip library prefixes (e.g. "extension-androidtools:assets/..." -> "assets/...")
@@ -352,6 +436,7 @@ class TitleState extends MusicBeatState
 			locatedFiles.remove(file);
 
 		maxLoopTimes = locatedFiles.length;
+		#end
 	}
 
 	function copyAsset():Void
@@ -702,6 +787,13 @@ class TitleState extends MusicBeatState
 		#if mobile
 		if (isCopying)
 		{
+			#if android
+			if (extractionDone && copyCanUpdate)
+			{
+				handleNativeExtractionFinished();
+				return;
+			}
+			#else
 			if (copyLoop != null)
 			{
 				if (copyLoop.finished && copyCanUpdate)
@@ -728,6 +820,7 @@ class TitleState extends MusicBeatState
 				else
 					copyLoadedText.text = '$copyLoopTimes/$maxLoopTimes';
 			}
+			#end
 			#if LUA_ALLOWED
 			callOnLuas('onUpdatePost', [elapsed]);
 			#end

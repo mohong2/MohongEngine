@@ -88,6 +88,9 @@ class FunkinLua {
 	public var scriptName:String = '';
 	public var closed:Bool = false;
 
+	/** 连续报错计数：脚本在 update 循环里连续报错达到上限时会被静默忽略。 */
+	public var errorLoopCount:Int = 0;
+
 	#if HSCRIPT_ALLOWED
 	public static var hscript:HScript = null;
 	#end
@@ -563,6 +566,65 @@ class FunkinLua {
 				runningScripts.push(luaArr[idx].scriptName);
 			return runningScripts;
 		});
+
+		// ============ 多k API ============
+		Lua_helper.add_callback(lua, "getMania", function():Int {
+			if (PlayState.instance == null) return -1;
+			return PlayState.mania + 1;
+		});
+
+		Lua_helper.add_callback(lua, "setNoteTexture", function(noteIndex:Int, texture:String):Bool {
+			if (PlayState.instance == null || texture == null) return false;
+			var notes:FlxTypedGroup<Note> = PlayState.instance.notes;
+			if (noteIndex < 0 || noteIndex >= notes.length) return false;
+			var note:Note = notes.members[noteIndex];
+			if (note == null || !note.exists || note.noteData < 0) return false;
+			// 自定义纹理不应用多k 调色 (默认/空纹理恢复轨道色)
+			note.applyLaneColorShader = (texture.length < 1 || texture == 'NOTE_assets');
+			note.texture = texture;
+			note.reloadNote('', texture);
+			if (note.applyLaneColorShader) note.applyLaneColor();
+			return true;
+		});
+
+		Lua_helper.add_callback(lua, "setNoteCharAnim", function(noteIndex:Int, anim:String):Bool {
+			if (PlayState.instance == null) return false;
+			var notes:FlxTypedGroup<Note> = PlayState.instance.notes;
+			if (noteIndex < 0 || noteIndex >= notes.length) return false;
+			var note:Note = notes.members[noteIndex];
+			if (note == null || !note.exists) return false;
+			note.customCharAnim = (anim == null || anim.length < 1) ? null : anim;
+			return true;
+		});
+
+		Lua_helper.add_callback(lua, "setNoteColor", function(noteIndex:Int, hue:Float, sat:Float, brt:Float):Bool {
+			if (PlayState.instance == null) return false;
+			var notes:FlxTypedGroup<Note> = PlayState.instance.notes;
+			if (noteIndex < 0 || noteIndex >= notes.length) return false;
+			var note:Note = notes.members[noteIndex];
+			if (note == null || !note.exists || note.colorSwap == null) return false;
+			note.noteColorOverride = [hue / 360, sat / 100, brt / 100];
+			note.applyLaneColor();
+			return true;
+		});
+
+		Lua_helper.add_callback(lua, "setMania", function(k:Int, skipTween:Dynamic = false, ?animStyle:Dynamic = null):Bool {
+			if (PlayState.instance == null || k < 1) return false;
+			var skip:Bool = (skipTween == true);
+			var style:String = (animStyle != null) ? Std.string(animStyle) : null;
+			PlayState.instance.changeMania(k - 1, skip, style);
+			return true;
+		});
+
+		// 兼容命名: changeMania 与 setMania 相同
+		Lua_helper.add_callback(lua, "changeMania", function(k:Int, skipTween:Dynamic = false, ?animStyle:Dynamic = null):Bool {
+			if (PlayState.instance == null || k < 1) return false;
+			var skip:Bool = (skipTween == true);
+			var style:String = (animStyle != null) ? Std.string(animStyle) : null;
+			PlayState.instance.changeMania(k - 1, skip, style);
+			return true;
+		});
+		// ============ 多k API 结束 ============
 
 		Lua_helper.add_callback(lua, "callOnScripts", function(?funcName:String, ?args:Array<Dynamic>, ignoreStops=false, ignoreSelf=true, ?exclusions:Array<String>){
 			if(funcName==null){
@@ -3170,7 +3232,9 @@ class FunkinLua {
 	#end
 	public function addLocalCallback(name:String, myFunction:Dynamic) {
     callbacks.set(name, myFunction);
+    #if LUA_ALLOWED
     Lua_helper.add_callback(lua, name, myFunction); 
+    #end
 }
 	public static function new_setVarInArray(instance:Dynamic, variable:String, value:Dynamic, allowMaps:Bool = false):Any
 	{
@@ -3272,6 +3336,8 @@ public static function getModSetting(saveTag:String, ?modName:String = null):Dyn
 
         return null;
     }
+	#else
+	return null;
 	#end
 }
 	/** Get the variables map from whichever MusicBeatState is currently active */
@@ -3874,6 +3940,27 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 	}
 
 	var lastCalledFunction:String = '';
+
+	/**
+	 * 记录一次脚本报错：连续报错达到 scriptErrorLimit 时静默忽略（closed）这个脚本，
+	 * 防止在 update 循环里因同一个错误每帧刷屏、白白占用性能。
+	 * @return true = 已达到上限已被忽略
+	 */
+	function registerError():Bool {
+		if (!ClientPrefs.data.ignoreErrorLoopScripts) return false;
+		errorLoopCount++;
+		if (errorLoopCount >= ClientPrefs.data.scriptErrorLimit) {
+			closed = true;
+			TraceManager.warn('trace.script.ignoredAfterErrors', 'Script ignored after {} repeated errors: {}', [errorLoopCount, scriptName]);
+			return true;
+		}
+		return false;
+	}
+	/** 脚本成功执行过一次调用后，重置连续报错计数（只有"持续报错"才算循环）。 */
+	inline function resetErrors():Void {
+		errorLoopCount = 0;
+	}
+
 	public function call(func:String, args:Array<Dynamic>):Dynamic {
 		#if LUA_ALLOWED
 		if(closed) return Function_Continue;
@@ -3897,6 +3984,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 						luaTrace(errMsg, false, false, FlxColor.RED);
 						TraceManager.error('trace.lua.callNotFunction', 'ERROR ({}): attempt to call a {} value', [func, typeName]);
 					}
+					if (registerError()) { Lua.pop(lua, 1); return Function_Continue; }
 				}
 
 				Lua.pop(lua, 1);
@@ -3918,6 +4006,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 					luaTrace(errMsg, false, false, FlxColor.RED);
 					TraceManager.error('trace.lua.callRuntimeError', 'ERROR ({}): {}', [func, error]);
 				}
+				if (registerError()) return Function_Continue;
 				return Function_Continue;
 			}
 
@@ -3926,6 +4015,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			if (result == null) result = Function_Continue;
 
 			Lua.pop(lua, 1);
+			resetErrors();
 			return result;
 		}
 		catch (e:Dynamic) {
@@ -3934,6 +4024,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			} else {
 				TraceManager.error('trace.lua.callError', '{}', [e]);
 			}
+			registerError();
 		}
 		#end
 		return Function_Continue;

@@ -10,7 +10,7 @@ import flixel.input.actions.FlxActionSet;
 import flixel.input.gamepad.FlxGamepadButton;
 import flixel.input.gamepad.FlxGamepadInputID;
 import flixel.input.keyboard.FlxKey;
-#if android
+#if TOUCH_CONTROLS
 import android.flixel.FlxButton;
 import android.flixel.FlxHitbox;
 import android.flixel.FlxVirtualPad;
@@ -387,7 +387,7 @@ class Controls extends FlxActionSet
 	public var trackedinputsUI:Array<FlxActionInput> = [];
 	public var trackedinputsNOTES:Array<FlxActionInput> = [];
 
-	#if android
+	#if TOUCH_CONTROLS
 	public function addButtonNOTES(action:FlxActionDigital, button:FlxButton, state:FlxInputState):Void
 	{
 		if (button == null)
@@ -733,7 +733,7 @@ class Controls extends FlxActionSet
 	 * Sets all actions that pertain to the binder to trigger when the supplied keys are used.
 	 * If binder is a literal you can inline this
 	 */
-	#if !android
+	#if !TOUCH_CONTROLS
 	public function bindKeys(control:Control, keys:Array<FlxKey>)
 	{
 		var copyKeys:Array<FlxKey> = keys.copy();

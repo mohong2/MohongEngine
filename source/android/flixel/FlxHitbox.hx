@@ -1,6 +1,8 @@
 package android.flixel;
 
 import flixel.input.keyboard.FlxKey;
+import EKData.Keybinds;
+import states.PlayState;
 import flixel.util.FlxDestroyUtil;
 import android.flixel.FlxButton;
 import openfl.display.BitmapData;
@@ -42,7 +44,6 @@ class FlxHitbox extends FlxSpriteGroup
 		var topHeight = perHintHeight - bottomHeight;
 		var halfWidth = Std.int(FlxG.width / 2);
 
-		// 计算 4 个主按键的 Y 和高度（根据额外按钮开关/位置动态调整）
 		var mainY:Int;
 		var mainH:Int;
 		var extraY:Int = 0;
@@ -52,7 +53,6 @@ class FlxHitbox extends FlxSpriteGroup
 		{
 			if (ClientPrefs.data.hitboxExtraPos == "Top")
 			{
-				// 额外按钮在顶部 → 主按键下移
 				extraY = 0;
 				if (ClientPrefs.data.mobileCEx)
 				{
@@ -67,7 +67,6 @@ class FlxHitbox extends FlxSpriteGroup
 			}
 			else
 			{
-				// 额外按钮在底部 → 主按键保持在上方
 				if (ClientPrefs.data.mobileCEx)
 				{
 					mainY = offsetSec;
@@ -83,7 +82,6 @@ class FlxHitbox extends FlxSpriteGroup
 		}
 		else
 		{
-			// 无额外按钮 → 4 个主按键铺满可用区域
 			if (ClientPrefs.data.mobileCEx)
 			{
 				mainY = offsetSec;
@@ -96,18 +94,17 @@ class FlxHitbox extends FlxSpriteGroup
 			}
 		}
 
-		// 创建 4 个方向键（传入 hintIndex 以从设置读取键值并模拟键盘按键）
 		for (i in 0...ammo)
 			add(hints[i] = createHint(i * perHintWidth, mainY, perHintWidth, mainH, colors[i], i));
 
-		// 额外 SPACE / SHIFT 按钮
-		if (showExtra)
+		// 多k: 轨道数 >4 时不再叠加额外的 2 个功能键, 避免覆盖轨道色块
+		if (showExtra && ammo <= 4)
 		{
 			add(hints[4] = createHint(0, extraY, halfWidth, bottomHeight, 0xFFFF00));
 			add(hints[5] = createHint(halfWidth, extraY, halfWidth, bottomHeight, 0x00FFFF));
 		}
 
-		if (ClientPrefs.data.mobileCEx)
+		if (ClientPrefs.data.mobileCEx && ammo <= 4)
 			add(hints[6] = createHint(0, offsetFir, FlxG.width, Std.int(FlxG.height / 4), 0xFF0066FF));
 
 		scrollFactor.set();
@@ -126,7 +123,6 @@ class FlxHitbox extends FlxSpriteGroup
 		hints.splice(0, hints.length);
 	}
 
-	// FlxHitbox.hx 的 createHint 方法中添加键盘触发逻辑
 
 	private function createHint(X:Float, Y:Float, Width:Int, Height:Int, Color:Int = 0xFFFFFF, ?hintIndex:Int = -1):FlxButton
 	{
@@ -142,9 +138,21 @@ class FlxHitbox extends FlxSpriteGroup
 		hint.scrollFactor.set();
 		hint.alpha = guh2;
 
-		// ---- 从设置读取键值，直接通知 Replay 录制（不修改 FlxG.keys，避免 Controls 二次判定） ----
 		var notifyKeyName:String = null;
-		if (hintIndex >= 0 && hintIndex < 4)
+		var isMultiK:Bool = (PlayState.SONG != null && PlayState.SONG.mania != null && PlayState.SONG.mania != Note.defaultMania);
+		if (isMultiK)
+		{
+			// 多k: 所有轨道直接按多k键位 (0-3 也读多k键位)
+			var mania:Int = (PlayState.SONG != null && PlayState.SONG.mania != null) ? PlayState.SONG.mania : Note.defaultMania;
+			var binds:Array<Array<Dynamic>> = Keybinds.fill();
+			if (mania >= 0 && mania < binds.length && hintIndex >= 0 && hintIndex < binds[mania].length)
+			{
+				var laneKeys:Array<FlxKey> = binds[mania][hintIndex];
+				if (laneKeys != null && laneKeys.length > 0)
+					notifyKeyName = Std.string(laneKeys[0]);
+			}
+		}
+		else if (hintIndex >= 0 && hintIndex < 4)
 		{
 			var bindName:String = switch(hintIndex) {
 				case 0: 'note_left';
@@ -165,11 +173,41 @@ class FlxHitbox extends FlxSpriteGroup
 		else if (Color == 0x00FFFF)
 			notifyKeyName = Std.string(FlxKey.SHIFT);
 
+		// 多k: 4K 以上轨道 (或整个多k Hitbox) → 直接驱动 PlayState 按键
+		if (hintIndex >= 4 || isMultiK)
+		{
+			if (notifyKeyName == null)
+				notifyKeyName = Std.string(FlxKey.NONE);
+		}
+
 		if (notifyKeyName != null)
 		{
 			hint.onDown.callback = function() { Replay.notifyPress(notifyKeyName); };
 			hint.onUp.callback = function() { Replay.notifyRelease(notifyKeyName); };
 			hint.onOut.callback = function() { Replay.notifyRelease(notifyKeyName); };
+		}
+
+		// 多k: 直接驱动按键 (同时保留 Replay 录制)
+		if (hintIndex >= 4 || isMultiK)
+		{
+			var oldDown = hint.onDown.callback;
+			var oldUp = hint.onUp.callback;
+			var oldOut = hint.onOut.callback;
+			hint.onDown.callback = function()
+			{
+				if (oldDown != null) oldDown();
+				if (PlayState.instance != null) PlayState.instance.mobileKeyPressed(hintIndex);
+			};
+			hint.onUp.callback = function()
+			{
+				if (oldUp != null) oldUp();
+				if (PlayState.instance != null) PlayState.instance.mobileKeyReleased(hintIndex);
+			};
+			hint.onOut.callback = function()
+			{
+				if (oldOut != null) oldOut();
+				if (PlayState.instance != null) PlayState.instance.mobileKeyReleased(hintIndex);
+			};
 		}
 
 		// ---- 视觉反馈（仅在非隐藏模式下） ----

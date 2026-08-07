@@ -1,8 +1,10 @@
 package;
 
 import haxe.Json;
+#if !js
 import sys.FileSystem;
 import sys.io.File;
+#end
 
 class Language
 {
@@ -28,15 +30,43 @@ class Language
     private static function loadDirectory(path:String):Void
     {
         if(path == null) return;
-        if(!FileSystem.exists(path) || !FileSystem.isDirectory(path)) return;
 
         var files:Array<String> = [];
+        #if js
+        var allAssets:Array<String> = lime.utils.Assets.list();
+        var prefix:String = path + '/';
+        for(asset in allAssets)
+        {
+            if(asset.startsWith(prefix) && asset.endsWith('.json'))
+                files.push(asset.substr(prefix.length));
+        }
+        if(files.length == 0)
+        {
+            var known:Array<String> = [
+                'English.json', 'option.json', 'playstate.json', 'pause.json',
+                'ResultsScreen.json', 'ScoreHistorySubstate.json',
+                'characterEditor.json', 'creditsEditor.json',
+                'dialogueCharacterEditor.json', 'dialogueEditor.json',
+                'menuCharacterEditor.json', 'newchartEditor.json',
+                'script.json', 'weekEditor.json', 'backgroundEditor.json',
+                'CrashCatcherState.json', 'GameplayChangersSubstate.json'
+            ];
+            for(name in known)
+            {
+                var full:String = path + '/' + name;
+                if(lime.utils.Assets.exists(full, TEXT))
+                    files.push(name);
+            }
+        }
+        #else
+        if(!FileSystem.exists(path) || !FileSystem.isDirectory(path)) return;
         try {
             files = FileSystem.readDirectory(path);
         } catch(e:Dynamic) {
             trace('Failed to read language directory: $path');
             return;
         }
+        #end
 
         for(file in files) {
             if(!file.endsWith(".json")) continue;
@@ -46,7 +76,12 @@ class Language
             if(loadedFiles.exists(filePath)) continue;
 
             try {
+                #if js
+                var rawJson:String = lime.utils.Assets.getText(filePath);
+                if(rawJson == null) continue;
+                #else
                 var rawJson:String = File.getContent(filePath);
+                #end
                 var parsedData:Dynamic = Json.parse(rawJson);
 
                 for(field in Reflect.fields(parsedData)) {

@@ -57,6 +57,15 @@
 		"defaultValue": false
 	},
 	{
+		"nameKey": "option.chartAutosave",
+		"defaultName": "Chart Auto-save",
+		"descKey": "option.chartAutosave.desc",
+		"defaultDesc": "If checked, chart editors will automatically save backups and create autosave data (also when entering Playtest). Unchecked by default so your chart is NEVER saved without you pressing Save manually.",
+		"variable": "chartAutosave",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
 		"nameKey": "option.traceConsole",
 		"defaultName": "Trace Console",
 		"descKey": "option.traceConsole.desc",
@@ -95,6 +104,24 @@
 		"descKey": "option.oldPauseMenu.desc",
 		"defaultDesc": "If checked, the old 0.6.3-style pause menu will be used instead of the new acrylic one.",
 		"variable": "oldPauseMenu",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.seiuMenuFx",
+		"defaultName": "Seiun Menu Effects",
+		"descKey": "option.seiuMenuFx.desc",
+		"defaultDesc": "If enabled, the menus get extra glowing auroras, particles and beat-synced pulses. Disable for a cleaner look.",
+		"variable": "seiuMenuFx",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.freeplayAutoPreview",
+		"defaultName": "Freeplay Auto Music",
+		"descKey": "option.freeplayAutoPreview.desc",
+		"defaultDesc": "If enabled, Freeplay automatically plays the background music of the selected song.",
+		"variable": "freeplayAutoPreview",
 		"type": "bool",
 		"defaultValue": false
 	}

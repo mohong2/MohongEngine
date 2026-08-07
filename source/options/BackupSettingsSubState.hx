@@ -4,8 +4,10 @@ import backend.MusicBeatSubstate;
 import backend.BackupUtil;
 import editors.content.FileDialogHandler;
 import haxe.Json;
+#if sys
 import sys.io.File;
 import sys.FileSystem;
+#end
 import haxe.io.Bytes;
 import flixel.FlxG;
 import flixel.FlxSprite;
@@ -339,7 +341,9 @@ class BackupSettingsSubState extends MusicBeatSubstate
 				isProcessing = false;
 				return;
 			}
+			#if sys
 			try { raw = File.getContent(path); } catch (e:Dynamic) {}
+			#end
 		}
 
 		if (raw == null || raw == "")

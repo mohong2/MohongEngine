@@ -28,19 +28,23 @@ class MasterEditorMenu extends MusicBeatState
 		'editors_dialogue_portrait',
 		'editors_character',
 		'editors_chart',
-		'editors_new_chart'//,
+		'editors_new_chart',
+		'editors_chart_converter'//,
 		//'editors_background'
 		//,
 		//'editors_credits'
 	];
 	private var grpTexts:FlxTypedGroup<FlxTextMenuItem>;
+	#if MODS_ALLOWED
 	private var directories:Array<String> = [null];
+	#end
 
 	private var curSelected = 0;
 	private var curDirectory = 0;
 	private var directoryTxt:EditorsText;
 
 	// MOD list UI
+	#if MODS_ALLOWED
 	private var modsGroup:FlxTypedGroup<EditorModItem>;
 	private var curSelectedMod:Int = 0;
 	private var onMods:Bool = false;
@@ -48,6 +52,7 @@ class MasterEditorMenu extends MusicBeatState
 
 	// Persist mod selection across state recreations
 	static var lastSelectedMod:String = '';
+	#end
 
 	override function create()
 	{
@@ -143,6 +148,7 @@ class MasterEditorMenu extends MusicBeatState
 			'editors_character' => Language.get('editors_character', 'Character Editor'),
 			'editors_chart' => Language.get('editors_chart', 'Chart Editor'),
 			'editors_new_chart' => Language.get('editors_new_chart', 'New Chart Editor'),
+			'editors_chart_converter' => Language.get('editors_chart_converter', 'Chart Converter (osu!/Malody)'),
 			'editors_background' => Language.get('editors_background', 'Background Editor'),
 			'editors_credits' => Language.get('editors_credits', 'Credits Editor')
 		];
@@ -172,7 +178,12 @@ class MasterEditorMenu extends MusicBeatState
 				else
 					Paths.currentModDirectory = directories[curDirectory];
 				lastSelectedMod = Paths.currentModDirectory;
-				WeekData.setDirectoryFromWeek();
+				// NOTE: Do NOT call WeekData.setDirectoryFromWeek() here.
+				// It resets Paths.currentModDirectory to '' with no argument,
+				// wiping the selection the player just made and making the
+				// first editor entry load default (or the previously loaded mod)
+				// resources. Only on a second entry (via the persisted
+				// lastSelectedMod) would the chosen mod load correctly.
 				FlxG.sound.play(Paths.sound('confirmMenu'));
 				onMods = false;
 			}
@@ -210,6 +221,8 @@ class MasterEditorMenu extends MusicBeatState
 						LoadingState.loadAndSwitchState(new ChartingState(), false);
 					case 'editors_new_chart':
 						LoadingState.loadAndSwitchState(new NewChartingState(), false);
+					case 'editors_chart_converter':
+						MusicBeatState.switchState(new ChartConverterState());
 					case 'editors_background':
 						LoadingState.loadAndSwitchState(new BackgroundEditorState(), false);
 					case 'editors_credits':
@@ -249,6 +262,8 @@ class MasterEditorMenu extends MusicBeatState
 					LoadingState.loadAndSwitchState(new ChartingState(), false);
 				case 'editors_new_chart':
 					LoadingState.loadAndSwitchState(new NewChartingState(), false);
+				case 'editors_chart_converter':
+					MusicBeatState.switchState(new ChartConverterState());
 				case 'editors_background':
 					LoadingState.loadAndSwitchState(new BackgroundEditorState(), false);
 				case 'editors_credits':

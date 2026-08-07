@@ -23,17 +23,22 @@ import haxe.io.Path;
 #if cpp
 import Discord.DiscordClient;
 #end
-import sys.FileSystem;
-import sys.io.File;
-import sys.io.Process;
 #end
 import mohong.Windows;
 import mohong.TraceManager;
 import mohong.TraceConsole;
+import mohong.MemoryMonitor;
 import backend.Dialog;
 import states.CrashCatcherState;
 
 using StringTools;
+
+#if linux
+@:cppInclude('./external/gamemode_client.h')
+@:cppFileCode('
+	#define GAMEMODE_AUTO
+')
+#end
 
 class Main extends Sprite
 {
@@ -57,10 +62,21 @@ class Main extends Sprite
 	public static var useOldPause:Null<Bool> = null;
 	public static var originalVolume:Float = -1;
 	static var backgroundDimInitialized:Bool = false;
+	// Windows 关闭动画状态（仅 Windows 目标使用）
+	static var allowWindowClose:Bool = false;
+	static var closeAnimStarted:Bool = false;
 	// You can pretty much ignore everything from here on - your code should go in your states.
 
 	public static function main():Void
 	{
+		#if mac
+		// macOS: .app 由 Finder 双击启动时，进程工作目录是根目录 "/"，
+		// 会导致 assets/、mods/、lang/ 等所有相对路径读取失败。
+		// 这里把工作目录切换到 bundle 的资源目录，让全部相对路径正常解析。
+		var resourcesDir:String = haxe.io.Path.directory(Sys.programPath()) + "/../Resources/";
+		if (sys.FileSystem.exists(resourcesDir))
+			Sys.setCwd(resourcesDir);
+		#end
 		Lib.current.addChild(new Main());
 		#if desktop
 		applyWindowMode();
@@ -95,15 +111,20 @@ class Main extends Sprite
 	{
 		#if android
 		SUtil.doPermissionsShit();
+		// Floating keyboard button: show automatically once the storage
+		// permission flow is done (prompts for SYSTEM_ALERT_WINDOW once if
+		// the user hasn't granted it yet).
+		backend.SeiunOverlay.maybeAutoShow();
 		#end
+		#if sys
 		Sys.setCwd(SUtil.getStorageDirectory());
+		#end
 		
 		super();
 		
 
 		#if HSCRIPT_ALLOWED
         HScript.initialize();
-        HScript.loadModBootScript();
         #end
 
         // 初始化 TraceManager（尽早拦截所有 trace() 调用）
@@ -175,12 +196,14 @@ class Main extends Sprite
 
 				var fullMsg:String = stack + "\nUncaught Error: " + msg + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
+				#if sys
 				if (!sys.FileSystem.exists("./crash/"))
 					sys.FileSystem.createDirectory("./crash/");
 				sys.io.File.saveContent(path, fullMsg + "\n");
 
 				Sys.println(fullMsg);
 				Sys.println("Crash dump saved in " + haxe.io.Path.normalize(path));
+				#end
 
 				// Store crash info for the in-game crash catcher
 				states.CrashCatcherState.lastCrashMessage = msg;
@@ -216,7 +239,9 @@ class Main extends Sprite
 					#if cpp
 					DiscordClient.shutdown();
 					#end
+					#if sys
 					Sys.exit(1);
+					#end
 				}
 			};
 		}
@@ -245,10 +270,18 @@ class Main extends Sprite
 			oldFpsVar.visible = ClientPrefs.data.showFPS && useOldFPS;
 		}
 
+		// 内存监控：每帧计时 + 低频内存压力/定时 GC 检查（syscall 已按 ~120 帧节流）
+		MemoryMonitor.initialize();
+
 		// 每帧通过 hscript 触发 onFrameUpdate 事件，供脚本自定义更新
 		#if HSCRIPT_ALLOWED
 		addEventListener(Event.ENTER_FRAME, function(_) {
+			MemoryMonitor.onFrameStart();
 			HScript.callOnGlobalScript("onFrameUpdate", []);
+		});
+		#else
+		addEventListener(Event.ENTER_FRAME, function(_) {
+			MemoryMonitor.onFrameStart();
 		});
 		#end
 		#if html5
@@ -275,6 +308,10 @@ class Main extends Sprite
 	 * Uses Lime's onClose event + cancel() mechanism.
 	 * NativeWindow dispatches onClose, then checks onClose.canceled — if true,
 	 * the native WM_CLOSE is blocked.
+	 *
+	 * Windows 目标额外播放可配置的关闭动画（样式与速度见设置中的
+	 * 「关闭动画」/「关闭动画速度」），动画结束后才真正关闭窗口；
+	 * 其他桌面平台保持原行为（直接关闭）。
 	 */
 	static function setupWindowCloseHandler():Void
 	{
@@ -284,17 +321,302 @@ class Main extends Sprite
 
 		window.onClose.add(function()
 		{
+			// 动画完成后的最终关闭：不再拦截，放行原生关闭
+			if (allowWindowClose) return;
+
 			if (backend.UnsavedChangesTracker.hasUnsavedChanges)
 			{
 				if (!backend.UnsavedChangesTracker.onWindowQuit())
 				{
 					// User cancelled — cancel the close event
 					window.onClose.cancel();
+					return;
 				}
 			}
+
+			#if windows
+			// 未启用关闭动画：直接放行原生关闭
+			var closeStyle:String = ClientPrefs.data.closeAnimStyle;
+			if (closeStyle != null && closeStyle == 'off')
+				return;
+
+			// 关闭动画播放中：拦截重复的关闭请求（防 Alt+F4 连按）
+			if (closeAnimStarted)
+			{
+				window.onClose.cancel();
+				return;
+			}
+
+			// 拦截本次原生关闭，先播动画，动画结束后再真正关闭
+			window.onClose.cancel();
+			startCloseAnimation(window);
+			#end
 		});
 		#end
 	}
+
+	#if windows
+	/**
+	 * 从脚本返回值里取字段。Lua 表在非 JS 目标上会转成匿名对象，
+	 * HScript 返回的对象也是匿名结构，用 Reflect 直接取即可。
+	 */
+	static function scriptField(obj:Dynamic, name:String):Dynamic
+	{
+		if (obj == null) return null;
+		if (Reflect.hasField(obj, name))
+			return Reflect.field(obj, name);
+		return null;
+	}
+
+	/** 把脚本返回值里的字段安全地转成 Float，失败用 fallback。 */
+	static function scriptNumField(obj:Dynamic, name:String, fallback:Float):Float
+	{
+		var v:Dynamic = scriptField(obj, name);
+		if (v == null) return fallback;
+		var f:Float = Std.parseFloat(Std.string(v));
+		return Math.isNaN(f) ? fallback : f;
+	}
+
+	/** 调用当前状态附带的 Lua 脚本（模组写在 data/states/<State>.lua 等位置）。 */
+	static function callCloseAnimLua(func:String, args:Array<Dynamic>):Dynamic
+	{
+		#if LUA_ALLOWED
+		var state = FlxG.state;
+		if (state != null && Std.isOfType(state, backend.MusicBeatState))
+			return cast(state, backend.MusicBeatState).callOnLuas(func, args);
+		#end
+		return null;
+	}
+
+	/**
+	 * 模组扩展入口 1：onCloseAnimStart(style, speed)
+	 * 返回 null 表示不改动；返回字符串可换成自定义样式名（未知样式按“缩放”兜底，
+	 * 配合 onCloseAnimUpdate 逐帧覆盖即可实现完全自定义动画）；
+	 * 返回 {style=..., duration=...} 可同时改样式和总时长；返回 "off" 直接关闭。
+	 */
+	static function callCloseAnimStart(style:String, speed:Float):Dynamic
+	{
+		var ret:Dynamic = null;
+		#if HSCRIPT_ALLOWED
+		var hxRet:Dynamic = HScript.callOnGlobalScript('onCloseAnimStart', [style, speed]);
+		if (hxRet != null && hxRet != 0) ret = hxRet;
+		#end
+		#if LUA_ALLOWED
+		var luaRet:Dynamic = callCloseAnimLua('onCloseAnimStart', [style, speed]);
+		if (luaRet != null && luaRet != 0) ret = luaRet;
+		#end
+		return ret;
+	}
+
+	/**
+	 * 模组扩展入口 2：onCloseAnimUpdate(progress, style, speed)
+	 * 每帧调用，progress 0→1。返回 {x=..., y=..., width=..., height=...}
+	 * 可覆盖窗口变换（返回 null 则使用内置计算）。
+	 */
+	static function callCloseAnimUpdate(progress:Float, style:String, speed:Float):Dynamic
+	{
+		var ret:Dynamic = null;
+		#if HSCRIPT_ALLOWED
+		var hxRet:Dynamic = HScript.callOnGlobalScript('onCloseAnimUpdate', [progress, style, speed]);
+		if (hxRet != null && hxRet != 0) ret = hxRet;
+		#end
+		#if LUA_ALLOWED
+		var luaRet:Dynamic = callCloseAnimLua('onCloseAnimUpdate', [progress, style, speed]);
+		if (luaRet != null && luaRet != 0) ret = luaRet;
+		#end
+		return ret;
+	}
+
+	/** 模组扩展入口 3：onCloseAnimEnd(style)，动画结束、真正关闭前调用。 */
+	static function callCloseAnimEnd(style:String):Void
+	{
+		#if HSCRIPT_ALLOWED
+		HScript.callOnGlobalScript('onCloseAnimEnd', [style]);
+		#end
+		#if LUA_ALLOWED
+		callCloseAnimLua('onCloseAnimEnd', [style]);
+		#end
+	}
+
+	/**
+	 * 关闭动画：按设置中的样式（off/squeeze/zoom/drop/slide）与速度倍率播放，
+	 * 完成后才真正调用 window.close()。
+	 * 模组可通过 HScript 全局脚本 / 当前状态 Lua 脚本实现自定义关闭动画。
+	 *
+	 * 使用主线程 ENTER_FRAME 驱动，不依赖 FlxG 的更新循环，
+	 * 因此在暂停菜单等状态下按 Alt+F4 也能正常播放。
+	 */
+	static function startCloseAnimation(window:lime.ui.Window):Void
+	{
+		closeAnimStarted = true;
+
+		var style:String = ClientPrefs.data.closeAnimStyle;
+		var speed:Float = ClientPrefs.data.closeAnimSpeed;
+		if (style == null || style.length == 0) style = 'squeeze';
+		if (speed <= 0) speed = 1.0;
+
+		// ── 模组扩展：onCloseAnimStart 可改样式 / 时长，或返回 'off' 直接关闭 ──
+		var customDuration:Float = -1;
+		var startRet:Dynamic = callCloseAnimStart(style, speed);
+		if (startRet != null && startRet != 0)
+		{
+			if (Std.isOfType(startRet, String))
+				style = Std.string(startRet);
+			else
+			{
+				var s:Dynamic = scriptField(startRet, 'style');
+				if (s != null) style = Std.string(s);
+				var d:Dynamic = scriptField(startRet, 'duration');
+				if (d != null)
+				{
+					var dv:Float = Std.parseFloat(Std.string(d));
+					if (!Math.isNaN(dv) && dv > 0) customDuration = dv;
+				}
+			}
+		}
+
+		// 未启用关闭动画：直接关闭
+		if (style == 'off')
+		{
+			callCloseAnimEnd(style);
+			allowWindowClose = true;
+			window.close();
+			return;
+		}
+
+		// 全屏时窗口尺寸无法正常缩放，先退回窗口模式再播动画
+		if (window.fullscreen)
+			window.fullscreen = false;
+
+		// 以退出全屏后的实际尺寸为准（退出全屏会触发一次 resize）
+		var startWidth:Int = window.width;
+		var startHeight:Int = window.height;
+		var centerX:Float = window.x + startWidth * 0.5;
+		var centerY:Float = window.y + startHeight * 0.5;
+
+		var minSize:Int = 1; // 避免缩到 0 导致渲染/系统异常
+
+		// 基础时长（秒），除以速度倍率得到实际时长
+		var durationH:Float = 0.30 / speed; // squeeze 高度段
+		var durationW:Float = 0.35 / speed; // squeeze 宽度段
+		var duration:Float = switch (style)
+		{
+			case 'zoom': 0.40 / speed;
+			case 'drop': 0.50 / speed;
+			case 'slide': 0.50 / speed;
+			default: 0.40 / speed; // squeeze 外的未知样式（模组自定义）按缩放兜底
+		}
+		if (customDuration > 0) duration = customDuration / speed;
+
+		var phase:Int = 0; // 0 = 高度，1 = 宽度
+		var t0:Float = haxe.Timer.stamp();
+		var stage = Lib.current.stage;
+		if (stage == null) // 极端情况：没有舞台就直接关
+		{
+			allowWindowClose = true;
+			window.close();
+			return;
+		}
+
+		var onFrame:openfl.events.Event->Void = null;
+		onFrame = function(_)
+		{
+			var elapsed:Float = haxe.Timer.stamp() - t0;
+			var curDuration:Float = (style == 'squeeze') ? (phase == 0 ? durationH : durationW) : duration;
+			var progress:Float = Math.min(1, elapsed / curDuration);
+			// 快速起步、末尾放缓，让「压扁」显得干脆
+			var eased:Float = progress * (2 - progress);
+
+			var newWidth:Int = startWidth;
+			var newHeight:Int = startHeight;
+			var newX:Float = centerX - startWidth * 0.5;
+			var newY:Float = centerY - startHeight * 0.5;
+
+			var builtin:String = switch (style)
+			{
+				case 'squeeze': 'squeeze';
+				case 'drop': 'drop';
+				case 'slide': 'slide';
+				default: 'zoom'; // 模组自定义样式兜底为缩放
+			}
+			switch (builtin)
+			{
+				case 'zoom':
+					newWidth = Math.round(startWidth * (1 - eased));
+					newHeight = Math.round(startHeight * (1 - eased));
+					newX = centerX - newWidth * 0.5;
+					newY = centerY - newHeight * 0.5;
+
+				case 'drop':
+					newWidth = Math.round(startWidth * (1 - eased));
+					newHeight = Math.round(startHeight * (1 - eased));
+					newX = centerX - newWidth * 0.5;
+					// 下落：先慢后快的重力感
+					var fall:Float = progress * progress;
+					newY = centerY - newHeight * 0.5 + startHeight * fall * 1.2;
+
+				case 'slide':
+					newWidth = Math.round(startWidth * (1 - eased));
+					newHeight = Math.round(startHeight * (1 - eased));
+					newY = centerY - newHeight * 0.5;
+					// 向左滑出屏幕
+					newX = centerX - newWidth * 0.5 - startWidth * eased * 0.7;
+
+				default: // squeeze：先压扁高度，再压扁宽度
+					if (phase == 0)
+					{
+						newHeight = Math.round(startHeight * (1 - eased));
+						newY = centerY - newHeight * 0.5;
+					}
+					else
+					{
+						newWidth = Math.round(startWidth * (1 - eased));
+						newHeight = minSize;
+						newX = centerX - newWidth * 0.5;
+						newY = centerY - newHeight * 0.5;
+					}
+			}
+
+			// ── 模组扩展：onCloseAnimUpdate 逐帧覆盖窗口变换 ──
+			var overrideRet:Dynamic = callCloseAnimUpdate(progress, style, speed);
+			if (overrideRet != null && overrideRet != 0)
+			{
+				newWidth = Std.int(scriptNumField(overrideRet, 'width', newWidth));
+				newHeight = Std.int(scriptNumField(overrideRet, 'height', newHeight));
+				newX = scriptNumField(overrideRet, 'x', newX);
+				newY = scriptNumField(overrideRet, 'y', newY);
+			}
+
+			if (newWidth < minSize) newWidth = minSize;
+			if (newHeight < minSize) newHeight = minSize;
+
+			window.width = newWidth;
+			window.height = newHeight;
+			window.x = Math.round(newX);
+			window.y = Math.round(newY);
+
+			if (progress >= 1)
+			{
+				if (style == 'squeeze' && phase == 0)
+				{
+					// 高度压扁完成，进入宽度段
+					phase = 1;
+					t0 = haxe.Timer.stamp();
+					window.height = minSize;
+				}
+				else
+				{
+					stage.removeEventListener(Event.ENTER_FRAME, onFrame);
+					callCloseAnimEnd(style);
+					allowWindowClose = true;
+					window.close();
+				}
+			}
+		};
+
+		stage.addEventListener(Event.ENTER_FRAME, onFrame);
+	}
+	#end
 
 	/** [TEST] Initialize FlxMouse drag-to-wheel from saved setting. */
 	static function initDragToWheel():Void
@@ -370,12 +692,15 @@ class Main extends Sprite
 				case FilePos(s, file, line, column):
 					stackLines += file + " (line " + line + ")\n";
 				default:
+					#if sys
 					Sys.println(stackItem);
+					#end
 			}
 		}
 
 		var fullMsg:String = stackLines + "\nUncaught Error: " + e.error + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
+		#if sys
 		if (!FileSystem.exists("./crash/"))
 			FileSystem.createDirectory("./crash/");
 
@@ -383,6 +708,7 @@ class Main extends Sprite
 
 		Sys.println(fullMsg);
 		Sys.println("Crash dump saved in " + Path.normalize(path));
+		#end
 
 		// Store crash info for the in-game crash catcher
 		CrashCatcherState.lastCrashMessage = Std.string(e.error);
@@ -422,7 +748,9 @@ class Main extends Sprite
 			#if cpp
 			DiscordClient.shutdown();
 			#end
+			#if sys
 			Sys.exit(1);
+			#end
 		}
 	}
 	#end

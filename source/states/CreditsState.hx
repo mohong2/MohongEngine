@@ -86,6 +86,9 @@ class CreditsState extends MusicBeatState
 			['RiverOaken',			'river',			'Main Artist/Animator of Psych Engine',							'https://twitter.com/RiverOaken',		'B42F71'],
 			['shubs',				'shubs',			'Additional Programmer of Psych Engine',						'https://twitter.com/yoshubs',			'5E99DF'],
 			[''],
+			['Codename Engine Team'],
+			['CodenameCrew',		'none',				'ModState scripting & pack.json mod API design inspiration',	'https://github.com/CodenameCrew',		'7F5FA5'],
+			[''],
 			['Former Engine Members'],
 			['bb-panzu',			'bb',				'Ex-Programmer of Psych Engine',								'https://twitter.com/bbsub3',			'3E813A'],
 			[''],
@@ -93,7 +96,7 @@ class CreditsState extends MusicBeatState
 			['iFlicky',				'flicky',			'Composer of Psync and Tea Time\nMade the Dialogue Sounds',		'https://twitter.com/flicky_i',			'9E29CF'],
 			['SqirraRNG',			'sqirra',			'Crash Handler and Base code for\nChart Editor\'s Waveform',	'https://twitter.com/gedehari',			'E1843A'],
 			['EliteMasterEric',		'mastereric',		'Runtime Shaders support',										'https://twitter.com/EliteMasterEric',	'FFBD40'],
-			['PolybiusProxy',		'proxy',			'.MP4 Video Loader Library (hxCodec)',							'https://twitter.com/polybiusproxy',	'DCD294'],
+			['MAJigsaw77',			'jigsaw',			'.MP4 Video Loader Library (hxvlc)\nhxCodec Compatibility Layer',	'https://github.com/MAJigsaw77/hxvlc',	'5D9CEC'],
 			['KadeDev',				'kade',				'Fixed some cool stuff on Chart Editor\nand other PRs',			'https://twitter.com/kade0912',			'64A250'],
 			['Keoiki',				'keoiki',			'Note Splash Animations',										'https://twitter.com/Keoiki_',			'D2D2D2'],
 			['Nebula the Zorua',	'nebula',			'LUA JIT Fork and some Lua reworks',							'https://twitter.com/Nebula_Zorua',		'7D40B2'],
@@ -159,7 +162,7 @@ class CreditsState extends MusicBeatState
 		bg.color = getCurrentBGColor();
 		intendedColor = bg.color;
 		changeSelection();
-		#if android
+		#if TOUCH_CONTROLS
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 		super.create();
@@ -191,7 +194,7 @@ class CreditsState extends MusicBeatState
 			if(creditsStuff.length > 1)
 			{
 				var shiftMult:Int = 1;
-				if(#if android virtualPad.buttonC.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
+				if(#if TOUCH_CONTROLS virtualPad.buttonC.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 
 				var upP = controls.UI_UP_P;
 				var downP = controls.UI_DOWN_P;

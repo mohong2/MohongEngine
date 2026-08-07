@@ -44,6 +44,8 @@ class CrashCatcherState extends MusicBeatState
 	var btnReturnTxt:FlxText;
 	var btnSave:FlxSprite;
 	var btnSaveTxt:FlxText;
+	var btnCopy:FlxSprite;
+	var btnCopyTxt:FlxText;
 
 	var savedConfirmTxt:FlxText;
 	var instructionsTxt:FlxText;
@@ -68,7 +70,7 @@ class CrashCatcherState extends MusicBeatState
 	var errorViewH:Float = 0;
 
 	// -- Button selection --
-	var selectedButton:Int = 0; // 0 = return, 1 = save
+	var selectedButton:Int = 0; // 0 = return, 1 = save, 2 = copy
 
 	// -- Save countdown (5-second delay) --
 	var saveState:Int = 0; // 0=idle, 1=counting, 2=saving
@@ -264,10 +266,10 @@ class CrashCatcherState extends MusicBeatState
 
 		// -- Buttons --
 		var btnY:Float = Math.min(lowerY + lowerAreaH + 50, FlxG.height - 150);
-		var btnW:Int = 220;
+		var btnW:Int = 190;
 		var btnH:Int = 46;
-		var btnGap:Int = 24;
-		var totalBtnW:Float = btnW * 2 + btnGap;
+		var btnGap:Int = 16;
+		var totalBtnW:Float = btnW * 3 + btnGap * 2;
 		var btnStartX:Float = (FlxG.width - totalBtnW) / 2;
 
 		// Return to menu button
@@ -291,6 +293,17 @@ class CrashCatcherState extends MusicBeatState
 		btnSaveTxt.alpha = 0;
 		add(btnSaveTxt);
 		centerTextOnButton(btnSaveTxt, btnSave);
+
+		// Copy report button
+		btnCopy = createButton(btnStartX + (btnW + btnGap) * 2, btnY, btnW, btnH, FlxColor.fromRGB(80, 110, 150));
+		add(btnCopy);
+
+		btnCopyTxt = new FlxText(0, 0, btnW,
+			Language.get("CrashCatcher.copyReport", "Copy Log"), 20);
+		btnCopyTxt.setFormat(Paths.languageFont(), 20, FlxColor.WHITE, CENTER);
+		btnCopyTxt.alpha = 0;
+		add(btnCopyTxt);
+		centerTextOnButton(btnCopyTxt, btnCopy);
 
 		// Save countdown overlay (hidden by default, only shown when counting)
 		saveCountdownTxt = new FlxText(0, 0, btnW, "", 28);
@@ -341,9 +354,11 @@ class CrashCatcherState extends MusicBeatState
 			FlxTween.tween(btnReturnTxt, {alpha: 1}, 0.35, {ease: FlxEase.quartOut});
 			FlxTween.tween(btnSave, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.05});
 			FlxTween.tween(btnSaveTxt, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.05});
-			FlxTween.tween(reportHintTxt, {alpha: 0.7}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.12});
-			FlxTween.tween(reportUrlTxt, {alpha: 0.8}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.15});
-			FlxTween.tween(instructionsTxt, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.1});
+			FlxTween.tween(btnCopy, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.1});
+			FlxTween.tween(btnCopyTxt, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.1});
+			FlxTween.tween(reportHintTxt, {alpha: 0.7}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.15});
+			FlxTween.tween(reportUrlTxt, {alpha: 0.8}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.18});
+			FlxTween.tween(instructionsTxt, {alpha: 1}, 0.35, {ease: FlxEase.quartOut, startDelay: 0.13});
 		});
 
 		#if android
@@ -500,17 +515,22 @@ class CrashCatcherState extends MusicBeatState
 		{
 			if (controls.UI_LEFT_P || controls.UI_RIGHT_P)
 			{
-				selectedButton = (selectedButton + 1) % 2;
+				selectedButton = (selectedButton + 1) % 3;
 				updateButtonSelection();
 				FlxG.sound.play(Paths.sound('scrollMenu'));
 			}
 
 			if (controls.ACCEPT)
 			{
-				if (selectedButton == 0)
-					returnToMenu();
-				else
-					saveReport();
+				switch (selectedButton)
+				{
+					case 0:
+						returnToMenu();
+					case 1:
+						saveReport();
+					case 2:
+						doCopyLog();
+				}
 			}
 		}
 		else
@@ -547,6 +567,12 @@ class CrashCatcherState extends MusicBeatState
 				updateButtonSelection();
 				saveReport();
 			}
+			else if (FlxG.mouse.overlaps(btnCopy))
+			{
+				selectedButton = 2;
+				updateButtonSelection();
+				doCopyLog();
+			}
 		}
 
 		#if mobile
@@ -555,6 +581,7 @@ class CrashCatcherState extends MusicBeatState
 			var touchPressed:Bool = false;
 			var touchOverReturn:Bool = false;
 			var touchOverSave:Bool = false;
+			var touchOverCopy:Bool = false;
 			for (touch in FlxG.touches.list)
 			{
 				if (touch.justReleased)
@@ -562,6 +589,7 @@ class CrashCatcherState extends MusicBeatState
 					touchPressed = true;
 					if (touch.overlaps(btnReturn)) touchOverReturn = true;
 					if (touch.overlaps(btnSave)) touchOverSave = true;
+					if (touch.overlaps(btnCopy)) touchOverCopy = true;
 				}
 			}
 			if (touchPressed)
@@ -578,6 +606,12 @@ class CrashCatcherState extends MusicBeatState
 					selectedButton = 1;
 					updateButtonSelection();
 					saveReport();
+				}
+				else if (touchOverCopy)
+				{
+					selectedButton = 2;
+					updateButtonSelection();
+					doCopyLog();
 				}
 			}
 		}
@@ -621,6 +655,50 @@ class CrashCatcherState extends MusicBeatState
 			? "> " + saveLabel + " <"
 			: saveLabel;
 		centerTextOnButton(btnSaveTxt, btnSave);
+
+		btnCopyTxt.text = (selectedButton == 2)
+			? "> " + Language.get("CrashCatcher.copyReport", "Copy Log") + " <"
+			: Language.get("CrashCatcher.copyReport", "Copy Log");
+		centerTextOnButton(btnCopyTxt, btnCopy);
+	}
+
+	// ================ Copy the crash log to the clipboard ================
+	function doCopyLog()
+	{
+		try
+		{
+			var report:String = "=== FNF-SeiunEngine Crash Report ===\n";
+			report += "Date: " + Date.now().toString() + "\n";
+			report += "Crash Count: " + crashCount + "\n\n";
+			report += "Device: " + backend.DeviceInfo.summary() + "\n\n";
+			report += "Error:\n" + lastCrashMessage + "\n\n";
+			report += "Stack Trace:\n" + lastCrashStack + "\n";
+
+			// Try to include the full crash dump file if it exists.
+			#if sys
+			if (lastCrashPath != "" && sys.FileSystem.exists(lastCrashPath))
+			{
+				report += "\n--- Full Crash Dump ---\n";
+				report += sys.io.File.getContent(lastCrashPath);
+			}
+			#end
+
+			var ok:Bool = backend.SeiunOverlay.setClipboardText(report);
+
+			savedConfirmTxt.text = ok
+				? Language.get("CrashCatcher.copiedConfirm", "Crash log copied to clipboard!")
+				: Language.get("CrashCatcher.copiedFail", "Could not copy - please use Save Report instead.");
+			savedConfirmTxt.alpha = 1;
+			FlxTween.tween(savedConfirmTxt, {alpha: 0}, 3, {startDelay: 2});
+			FlxG.sound.play(Paths.sound('confirmMenu'));
+		}
+		catch (e:Dynamic)
+		{
+			TraceManager.error('trace.crashCatcher.copyFailed', 'CrashCatcherState - Failed to copy log: {}', [e]);
+			savedConfirmTxt.text = Language.get("CrashCatcher.copiedFail", "Could not copy - please use Save Report instead.");
+			savedConfirmTxt.alpha = 1;
+			FlxTween.tween(savedConfirmTxt, {alpha: 0}, 3, {startDelay: 2});
+		}
 	}
 
 	// ================ Return to main menu ================
@@ -643,6 +721,8 @@ class CrashCatcherState extends MusicBeatState
 		FlxTween.tween(btnReturnTxt, {alpha: 0}, fadeTime);
 		FlxTween.tween(btnSave, {alpha: 0}, fadeTime);
 		FlxTween.tween(btnSaveTxt, {alpha: 0}, fadeTime);
+		FlxTween.tween(btnCopy, {alpha: 0}, fadeTime);
+		FlxTween.tween(btnCopyTxt, {alpha: 0}, fadeTime);
 		FlxTween.tween(saveCountdownTxt, {alpha: 0}, fadeTime);
 		FlxTween.tween(reportHintTxt, {alpha: 0}, fadeTime);
 		FlxTween.tween(reportUrlTxt, {alpha: 0}, fadeTime);
@@ -710,6 +790,7 @@ class CrashCatcherState extends MusicBeatState
 			var report:String = "=== FNF-SeiunEngine Crash Report ===\n";
 			report += "Date: " + Date.now().toString() + "\n";
 			report += "Crash Count: " + crashCount + "\n\n";
+			report += "Device: " + backend.DeviceInfo.summary() + "\n\n";
 			report += "Error:\n" + lastCrashMessage + "\n\n";
 			report += "Stack Trace:\n" + lastCrashStack + "\n";
 			report += "\n--- Replay Data Available ---\n";

@@ -6,11 +6,18 @@ import openfl.events.IOErrorEvent;
 import flash.net.FileFilter;
 
 import haxe.Exception;
+#if !js
 import sys.io.File;
+import sys.FileSystem;
+#end
 import lime.ui.*;
 import mohong.TraceManager;
 
 import flixel.FlxBasic;
+import flixel.FlxG;
+import backend.ui.PsychUIButton;
+import editors.content.Prompt.BasePrompt;
+import Language;
 
 #if android
 import android.Tools as AndroidTools;
@@ -79,6 +86,34 @@ class FileDialogHandler extends FlxBasic
         
         AndroidTools.createDocument(mimeType, _pendingFileName, AndroidTools.REQUEST_CODE_CREATE_DOCUMENT);
         _pendingAndroidRequest = AndroidTools.REQUEST_CODE_CREATE_DOCUMENT;
+        #elseif ios
+        // OpenFL's FileReference.save() is a no-op on iOS (only desktop and
+        // HTML5 implement it), so the native "save" dialog simply never fires
+        // its callbacks. Instead, write directly into the app's Documents
+        // directory (SUtil.getStorageDirectory() on iOS returns
+        // LimeSystem.documentsDirectory).
+        if(fileName == null || fileName.length == 0)
+            fileName = 'chart.json';
+        if(!fileName.contains('.'))
+            fileName += '.json';
+
+        var dir:String = SUtil.getStorageDirectory();
+        if(dir != null && dir.length > 0 && !dir.endsWith('/'))
+            dir += '/';
+        var fullPath:String = dir + fileName;
+        try {
+            if(!FileSystem.exists(dir))
+                FileSystem.createDirectory(dir);
+            sys.io.File.saveContent(fullPath, dataToSave);
+            this.path = fullPath;
+            this.completed = true;
+            TraceManager.info('trace.editor.fileSaved', 'Saved file to: {}', [fullPath]);
+            if(onComplete != null) onComplete();
+        } catch(e:Dynamic) {
+            this.completed = true;
+            TraceManager.error('trace.editor.fileSaveError', 'Save failed: {}', [Std.string(e)]);
+            if(onError != null) onError();
+        }
         #else
         removeEvents();
         _currentEvent = onSaveComplete;
@@ -137,6 +172,91 @@ class FileDialogHandler extends FlxBasic
         _pendingMimeType = mimeTypes;
         AndroidTools.openDocument(mimeTypes, AndroidTools.REQUEST_CODE_OPEN_DOCUMENT);
         _pendingAndroidRequest = AndroidTools.REQUEST_CODE_OPEN_DOCUMENT;
+        #elseif ios
+        // OpenFL's FileReference.browse() is a no-op on iOS. Scan the app's
+        // Documents directory and let the player pick from an in-game list.
+        var dir:String = SUtil.getStorageDirectory();
+        if(dir != null && dir.length > 0 && !dir.endsWith('/'))
+            dir += '/';
+
+        var exts:Array<String> = ['.json', '.osu', '.mc', '.osz', '.mcz'];
+        var files:Array<String> = [];
+        try {
+            if(FileSystem.exists(dir))
+            {
+                for(file in FileSystem.readDirectory(dir))
+                {
+                    var lower:String = file.toLowerCase();
+                    for(ext in exts)
+                    {
+                        if(lower.endsWith(ext))
+                        {
+                            files.push(dir + file);
+                            break;
+                        }
+                    }
+                }
+            }
+        } catch(e:Dynamic) {}
+
+        if(files.length == 1)
+        {
+            var found:String = files[0];
+            this.path = found;
+            this.data = sys.io.File.getContent(found);
+            this.completed = true;
+            TraceManager.info('trace.editor.fileLoaded', 'Loaded file from: {}', [found]);
+            if(onComplete != null) onComplete();
+        }
+        else if(files.length > 1)
+        {
+            // Multiple charts in Documents: show an in-game picker.
+            var sorted:Array<String> = files.copy();
+            sorted.sort(function(a, b) return (a.toLowerCase() < b.toLowerCase()) ? -1 : 1);
+
+            var picker:BasePrompt = new BasePrompt(
+                460,
+                100 + Math.min(sorted.length, 8) * 40 + 60,
+                Language.get('fileDialog_ios_pick', 'Choose a chart from Documents...'),
+                function(state:BasePrompt)
+                {
+                    var btnY:Float = state.bg.y + 50;
+                    var shown:Int = 0;
+                    for(f in sorted)
+                    {
+                        if(shown >= 8) break;
+                        var fname:String = f.substr(f.lastIndexOf('/') + 1);
+                        var btn:PsychUIButton = new PsychUIButton(state.bg.x + 40, btnY, fname, function()
+                        {
+                            state.close();
+                            var picked:String = f;
+                            this.path = picked;
+                            this.data = sys.io.File.getContent(picked);
+                            this.completed = true;
+                            TraceManager.info('trace.editor.fileLoaded', 'Loaded file from: {}', [picked]);
+                            if(onComplete != null) onComplete();
+                        }, 380, 30);
+                        btn.cameras = state.cameras;
+                        state.add(btn);
+                        btnY += 40;
+                        shown++;
+                    }
+                });
+            picker.showCloseButton = true;
+            var st:Dynamic = FlxG.state;
+            if(st != null && Reflect.hasField(st, 'openSubState'))
+                st.openSubState(picker);
+            else
+            {
+                this.completed = true;
+                if(onCancel != null) onCancel();
+            }
+        }
+        else
+        {
+            this.completed = true;
+            if(onCancel != null) onCancel();
+        }
         #else
         removeEvents();
         _currentEvent = onLoadComplete;
@@ -215,18 +335,42 @@ class FileDialogHandler extends FlxBasic
                 
             case OPEN, OPEN_DIRECTORY:
                 if (_pendingAndroidRequest == AndroidTools.REQUEST_CODE_OPEN_DOCUMENT) {
-                    var content = AndroidTools.readTextFromUri(uri);
-                    if (content != null) {
-                        AndroidTools.persistUriPermission(uri);
-                        this.data = content;
-                        this.path = uri;
-                        this.completed = true;
-                        TraceManager.info('trace.editor.fileLoaded', 'Loaded file from: {}', [uri]);
-                        if (onComplete != null) onComplete();
-                    } else {
+                    // Android SAF returns a content:// URI which sys.io.File
+                    // cannot open. Copy it into a local cache path first so
+                    // every consumer (chart editor, converter, ...) gets a
+                    // real filesystem path - this also preserves the original
+                    // file extension (.osz/.mcz/.osu/.mc/json) which callers
+                    // rely on for format detection.
+                    var localPath:String = AndroidTools.copyUriToFile(uri, SUtil.getStorageDirectory() + 'converted/tmp/pick');
+                    if (localPath == null || localPath.length == 0) {
                         this.completed = true;
                         if (onError != null) onError();
+                        return;
                     }
+
+                    this.path = localPath;
+
+                    // For text-based formats (json / osu / mc / cne) also
+                    // expose the decoded content; binary packages (osz/mcz)
+                    // are handled via this.path by the callers.
+                    var lower:String = localPath.toLowerCase();
+                    var isBinary:Bool = lower.endsWith('.osz') || lower.endsWith('.mcz');
+                    if (!isBinary) {
+                        var content = AndroidTools.readTextFromUri(uri);
+                        if (content != null)
+                            this.data = content;
+                        TraceManager.info('trace.editor.androidLoad',
+                            'Android file load: path={} dataLen={} dataHead={}', [
+                            localPath,
+                            (this.data != null ? this.data.length : -1),
+                            (this.data != null && this.data.length > 0 ? this.data.substr(0, 40) : 'NULL')
+                        ]);
+                    }
+
+                    AndroidTools.persistUriPermission(uri);
+                    this.completed = true;
+                    TraceManager.info('trace.editor.fileLoaded', 'Loaded file from: {}', [localPath]);
+                    if (onComplete != null) onComplete();
                 }
         }
         

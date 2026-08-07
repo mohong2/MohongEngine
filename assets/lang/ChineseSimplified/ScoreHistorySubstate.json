@@ -4,6 +4,7 @@
     "ScoreHistorySubstate.accuracy" : "准确率",
     "ScoreHistorySubstate.rating" : "评价",
     "ScoreHistorySubstate.songRating" : "歌曲评级",
+    "ScoreHistorySubstate.marvelouses" : "超完美",
     "ScoreHistorySubstate.sicks" : "完美!",
     "ScoreHistorySubstate.goods" : "不错",
     "ScoreHistorySubstate.bads" : "不好",
@@ -18,7 +19,8 @@
     "ScoreHistorySubstate.replayDataNo" : "不存在",
     "ScoreHistorySubstate.title" : "歌曲历史记录:",
     "ScoreHistorySubstate.emptyMsg" : "暂无历史记录,请在无Practice或BotPlay模式下进行游戏记录历史记录",
-    "ScoreHistorySubstate.judgeWindows": "判定区间 完美/不错/不好/帧",
+    "ScoreHistorySubstate.judgeWindows": "判定类型 / 区间",
+    "ScoreHistorySubstate.custom" : "自定义",
     "ScoreHistorySubstate.replayDifficultyLock" : "回放模式下不允许调整难度.",
     "ScoreHistorySubstate.instructions": "上/下: 选择  |  ENTER: 播放  |  RESET: 删除  |  ESC: 返回"
 }

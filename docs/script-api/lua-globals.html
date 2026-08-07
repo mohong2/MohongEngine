@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lua · Globals — SeiunEngine Script API</title>
+<link rel="stylesheet" href="style.css"><script src="app.js"></script>
+</head>
+<body>
+<nav class="nav"><div class="nav-inner">
+  <span class="nav-brand" data-i18n="nav.brand">SeiunEngine · Script API</span>
+  <div class="nav-links">
+    <a href="index.html">Home</a>
+    <a href="engine-states.html">States</a>
+    <a href="lua-functions-1.html">Lua I</a>
+    <a href="lua-functions-2.html">Lua II</a>
+    <a href="hscript-environment.html">HScript</a>
+    <a href="modding-advanced.html">Modding</a>
+  </div>
+  <div class="lang-toggle" data-lang-toggle></div>
+</div></nav>
+
+<div class="wrap">
+  <div class="badge" data-i18n="lg.badge">Lua</div>
+  <h1 data-i18n="lg.title">Lua Global Variables</h1>
+  <p class="sub" data-i18n="lg.sub">Directly usable variables.</p>
+
+  <div class="note" data-i18n="lg.note">Mirror live game state.</div>
+
+  <h2 data-i18n="lg.h_gen">General / return flags</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th data-i18n="lg.col_var">Variable</th><th data-i18n="lg.col_notes">Notes</th></tr></thead><tbody>
+      <tr><td class="fn">Function_Stop · Function_Continue · Function_StopLua · Function_StopHScript · Function_StopAll</td><td data-i18n="lg.flags.desc">Return flags.</td></tr>
+      <tr><td class="fn">luaDebugMode · luaDeprecatedWarnings</td><td data-i18n="lg.debug.desc">Debug toggles.</td></tr>
+      <tr><td class="fn">inChartEditor</td><td data-i18n="lg.chart.desc">In chart editor?</td></tr>
+      <tr><td class="fn">luaVersion</td><td data-i18n="lg.luav.desc">Lua version.</td></tr>
+      <tr><td class="fn">hscriptVersion</td><td data-i18n="lg.hscriptv.desc">HScript version.</td></tr>
+      <tr><td class="fn">language</td><td data-i18n="lg.language.desc">Language.</td></tr>
+      <tr><td class="fn">version</td><td data-i18n="lg.version.desc">Engine Psych version.</td></tr>
+      <tr><td class="fn">buildTarget</td><td data-i18n="lg.build.desc">Build target.</td></tr>
+      <tr><td class="fn">scriptName · currentModDirectory</td><td data-i18n="lg.script.desc">Script / mod id.</td></tr>
+      <tr><td class="fn">screenWidth · screenHeight</td><td data-i18n="lg.screen.desc">Screen size.</td></tr>
+      <tr><td class="fn">luattf <span class="pill pse" data-i18n="tag.seiun">SEIUN</span></td><td data-i18n="lg.ttf.desc">Font style.</td></tr>
+    </tbody></table>
+  </div>
+
+  <h2 data-i18n="lg.h_song">Song / game state</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th data-i18n="lg.col_var">Variable</th><th data-i18n="lg.col_notes">Notes</th></tr></thead><tbody>
+      <tr><td class="fn">curBpm · bpm · crochet · stepCrochet</td><td data-i18n="lg.bpm.desc">BPM &amp; timing.</td></tr>
+      <tr><td class="fn">scrollSpeed</td><td data-i18n="lg.speed.desc">Scroll speed.</td></tr>
+      <tr><td class="fn">songLength · songName · songPath</td><td data-i18n="lg.songinfo.desc">Song info.</td></tr>
+      <tr><td class="fn">startedCountdown</td><td data-i18n="lg.count.desc">Countdown started?</td></tr>
+      <tr><td class="fn">curStage</td><td data-i18n="lg.stage.desc">Stage.</td></tr>
+      <tr><td class="fn">compatibility_mode</td><td data-i18n="lg.compat.desc">Compat mode.</td></tr>
+      <tr><td class="fn">isStoryMode · difficulty · difficultyName · difficultyPath</td><td data-i18n="lg.mode.desc">Mode / difficulty.</td></tr>
+      <tr><td class="fn">weekRaw · week · seenCutscene</td><td data-i18n="lg.week.desc">Week / cutscene.</td></tr>
+      <tr><td class="fn">score · misses · hits</td><td data-i18n="lg.score.desc">Score data.</td></tr>
+      <tr><td class="fn">rating · ratingName · ratingFC</td><td data-i18n="lg.rating.desc">Rating.</td></tr>
+      <tr><td class="fn">inGameOver</td><td data-i18n="lg.gameover.desc">Game over?</td></tr>
+      <tr><td class="fn">mustHitSection · altAnim · gfSection</td><td data-i18n="lg.section.desc">Section flags.</td></tr>
+      <tr><td class="fn">healthGainMult · healthLossMult · playbackRate · instakillOnMiss</td><td data-i18n="lg.mod.desc">Modifiers.</td></tr>
+      <tr><td class="fn">botPlay · practice</td><td data-i18n="lg.bot.desc">Bot / practice.</td></tr>
+      <tr><td class="fn">hasVocals</td><td data-i18n="lg.vocals.desc">Has vocals?</td></tr>
+      <tr><td class="fn">curSection · combo · curBeat · curStep · curDecBeat · curDecStep</td><td data-i18n="lg.counters.desc">Section / combo / beat.</td></tr>
+      <tr><td class="fn">defaultBoyfriendX/Y · defaultOpponentX/Y · defaultGirlfriendX/Y</td><td data-i18n="lg.defaultcoords.desc">Default coords.</td></tr>
+      <tr><td class="fn">boyfriendName · dadName · gfName</td><td data-i18n="lg.names.desc">Character names.</td></tr>
+      <tr><td class="fn">defaultPlayerStrumX/Y[0-3] · defaultOpponentStrumX/Y[0-3]</td><td data-i18n="lg.strum.desc">Default strum.</td></tr>
+    </tbody></table>
+  </div>
+
+  <h2 data-i18n="lg.h_settings">Player settings</h2>
+  <div class="table-wrap">
+    <table><thead><tr><th data-i18n="lg.col_var">Variable</th><th data-i18n="lg.col_notes">Notes</th></tr></thead><tbody>
+      <tr><td class="fn">downscroll · middlescroll · ghostTapping</td><td data-i18n="lg.scrollmode.desc">Scroll modes.</td></tr>
+      <tr><td class="fn">framerate · noteOffset</td><td data-i18n="lg.fps.desc">FPS / offset.</td></tr>
+      <tr><td class="fn">hideHud · healthBarAlpha · timeBarType</td><td data-i18n="lg.hud.desc">HUD options.</td></tr>
+      <tr><td class="fn">scoreZoom · cameraZoomOnBeat · flashingLights · lowQuality · shadersEnabled</td><td data-i18n="lg.visual.desc">Visual toggles.</td></tr>
+      <tr><td class="fn">noResetButton · guitarHeroSustains</td><td data-i18n="lg.misc.desc">Misc.</td></tr>
+      <tr><td class="fn">noteSkin · splashSkin · splashAlpha · noteSkinPostfix · splashSkinPostfix</td><td data-i18n="lg.skins.desc">Skins.</td></tr>
+    </tbody></table>
+  </div>
+
+  <pre><code><span class="kw">function</span> onCreatePost()
+    <span class="kw">local</span> spd = scrollSpeed
+    <span class="kw">if</span> luattf == <span class="st">"Chinese TTF"</span> <span class="kw">then</span> <span class="cm">-- engine branch for bilingual font</span> <span class="kw">end</span>
+<span class="kw">end</span></code></pre>
+
+  <div class="btns">
+    <a class="btn ghost" href="lua-functions-2.html" data-i18n="module.f2.title">← Functions II</a>
+    <a class="btn primary" href="hscript-quickstart.html" data-i18n="module.hq.title">Next: HScript Quickstart</a>
+  </div>
+</div>
+</body>
+</html>

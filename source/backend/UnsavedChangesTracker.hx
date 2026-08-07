@@ -108,7 +108,7 @@ class UnsavedChangesTracker
 
         // Use native Windows dialog (synchronous)
         var confirmed:Bool;
-        #if (cpp && !android)
+        #if (cpp && windows)
         confirmed = mohong.Windows.showYesNoMessageBox(title, message);
         #else
         confirmed = true;

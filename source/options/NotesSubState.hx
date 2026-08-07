@@ -33,6 +33,8 @@ class NotesSubState extends MusicBeatSubstate
 
 	var blackBG:FlxSprite;
 	var hsbText:FlxTextMenuItem;
+	/** 多k: 每个槽位相对基底纹理的 ColorSwap 色差 (与 EKData.getLaneColorSwap 一致)。 */
+	var shaderDelta:Array<Array<Float>> = [];
 
 	var posX = 230;
 	public function new() {
@@ -68,6 +70,7 @@ class NotesSubState extends MusicBeatSubstate
 
 	var changingNote:Bool = false;
 	var switchingNote:Bool = false;
+	var centerShaderSlot:Int = 1;
 	override function update(elapsed:Float) {
 		if(changingNote) {
 			if(holdTime < 0.5) {
@@ -176,21 +179,26 @@ class NotesSubState extends MusicBeatSubstate
 		{
 			var note = new FlxSprite(d.x, d.y);
 			note.frames = Paths.getSparrowAtlas('NOTE_assets');
-			note.animation.addByPrefix('idle', animations[d.idx]);
+			// 多k: 9 色轨道复用 4 个基底纹理 (A~I -> left/down/up/right), 颜色靠 ColorSwap 推导
+			var baseTex:Int = EKData.getBaseTexture(8, d.idx);
+			note.animation.addByPrefix('idle', animations[baseTex]);
 			note.animation.play('idle');
 			note.antialiasing = ClientPrefs.data.globalAntialiasing;
 			note.scale.set(d.scale, d.scale);
 			note.alpha = d.alpha;
 			grpNotes.add(note);
 
+			var delta:Array<Float> = EKData.getLaneColorSwap(8, d.idx);
+			shaderDelta.push(delta);
 			var shader = new ColorSwap();
 			note.shader = shader.shader;
-			shader.hue = ClientPrefs.data.arrowHSV[d.idx][0] / 360;
-			shader.saturation = ClientPrefs.data.arrowHSV[d.idx][1] / 100;
-			shader.brightness = ClientPrefs.data.arrowHSV[d.idx][2] / 100;
+			shader.hue = delta[0] + ClientPrefs.data.arrowHSV[d.idx][0] / 360;
+			while (shader.hue < 0) shader.hue += 1;
+			while (shader.hue >= 1) shader.hue -= 1;
+			shader.saturation = delta[1] + ClientPrefs.data.arrowHSV[d.idx][1] / 100;
+			shader.brightness = delta[2] + ClientPrefs.data.arrowHSV[d.idx][2] / 100;
 			shaderArray.push(shader);
 		}
-
 		// HSV 文字（在当前 Note 下方）
 		for (j in 0...3) {
 			var optionText:FlxTextMenuItem = new FlxTextMenuItem(posX + (225 * j) + 250, centerY + 60, Std.string(ClientPrefs.data.arrowHSV[curSelected][j]), 48);
@@ -207,21 +215,27 @@ class NotesSubState extends MusicBeatSubstate
 		var animations:Array<String> = ['purple0', 'blue0', 'green0', 'red0'];
 		if (mapping == null)
 			mapping = [getPrevIndex(curSelected), curSelected, getNextIndex(curSelected)];
-
 		for (i in 0...3)
 		{
 			if (i >= grpNotes.members.length) break;
 			var note = grpNotes.members[i];
 			var idx = mapping[i];
-			note.animation.addByPrefix('idle', animations[idx]);
+			var baseTex:Int = EKData.getBaseTexture(8, idx);
+			note.animation.addByPrefix('idle', animations[baseTex]);
 			note.animation.play('idle');
 			if (i < shaderArray.length) {
 				var s = shaderArray[i];
-				s.hue = ClientPrefs.data.arrowHSV[idx][0] / 360;
-				s.saturation = ClientPrefs.data.arrowHSV[idx][1] / 100;
-				s.brightness = ClientPrefs.data.arrowHSV[idx][2] / 100;
+				var delta:Array<Float> = EKData.getLaneColorSwap(8, idx);
+				shaderDelta[i] = delta;
+				s.hue = delta[0] + ClientPrefs.data.arrowHSV[idx][0] / 360;
+				while (s.hue < 0) s.hue += 1;
+				while (s.hue >= 1) s.hue -= 1;
+				s.saturation = delta[1] + ClientPrefs.data.arrowHSV[idx][1] / 100;
+				s.brightness = delta[2] + ClientPrefs.data.arrowHSV[idx][2] / 100;
 			}
 		}
+		centerShaderSlot = mapping.indexOf(curSelected);
+		if (centerShaderSlot < 0) centerShaderSlot = 1;
 
 		// 更新中心 Note 对应的 HSV 文字（mapping[1] 是当前居中的 Note 索引）
 		var centerIdx = (mapping.length >= 3) ? mapping[1] : curSelected;
@@ -262,6 +276,7 @@ class NotesSubState extends MusicBeatSubstate
 		if (curSelected < 0) curSelected = ClientPrefs.data.arrowHSV.length - 1;
 		if (curSelected >= ClientPrefs.data.arrowHSV.length) curSelected = 0;
 
+		centerShaderSlot = change < 0 ? 0 : 2;
 		curValue = ClientPrefs.data.arrowHSV[curSelected][typeSelected];
 		updateValue();
 
@@ -353,11 +368,15 @@ class NotesSubState extends MusicBeatSubstate
 		curValue = 0;
 		ClientPrefs.data.arrowHSV[selected][type] = 0;
 		// 更新中心 Note 的 shader
-		if (shaderArray.length > 1) {
+		if (centerShaderSlot < shaderArray.length) {
 			switch(type) {
-				case 0: shaderArray[1].hue = 0;
-				case 1: shaderArray[1].saturation = 0;
-				case 2: shaderArray[1].brightness = 0;
+				case 0:
+					var hue:Float = shaderDelta[centerShaderSlot][0];
+					while (hue < 0) hue += 1;
+					while (hue >= 1) hue -= 1;
+					shaderArray[centerShaderSlot].hue = hue;
+				case 1: shaderArray[centerShaderSlot].saturation = shaderDelta[centerShaderSlot][1];
+				case 2: shaderArray[centerShaderSlot].brightness = shaderDelta[centerShaderSlot][2];
 			}
 		}
 		if (type < grpNumbers.length) {
@@ -378,11 +397,15 @@ class NotesSubState extends MusicBeatSubstate
 		ClientPrefs.data.arrowHSV[curSelected][typeSelected] = roundedValue;
 
 		// 实时更新中心 Note 颜色（shaderArray[1] = 中央 Note）
-		if (shaderArray.length > 1) {
+		if (centerShaderSlot < shaderArray.length) {
 			switch(typeSelected) {
-				case 0: shaderArray[1].hue = roundedValue / 360;
-				case 1: shaderArray[1].saturation = roundedValue / 100;
-				case 2: shaderArray[1].brightness = roundedValue / 100;
+				case 0:
+					var hue:Float = shaderDelta[centerShaderSlot][0] + roundedValue / 360;
+					while (hue < 0) hue += 1;
+					while (hue >= 1) hue -= 1;
+					shaderArray[centerShaderSlot].hue = hue;
+				case 1: shaderArray[centerShaderSlot].saturation = shaderDelta[centerShaderSlot][1] + roundedValue / 100;
+				case 2: shaderArray[centerShaderSlot].brightness = shaderDelta[centerShaderSlot][2] + roundedValue / 100;
 			}
 		}
 		if (typeSelected < grpNumbers.length) {

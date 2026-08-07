@@ -2,7 +2,7 @@
 <project>
 	<!-- _________________________ Application Settings _________________________ -->
 
-	<app title="SeiunEngine" file="SeiunEngine" packageName="com.mohong.Seiunengine" package="com.mohong.Seiunengine" main="Main" version="0.2.8" company="Mohong"/>
+	<app title="SeiunEngine" file="SeiunEngine" packageName="com.mohong.Seiunengine" package="com.mohong.Seiunengine" main="Main" version="0.2.1" company="Mohong"/>
 
 	<!--Switch Export with Unique ApplicationID and Icon-->
 	<set name="APP_ID" value="0x0100f6c013bbc000" />
@@ -44,11 +44,12 @@
 	<classpath name="source" />
 	
 	<!-- PSYCH ENGINE CUSTOMIZATION -->
-	<define name="MODS_ALLOWED" if="desktop || android" />
-	<define name="LUA_ALLOWED" if="desktop || android" />
-	<define name="HSCRIPT_ALLOWED" if="desktop || android" />
+	<define name="TOUCH_CONTROLS" if="android || ios" />
+	<define name="MODS_ALLOWED" if="desktop || mobile" />
+	<define name="LUA_ALLOWED" if="desktop || mobile" />
+	<define name="HSCRIPT_ALLOWED" if="desktop || mobile" />
 	<define name="ACHIEVEMENTS_ALLOWED" />
-	<define name="VIDEOS_ALLOWED" if="web || windows || android" unless="32bits"/>
+	<define name="VIDEOS_ALLOWED" if="web || windows || linux || mac || android || ios" unless="32bits"/>
 	<define name="PSYCH_WATERMARKS"/>
 	<define name="DARKMODE" if="desktop" />
 	<define name="CRASH_HANDLER"/>
@@ -78,13 +79,13 @@
 	
 	<section if="NO_PRELOAD_ALL">
 		<library name="songs"         preload="true" />
-		<library name="shared"        preload="false" />
-		<library name="week2"         preload="false" />
-		<library name="week3"         preload="false" />
-		<library name="week4"         preload="false" />
-		<library name="week5"         preload="false" />
-		<library name="week6"         preload="false" />
-		<library name="week7"         preload="false" />
+		<library name="shared"        preload="true" />
+		<library name="week2"         preload="true" />
+		<library name="week3"         preload="true" />
+		<library name="week4"         preload="true" />
+		<library name="week5"         preload="true" />
+		<library name="week6"         preload="true" />
+		<library name="week7"         preload="true" />
 	</section>
 	
 	<assets path="assets/videos"        library="videos"        if="VIDEOS_ALLOWED"/>
@@ -134,7 +135,7 @@
 	<!--In case you want to use the ui package-->
 	<haxelib name="flixel-ui" />
 	<haxelib name="linc_luajit" if="LUA_ALLOWED"/>
-	<haxelib name="hxCodec" if="desktop || android"/>
+	<haxelib name="hxvlc" if="desktop || android || ios"/>
 	<haxelib name="faxe" if='switch'/>
 	<haxelib name="tjson"/>
 	<haxelib name="extension-androidtools" if="android" />
@@ -175,9 +176,6 @@
 	<!--Allow working memory greater than 1 Gig-->
 	<!--haxedef name="HXCPP_GC_BIG_BLOCKS"-->
 	
-	<!-- Show debug traces for hxCodec -->
-	<haxedef name="HXC_DEBUG_TRACE" if="debug" />
-	
 	<!--Disable the Flixel core debugger. Automatically gets set whenever you compile in release mode!-->
 	<haxedef name="FLX_NO_DEBUG" unless="debug" />
 
@@ -211,7 +209,20 @@
 	<!--Notifications for Android 13+ (API 33+)-->
 	<config:android permission="android.permission.POST_NOTIFICATIONS" if="android"/>
 
+	<!--Floating keyboard button (SeiunOverlay): lets players summon the soft
+		keyboard anywhere - TYPE_APPLICATION_OVERLAY requires this special
+		permission, which is granted from the system settings page.-->
+	<config:android permission="android.permission.SYSTEM_ALERT_WINDOW" if="android"/>
+	<config:android extension="org.haxe.extension.SeiunOverlay" if="android"/>
+
 	<config:android gradle-version="6.7.1"/>
+	<!-- Android 15 crash investigation: targetSdk lowered back to 28.
+	     compileSdk stays 30 (see templates/android/template/gradle.properties)
+	     because extension-androidtools uses API 29+ constants. -->
+	<config:android target-sdk-version="28" />
+	<config:android gradle-plugin="4.1.3" />
+	<!-- 34.0.0 lacks dx.bat (AGP 4.x validation fails); 30.0.3 is complete -->
+	<config:android build-tools-version="30.0.3" />
 
 	<certificate path="key.keystore" password="mohong" alias="SeiunEngine" alias-password="mohong" if="android" unless="debug" />
 

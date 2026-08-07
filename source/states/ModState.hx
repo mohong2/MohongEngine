@@ -23,7 +23,11 @@ import script.hscript.HScript;
  * Also hosts the static state‑replacement system that lets mods redirect
  * built‑in states (e.g. `TitleState`) to a ModState backed by a script.
  *
- * Modeled after Codename Engine's ModState.
+ * The state-scripting concept and `stateReplacements` API are modeled
+ * after Codename Engine's ModState (CodenameCrew). This implementation
+ * is original and extended (window title/icon, mod-select, tracing, etc.).
+ * Seiun Engine is a Psych Engine fork and does not distribute Codename
+ * Engine source code.
  */
 class ModState extends MusicBeatState
 {
@@ -63,13 +67,20 @@ class ModState extends MusicBeatState
 			// mods (runsGlobally) remain active even when the user switches to
 			// vanilla or a different mod.
 			Paths.currentModDirectory = '';
+			#if HSCRIPT_ALLOWED
+			HScript.reloadGlobalScripts();
+			#end
 			return;
 		}
 
 		var cfg:ModConfig = ModConfig.load(modFolder);
 		if (cfg == null || (cfg.name.length == 0 && cfg.windowTitle.length == 0 && cfg.iconPath.length == 0
 			&& !cfg.stateReplacements.keys().hasNext() && !cfg.substateReplacements.keys().hasNext())) {
-			restoreWindowTitle(); return;
+			restoreWindowTitle();
+			#if HSCRIPT_ALLOWED
+			HScript.reloadGlobalScripts();
+			#end
+			return;
 		}
 
 		// ── Load dependencies first ──
@@ -247,6 +258,7 @@ class ModState extends MusicBeatState
 		// If replacingStateName wasn't set by resolveState() (e.g. this ModState
 		// was created directly from a script like mTitleState.hx), auto-detect
 		// it by looking up lastName in the stateReplacements values.
+		#if MODS_ALLOWED
 		if (replacingStateName == null && lastName != null) {
 			for (orig => cust in stateReplacements) {
 				if (cust == lastName) {
@@ -255,6 +267,7 @@ class ModState extends MusicBeatState
 				}
 			}
 		}
+		#end
 		super.create();
 		#if LUA_ALLOWED
 		initLuaScripts();

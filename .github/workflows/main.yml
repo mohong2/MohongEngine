@@ -1,146 +1,195 @@
-# This is a basic workflow to help you get started with Actions
-
 name: Build
 
-# Controls when the action will run.
+# ============================================================================
+# SeiunEngine 构建流（私有仓库友好）
+#
+# 触发时机：
+#   - push 到 main
+#   - 针对 main 的 pull_request
+#   - 手动触发（Actions 页面 -> Run workflow）
+#
+# 私有仓库注意事项：
+#   - 仓库本身是私有时，Actions 照常工作（Free 套餐每月 2000 分钟）。
+#   - checkout 当前仓库不需要任何配置（自动使用 GITHUB_TOKEN）。
+#   - 如果 hmm.json 里的某个依赖指向“另一个私有仓库”
+#     （例如把 hxvlc-local 推到 GitHub 私有仓库后改 url），
+#     需要在仓库 Settings -> Secrets and variables -> Actions 里配置
+#     GH_PAT（fine-grained PAT，只读目标仓库即可），下面的
+#     “Authenticate git for private haxelib deps”步骤会自动生效。
+#     详见 docs/github-actions-private-repos.md。
+#   - macOS runner 按 10 倍额度计费，默认只在手动触发时构建 mac。
+# ============================================================================
+
 on:
-  # Triggers the workflow on push or pull request events but only for the master branch
   push:
     branches: [ main ]
   pull_request:
     branches: [ main ]
-
-  # Allows you to run this workflow manually from the Actions tab
   workflow_dispatch:
 
-# A workflow run is made up of one or more jobs that can run sequentially or in parallel
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  HAXE_VERSION: "4.2.5"
+
 jobs:
-  # This workflow contains a single job called "build"
   buildLinux:
-    # The type of runner that the job will run on
+    name: Build Linux
     runs-on: ubuntu-latest
-
-    # Steps represent a sequence of tasks that will be executed as part of the job
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: krdlab/setup-haxe@master
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2.1.0
         with:
-          haxe-version: 4.2.5
-      # Runs a set of commands using the runners shell
-      - name: Install Haxelib
+          haxe-version: ${{ env.HAXE_VERSION }}
+          # 按 hmm.json 的内容哈希缓存 haxelib 仓库，命中后跳过几百 MB 下载
+          cache-dependency-path: hmm.json
+
+      - name: Install system dependencies
         run: |
-          sudo apt-get install libvlc-dev
-          sudo apt-get install libvlccore-dev
+          sudo apt-get update
+          sudo apt-get install -y libvlc-dev libvlccore-dev libpulse0 zenity \
+            libgl1-mesa-dev libglu1-mesa-dev libx11-dev
+
+      - name: Authenticate git for private haxelib deps (optional)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+          fi
+
+      - name: Install haxelib dependencies (hmm.json)
+        run: |
           haxelib setup ~/haxelib
-          haxelib install hxcpp > /dev/null
-          haxelib install lime
-          haxelib install openfl
-          haxelib --never install flixel
-          haxelib run lime setup flixel
-          haxelib run lime setup
-          haxelib install flixel-tools
-          haxelib install flixel-ui
-          haxelib install flixel-addons
-          haxelib install tjson
-          haxelib install hxjsonast
-          haxelib install hxCodec
-          haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit
-          haxelib install hscript
-          haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc
-          haxelib install hxcpp-debug-server
-          haxelib list
-      - name: Create Version Tag
-        run: echo "${{github.run_id}}" > VERSION
+          haxe -cp ./setup -main Main --interp
+          haxelib fixrepo
+
+      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Read app version from Project.xml
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
       - name: Compile
-        run: haxelib run lime build Project.xml linux --app-version="4.0.0-${{ github.run_id}}"
-      - name: Publish Artifact
-        uses: actions/upload-artifact@v2.2.4
+        run: haxelib run lime build linux --app-version="$APP_VERSION-${{ github.run_id }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: linuxBuild
-          path: 'export/release/linux/bin'
+          name: SeiunEngine-linux
+          path: export/release/linux/bin
+          if-no-files-found: error
+          retention-days: 14
+
   buildWindows:
+    name: Build Windows
     runs-on: windows-latest
-
     steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2.3.0
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - uses: krdlab/setup-haxe@master
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2.1.0
         with:
-          haxe-version: 4.2.5
-      # Runs a set of commands using the runners shell
-      - name: Install Haxelib
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Authenticate git for private haxelib deps (optional)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
         run: |
-          haxelib setup C:/haxelib
-          haxelib install hxcpp > nul
-          haxelib install lime
-          haxelib install openfl
-          haxelib --never install flixel
-          haxelib run lime setup flixel
-          haxelib run lime setup
-          haxelib install flixel-tools
-          haxelib install flixel-ui
-          haxelib install flixel-addons
-          haxelib install tjson
-          haxelib install hxjsonast
-          haxelib install hxCodec
-          haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit
-          haxelib install hscript
-          haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc
-          haxelib install hxcpp-debug-server
-          haxelib list
-        shell: cmd
-      - name: Create Version Tag
-        run: echo "${{github.run_id}}" > VERSION
-      - name: Compile
-        run: haxelib run lime build windows --app-version="4.0.0-${{ github.run_id}}"
-      - name: Publish Artifact
-        uses: actions/upload-artifact@v2.2.4
-        with:
-          name: windowsBuild
-          path: export/release/windows/bin
-  buildMac:
-    runs-on: macos-latest
+          if ($env:GH_PAT) {
+            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GH_PAT"))
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $b64"
+          }
 
-    steps:
-      # Checks-out your repository under $GITHUB_WORKSPACE, so your job can access it
-      - uses: actions/checkout@v2
-
-      - uses: krdlab/setup-haxe@master
-        with:
-          haxe-version: 4.2.5
-      # Runs a set of commands using the runners shell
-      - name: Install Haxelib
+      - name: Install haxelib dependencies (hmm.json)
         run: |
           haxelib setup ~/haxelib
-          haxelib install hxcpp > /dev/null
-          haxelib install lime
-          haxelib install openfl
-          haxelib --never install flixel
-          haxelib run lime setup flixel
-          haxelib run lime setup
-          haxelib install flixel-tools
-          haxelib install flixel-ui
-          haxelib install flixel-addons
-          haxelib install tjson
-          haxelib install hxjsonast
-          haxelib install hxCodec
-          haxelib git linc_luajit https://github.com/nebulazorua/linc_luajit
-          haxelib install hscript
-          haxelib git hscript-ex https://github.com/ianharrigan/hscript-ex
-          haxelib git discord_rpc https://github.com/Aidan63/linc_discord-rpc
-          haxelib install hxcpp-debug-server
-          haxelib list
-      - name: Create Version Tag
-        run: echo "${{github.run_id}}" > VERSION
+          haxe -cp ./setup -main Main --interp
+          haxelib fixrepo
+
+      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Read app version from Project.xml
+        run: |
+          $v = ([xml](Get-Content Project.xml)).project.app.version
+          "APP_VERSION=$v" | Out-File -FilePath $env:GITHUB_ENV -Append
+
       - name: Compile
-        run: haxelib run lime build mac --app-version="4.0.0-${{ github.run_id}}"
-      - name: Publish Artifact
-        uses: actions/upload-artifact@v2.2.4
+        run: haxelib run lime build windows --app-version="$env:APP_VERSION-${{ github.run_id }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: macBuild
-          path: export/release/macos/bin
+          name: SeiunEngine-windows
+          path: export/release/windows/bin
+          if-no-files-found: error
+          retention-days: 14
+
+  buildMac:
+    name: Build macOS
+    # linc_luajit 自带的 macOS 预编译库是 x86_64 架构，
+    # 因此必须用 Intel 版 runner；arm64 runner 链接会报架构不匹配。
+    # macos-15-intel 是官方标签，可用到 2027 年 8 月（之后 Actions 不再提供 x86_64）。
+    # macOS runner 按 10 倍额度计费，默认只在“手动触发”时构建；
+    # 想每次 push 都构建，删掉下面这一行 if 即可。
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: macos-15-intel
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Haxe
+        uses: krdlab/setup-haxe@v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Authenticate git for private haxelib deps (optional)
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          if [ -n "$GH_PAT" ]; then
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+          fi
+
+      - name: Install haxelib dependencies (hmm.json)
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+          haxelib fixrepo
+
+      - name: Init discord_rpc submodules (haxelib git does not fetch them)
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Read app version from Project.xml
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+      - name: Compile
+        run: haxelib run lime build mac --app-version="$APP_VERSION-${{ github.run_id }}"
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: SeiunEngine-mac
+          path: export/release/mac/bin
+          if-no-files-found: error
+          retention-days: 14
