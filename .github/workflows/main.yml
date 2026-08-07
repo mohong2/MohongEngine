@@ -44,13 +44,15 @@ jobs:
         run: |
           if [ -n "$GH_PAT" ]; then
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            echo 'git auth configured (GH_PAT found)'
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
           fi
 
       - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
-          haxelib fixrepo
 
       - name: Init discord_rpc submodules
         run: |
@@ -89,13 +91,15 @@ jobs:
           if ($env:GH_PAT) {
             $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("x-access-token:$env:GH_PAT"))
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $b64"
+            Write-Output 'git auth configured (GH_PAT found)'
+          } else {
+            Write-Output '::warning::GH_PAT not set - private deps will fail'
           }
 
       - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
-          haxelib fixrepo
 
       - name: Init discord_rpc submodules
         run: |
@@ -139,6 +143,9 @@ jobs:
         run: |
           if [ -n "$GH_PAT" ]; then
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            echo 'git auth configured (GH_PAT found)'
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
           fi
 
       - name: Install Android SDK components
@@ -156,7 +163,6 @@ jobs:
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
-          haxelib fixrepo
 
       - name: Init discord_rpc submodules
         run: |
@@ -206,13 +212,15 @@ jobs:
         run: |
           if [ -n "$GH_PAT" ]; then
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            echo 'git auth configured (GH_PAT found)'
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
           fi
 
       - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
-          haxelib fixrepo
 
       - name: Init discord_rpc submodules
         run: |
@@ -252,13 +260,15 @@ jobs:
         run: |
           if [ -n "$GH_PAT" ]; then
             git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $(printf '%s' "x-access-token:${GH_PAT}" | base64)"
+            echo 'git auth configured (GH_PAT found)'
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
           fi
 
       - name: Install haxelib dependencies
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
-          haxelib fixrepo
 
       - name: Init discord_rpc submodules
         run: |
