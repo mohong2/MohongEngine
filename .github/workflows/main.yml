@@ -4,11 +4,20 @@ name: Build
 # hmm.json 指向 mohong2 名下的私有 fork，需在仓库 secrets 里配置 GH_PAT（只读）。
 
 on:
-  push:
-    branches: [ main ]
-  pull_request:
-    branches: [ main ]
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 要构建的平台（all = 全部）
+        required: true
+        default: all
+        type: choice
+        options:
+          - all
+          - linux
+          - windows
+          - android
+          - macos
+          - ios
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -23,6 +32,7 @@ env:
 jobs:
   buildLinux:
     name: Build Linux
+    if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'linux'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -80,6 +90,7 @@ jobs:
 
   buildWindows:
     name: Build Windows
+    if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'windows'
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -134,6 +145,7 @@ jobs:
 
   buildAndroid:
     name: Build Android
+    if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'android'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -212,14 +224,14 @@ jobs:
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: SeiunEngine-android
-          path: export/release/android/bin
+          path: export/release/android/bin/app/build/outputs/apk/release/*.apk
           if-no-files-found: error
           retention-days: 14
 
   buildMac:
     name: Build macOS
-    # linc_luajit 预编译库仅 x86_64，须用 Intel runner；macOS 10x 计费，仅手动触发
-    if: github.event_name == 'workflow_dispatch'
+    # linc_luajit 预编译库仅 x86_64，须用 Intel runner；macOS 10x 计费
+    if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'macos'
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -272,7 +284,7 @@ jobs:
   buildIOS:
     name: Build iOS (simulator)
     # 模拟器构建无需签名；真机 .ipa 需 Apple 证书（另行配置 secret）
-    if: github.event_name == 'workflow_dispatch'
+    if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios'
     runs-on: macos-15-intel
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
