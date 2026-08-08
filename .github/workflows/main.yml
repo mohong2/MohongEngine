@@ -264,9 +264,8 @@ jobs:
 
       - name: Patch hxcpp zlib for modern macOS SDK
         run: |
-          ZUTIL="$HOME/haxelib/hxcpp/4,2,1/project/thirdparty/zlib-1.2.11/zutil.h"
-          sed -i.bak '/# *define fdopen(fd,mode) NULL/d' "$ZUTIL"
-          ! grep -q 'define fdopen' "$ZUTIL"
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
 
       - name: Init discord_rpc submodules
         run: |
@@ -323,9 +322,8 @@ jobs:
 
       - name: Patch hxcpp zlib for iOS 18 SDK
         run: |
-          ZUTIL="$HOME/haxelib/hxcpp/4,2,1/project/thirdparty/zlib-1.2.11/zutil.h"
-          sed -i.bak '/# *define fdopen(fd,mode) NULL/d' "$ZUTIL"
-          ! grep -q 'define fdopen' "$ZUTIL"
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
 
       - name: Init discord_rpc submodules
         run: |
