@@ -337,6 +337,9 @@ jobs:
         run: |
           LT="$HOME/haxelib/lime/8,0,1/templates/ios/template"
           cp "templates/ios/template/{{app.file}}/{{app.file}}-Info.plist" "$LT/{{app.file}}/{{app.file}}-Info.plist"
+          PBX="$LT/{{app.file}}.xcodeproj/project.pbxproj"
+          perl -0pi -e 's/(CODE_SIGN_IDENTITY\[sdk=iphoneos\*\] = "::config\.ios\.identity::";)/$1\n\tCODE_SIGNING_ALLOWED = NO;\n\tCODE_SIGNING_REQUIRED = NO;/g' "$PBX"
+          grep -c 'CODE_SIGNING_ALLOWED = NO' "$PBX"
 
       - name: Read app version
         run: |
