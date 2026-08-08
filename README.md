@@ -2,6 +2,8 @@
 
 A Friday Night Funkin' engine, forked from Psych Engine 0.6.3. Built for the Mandela Funkin Night mod.
 
+**Note:** This project uses AI-assisted tools in its development.
+
 **中文版：[ZHREADME.md](./ZHREADME.md)**
 
 ## Supported platforms

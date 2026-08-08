@@ -2,6 +2,8 @@
 
 基于 Psych Engine 0.6.3 的 Friday Night Funkin' 引擎，为 Mandela Funkin Night 模组构建。
 
+**声明：** 本项目开发过程中使用了 AI 工具辅助。
+
 **[English](./README.md)**
 
 ## 支持的平台
