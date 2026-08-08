@@ -322,7 +322,8 @@ jobs:
 
       - name: Patch hxcpp zlib for iOS 18 SDK
         run: |
-          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i '' '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
           ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
 
       - name: Init discord_rpc submodules
