@@ -136,6 +136,9 @@ class Main extends Sprite
         TraceConsole.start();
         #end
 
+        // 桌面端：注册窗口文件拖放（拖 zip / 链接自动安装）
+        backend.ModInstaller.init();
+
 		if (stage != null)
 		{
 			init();

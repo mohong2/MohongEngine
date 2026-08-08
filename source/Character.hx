@@ -164,11 +164,9 @@ class Character extends FlxSprite
 						frames = AtlasFrameMaker.construct(json.image);
 				}
 				imageFile = json.image;
-
+				
 				if (frames == null)
 				{
-					// 纹理缺失兜底：用占位图 + 单帧 idle，避免后续注册动画 / dance 崩溃。
-					// （正常路径下 Paths.getSparrowAtlas 已通过 shared 回退找到贴图，这里仅防御。）
 					loadGraphic(Paths.image(json.image));
 					if (graphic != null && animation != null)
 						animation.add('idle', [0], 1, true);

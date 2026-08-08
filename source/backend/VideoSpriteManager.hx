@@ -8,6 +8,7 @@ import states.PlayState;
 import haxe.extern.EitherType;
 import flixel.util.FlxSignal;
 import flixel.util.FlxTimer;
+import mohong.TraceManager;
 
 #if VIDEOS_ALLOWED
 class VideoSpriteManager extends VideoSprite {
@@ -37,9 +38,18 @@ class VideoSpriteManager extends VideoSprite {
     }
     
     public function startVideo(path:String, loop:Bool = false) {
-        playVideo(path, loop, false);
-        if(onPlayState)
-            playbackRate = PlayState.instance.playbackRate;
+        try
+        {
+            playVideo(path, loop, false);
+            if(onPlayState)
+                playbackRate = PlayState.instance.playbackRate;
+        }
+        catch (e:Dynamic)
+        {
+            // Log failures instead of failing silently, then run the end callback.
+            TraceManager.error('trace.video.startFailed', 'VideoSpriteManager failed to start video: {} - {}', [path, e]);
+            finishCallback();
+        }
     }
 
     @:noCompletion

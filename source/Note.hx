@@ -27,6 +27,8 @@ typedef EventNote = {
     public var sustainLength:Float = 0;
     public var parentST:Float = 0;
     public var parentSL:Float = 0;
+    /** stepCrochet of the section this note was generated in (BPM-change charts need it for sustain height). */
+    public var stepCrochet:Float = 0;
     /** 多k: 该 Note 所属键数快照 (0 基, -1 = 跟随 PlayState.mania)。 */
     public var mania:Int = -1;
     public var hitHealth:Float = 0.023;
@@ -179,6 +181,13 @@ class Note extends FlxSprite {
     public var originalHeightForCalcs:Float = 6;
 
     /**
+     * stepCrochet of the section this note was generated in (updated per changeBPM section).
+     * Sustain height must match the same stepCrochet as the spacing, or segments
+     * separate/overlap on BPM-change charts.
+     */
+    public var genStepCrochet:Float = 0;
+
+    /**
      * 多k: 该 Note 生成时的 mania 快照 (0 基)。中途 Change Mania 时已生成的 Note
      * 保持原 k 值渲染/判定，直到被销毁；新生成的 Note 使用新 k 值。
      */
@@ -233,6 +242,19 @@ class Note extends FlxSprite {
     }
 
     /**
+     * Mania scale factor: pixelScales for pixel stages, scales otherwise.
+     * Sustain height, movement and pixel centering all use it so they stay
+     * proportional to the arrow size of the current stage.
+     */
+    public static function getManiaScale(mania:Int):Float
+    {
+        var m:Int = EKData.clampMania(mania);
+        if (PlayState.isPixelStage)
+            return EKData.pixelScales[m] / EKData.pixelScales[3];
+        return EKData.scales[m] / EKData.scales[3];
+    }
+
+    /**
      * 多k: 中途切换 k 值时, 实时重置该 Note 的缩放大小以匹配新的 k 值布局。
      * 保留该 Note 生成时的 mania 快照 (判定/轨道不变), 仅重算视觉缩放,
      * 避免 >9K 时已生成 Note 与新的 strum 大小不一致。
@@ -252,7 +274,26 @@ class Note extends FlxSprite {
         {
             setGraphicSize(Std.int(rawW * 0.7 * Note.noteScale(newMania)));
         }
-        if (isSustainNote) scale.y = lastScaleY; // 长条高度由步进长度决定, 不随 k 缩放
+        if (isSustainNote)
+        {
+            // Recompute sustain height from the step formula and the new mania scale.
+            if (!isSustainEnd)
+            {
+                var stepCrochet:Float = (genStepCrochet > 0) ? genStepCrochet : Conductor.stepCrochet;
+                var songSpeedVal:Float = (PlayState.instance != null) ? PlayState.instance.songSpeed : 1;
+                scale.y = (stepCrochet / 100) * 1.05 * songSpeedVal * multSpeed * Note.getManiaScale(newMania);
+                if (PlayState.isPixelStage)
+                {
+                    scale.y *= 1.19;
+                    scale.y *= (6 / frameHeight);
+                    scale.y *= PlayState.daPixelZoom;
+                }
+            }
+            else
+            {
+                scale.y = Note.getManiaScale(newMania);
+            }
+        }
         updateHitbox();
         // 换 k 后轨道颜色/基底纹理可能变化, 重新应用颜色
         if (applyLaneColorShader && colorSwap != null && noteData > -1)
@@ -289,8 +330,11 @@ class Note extends FlxSprite {
         if(!isSustainNote || isSustainEnd || scale == null) return;
         if(PlayState.instance == null) return;
 
-        var stepCrochet:Float = Conductor.stepCrochet;
-        scale.y = (stepCrochet / 100) * 1.05 * newSongSpeed * multSpeed;
+        // 用生成时所在小节的 stepCrochet 计算高度，与长条间距保持一致
+        // （BPM 变化谱面里 Conductor.stepCrochet 会变，不能直接用）。
+        var stepCrochet:Float = (genStepCrochet > 0) ? genStepCrochet : Conductor.stepCrochet;
+        // Scale sustain height by mania (4K = 1.0, unchanged; high-K stays proportional to arrows).
+        scale.y = (stepCrochet / 100) * 1.05 * newSongSpeed * multSpeed * Note.getManiaScale(mania);
         if(PlayState.isPixelStage) {
             scale.y *= 1.19;
             scale.y *= (6 / frameHeight);
@@ -392,7 +436,7 @@ class Note extends FlxSprite {
             animation.play(colArray[baseTex()] + 'holdend');
             updateHitbox();
             offsetX -= width / 2;
-            if(PlayState.isPixelStage) offsetX += 30;
+            if(PlayState.isPixelStage) offsetX += 30 * Note.getManiaScale(mania);
 
             if(prevNote.isSustainNote) {
                 isSustainEnd = false;
@@ -486,7 +530,7 @@ class Note extends FlxSprite {
             antialiasing = false;
             if(isSustainNote) {
                 offsetX += lastNoteOffsetXForPixelAutoAdjusting;
-                lastNoteOffsetXForPixelAutoAdjusting = (width - 7) * (PlayState.daPixelZoom / 2);
+                lastNoteOffsetXForPixelAutoAdjusting = (width - 7) * (PlayState.daPixelZoom / 2) * Note.getManiaScale(mania);
                 offsetX -= lastNoteOffsetXForPixelAutoAdjusting;
             }
 		} else {
@@ -570,6 +614,7 @@ class Note extends FlxSprite {
         noteData = chartNoteData.noteData;
         isSustainNote = chartNoteData.isSustainNote;
         isSustainEnd = chartNoteData.isSustainEnd;
+        genStepCrochet = chartNoteData.stepCrochet;
 
         multSpeed = chartNoteData.multSpeed;
         multAlpha = chartNoteData.multAlpha;
@@ -579,6 +624,7 @@ class Note extends FlxSprite {
         active = true;
         offsetX = chartNoteData.offsetX;
         offsetY = chartNoteData.offsetY;
+        lastNoteOffsetXForPixelAutoAdjusting = 0; // Reset on reuse so pixel sustain X never accumulates.
         offsetAngle = 0;
         copyX = true;
         copyY = true;
@@ -660,13 +706,12 @@ class Note extends FlxSprite {
             animation.play(animToPlay);
             updateHitbox();
             offsetX -= width / 2;
-            if(PlayState.isPixelStage) offsetX += 30;
 
             if(!chartNoteData.isSustainEnd) {
                 if(PlayState.instance != null) {
-                    var stepCrochet:Float = Conductor.stepCrochet;
+                    var stepCrochet:Float = (genStepCrochet > 0) ? genStepCrochet : Conductor.stepCrochet;
                     var songSpeedVal:Float = PlayState.instance.songSpeed;
-                    scale.y = (stepCrochet / 100) * 1.05 * songSpeedVal * multSpeed;
+                    scale.y = (stepCrochet / 100) * 1.05 * songSpeedVal * multSpeed * Note.getManiaScale(mania);
                     if(PlayState.isPixelStage) {
                         scale.y *= 1.19;
                         scale.y *= (6 / frameHeight);
@@ -674,7 +719,7 @@ class Note extends FlxSprite {
                     updateHitbox();
                 }
             } else {
-                scale.y = 1;
+                scale.y = Note.getManiaScale(mania);
                 updateHitbox();
             }
         } else {
@@ -689,12 +734,18 @@ class Note extends FlxSprite {
                 updateHitbox();
         }
 
+        if (isSustainNote && PlayState.isPixelStage)
+        {
+            // Scale the pixel sustain centering by mania (4K = 1.0; smaller arrows in high-K).
+            offsetX += 30 * Note.getManiaScale(mania);
+        }
+
         if(!mustPress) visible = ClientPrefs.data.opponentStrums;
         else if(!visible) visible = true;
     }
 
     inline public function followStrum(strum:StrumNote, songSpeed:Float):Void {
-        distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed);
+        distance = (0.45 * (Conductor.songPosition - strumTime) * songSpeed * multSpeed) * Note.getManiaScale(mania);
         if(!strum.downScroll) distance *= -1;
 
         if(copyAngle) angle = strum.direction - 90 + strum.angle + offsetAngle;
@@ -703,38 +754,42 @@ class Note extends FlxSprite {
         if(copyX) x = strum.x + offsetX + Math.cos(strum.direction * Math.PI / 180) * distance;
 
         if(copyY) {
-            y = strum.y + offsetY + Math.sin(strum.direction * Math.PI / 180) * distance;
+			y = strum.y + offsetY + Math.sin(strum.direction * Math.PI / 180) * distance;
 
-            if(isSustainNote) {
-                var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
-                var isEnd:Bool = (animation.curAnim != null && (animation.curAnim.name.endsWith('end') || animation.curAnim.name.endsWith('holdend')));
+			if(isSustainNote) {
+				// 0.6.3 原版定位：各段按自身 strumTime 摆放 + 原版常量修正，
+				// 不依赖 prevNote.exists（TAP 命中销毁后长条不会跳位）。
+				// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
+				var maniaScale:Float = Note.getManiaScale(mania);
+				var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+				var isEnd:Bool = (animation.curAnim != null && (animation.curAnim.name.endsWith('end') || animation.curAnim.name.endsWith('holdend')));
 
-                if(strum.downScroll) {
-                    if(isEnd) {
-                        y += 10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1));
-                        y -= 46 * (1 - (fakeCrochet / 600)) * songSpeed;
-                        if(PlayState.isPixelStage) {
-                            y += 8 + (6 - originalHeightForCalcs) * PlayState.daPixelZoom;
-                        } else {
-                            y -= 19;
-                        }
-                    }
-                    y += (Note.swagWidth / 2) - (60.5 * (songSpeed - 1));
-                    y += 27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1);
-                } else {
-                    if(PlayState.isPixelStage)
-                        y += PlayState.daPixelZoom * 9.5;
-                    else
-                        y += 55;
-                }
-            }
-        }
+				if(strum.downScroll) {
+					if(isEnd) {
+						y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
+						y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
+						if(PlayState.isPixelStage) {
+							y += (8 + (6 - originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
+						} else {
+							y -= 19 * maniaScale;
+						}
+					}
+					y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
+					y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
+				} else {
+					if(PlayState.isPixelStage)
+						y += (PlayState.daPixelZoom * 9.5) * maniaScale;
+					else
+						y += 55 * maniaScale;
+				}
+			}
+		}
     }
 
     public function clipToStrumNote(myStrum:StrumNote):Void {
         if(!isSustainNote || (!mustPress && ignoreNote) || (mustPress && !wasGoodHit && canBeHit)) return;
 
-        final center:Float = myStrum.y + offsetY + swagWidth / 2;
+        final center:Float = myStrum.y + offsetY + (swagWidth / 2) * Note.getManiaScale(mania);
         if(clipRect == null) clipRect = FlxRect.get(0, 0, frameWidth, frameHeight);
         final swagRect = clipRect;
 
@@ -756,19 +811,6 @@ class Note extends FlxSprite {
         @:privateAccess if(frame != null && _frame != null)
             _frame = frame.clipTo(swagRect, _frame);
         dirty = true;
-    }
-
-    @:noCompletion
-    override function set_clipRect(rect:FlxRect):FlxRect {
-        @:bypassAccessor clipRect = rect;
-        @:privateAccess if(frame != null) {
-            if(rect != null && _frame != null)
-                _frame = frame.clipTo(rect, _frame);
-            else if(_frame != null)
-                _frame = frame.copyTo(_frame);
-            dirty = true;
-        }
-        return rect;
     }
 
     override function update(elapsed:Float) {

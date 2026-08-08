@@ -323,5 +323,10 @@
 
   "newchartEditor_select_difficulty": "Select difficulty to load:",
   "newchartEditor_load_btn": "Load",
-  "newchartEditor_cancel_btn": "Cancel"
+  "newchartEditor_cancel_btn": "Cancel",
+
+  "newchartEditor_convert_sequential": "Sequential Mapping",
+  "newchartEditor_convert_shuffle": "Auto Shuffle",
+  "newchartEditor_convert_double": "Auto Double",
+  "newchartEditor_convert_shuffle_double": "Shuffle + Double"
 }

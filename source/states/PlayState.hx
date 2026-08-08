@@ -456,6 +456,10 @@ class PlayState extends MusicBeatState
 	var _noteCleanupFrameCounter:Int = 0;
 	/** Interval for batched note cleanup (in frames). Soft-coded for tuning. */
 	static final NOTE_CLEANUP_INTERVAL:Int = 3;
+	/** Frame counter for periodic unused-graphic purges (see Paths.purgeUnusedGraphics). */
+	var _memoryPurgeFrameCounter:Int = 0;
+	/** Purge useCount<=0 graphics roughly every 15 seconds (60fps x 900 frames). */
+	static final MEMORY_PURGE_INTERVAL:Int = 900;
 
 	/**
 	 * Create the appropriate StageBackdrop for the current stage.
@@ -2944,6 +2948,7 @@ class PlayState extends MusicBeatState
 					offsetY: 0,
 					parentST: 0,
 					parentSL: 0,
+					stepCrochet: stepCrochet,
 					noteSplashDisabled: false,
 					hitsoundDisabled: false
 				};
@@ -2974,6 +2979,7 @@ class PlayState extends MusicBeatState
 						sustainLength: susLen,
 						parentST: rawStrum,
 						parentSL: susLen,
+						stepCrochet: stepCrochet,
 						hitHealth: 0.023,
 						missHealth: isHurt ? 0.1 : 0.0475,
 						hitCausesMiss: isHurt,
@@ -3035,12 +3041,16 @@ class PlayState extends MusicBeatState
 			unspawnNotes.push(newNote);
 
 			// Inline prevNote/nextNote linking (avoids a second pass)
-			var prev:Note = lastNotePerData.get(newNote.noteData);
+			// Chain per (lane + player/opponent side) so player and opponent notes
+			// in the same lane never cross-link; the tail cap would otherwise align
+			// to the wrong side's previous piece and detach.
+			var linkKey:Int = newNote.noteData + (newNote.mustPress ? 10000 : 0);
+			var prev:Note = lastNotePerData.get(linkKey);
 			if (prev != null) {
 				newNote.prevNote = prev;
 				prev.nextNote = newNote;
 			}
-			lastNotePerData.set(newNote.noteData, newNote);
+			lastNotePerData.set(linkKey, newNote);
 		}
 
 		if (eventNotes.length > 1)
@@ -3875,8 +3885,6 @@ class PlayState extends MusicBeatState
 				else
 					for (i in 0...laneCount)
 						strumsHit[i] = false;
-				var fakeCrochet:Float = (60 / SONG.bpm) * 1000;
-
 				function updateDaNote(daNote:Note):Void
 				{
 					if (daNote == null || !daNote.exists) return;
@@ -3905,9 +3913,10 @@ class PlayState extends MusicBeatState
 					var strumScroll:Bool = strum.downScroll;
 
 					if (strumScroll)
-						daNote.distance = (0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed);
+						// Scale movement by mania (4K = 1.0; high-K notes/sustains shrink together).
+						daNote.distance = (0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
 					else
-						daNote.distance = (-0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed);
+						daNote.distance = (-0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
 
 					var angleDir:Float = strumDirection * Math.PI / 180;
 
@@ -3942,51 +3951,68 @@ class PlayState extends MusicBeatState
 					{
 						daNote.y = strumY + Math.sin(angleDir) * daNote.distance;
 
-						if (strumScroll && daNote.isSustainNote)
+						if (daNote.isSustainNote)
 						{
-							if (daNote.animation.curAnim.name.endsWith('end'))
+							// 0.6.3 原版定位：长条各段按自身 strumTime 摆放 + 原版常量修正。
+							// 不依赖 prevNote.exists——TAP 命中销毁后长条不会跳位/突出 TAP。
+							// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
+							var maniaScale:Float = Note.getManiaScale(daNote.mania);
+							var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+							var isEnd:Bool = (daNote.animation.curAnim != null
+								&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
+							if (strumScroll)
 							{
-								daNote.y += 10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1));
-								daNote.y -= 46 * (1 - (fakeCrochet / 600)) * songSpeed;
-								if (PlayState.isPixelStage)
-									daNote.y += 8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom;
-								else
-									daNote.y -= 19;
+								if (isEnd)
+								{
+									daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
+									daNote.y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
+									if (PlayState.isPixelStage)
+										daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
+									else
+										daNote.y -= 19 * maniaScale;
+								}
+								daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
+								daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
 							}
-							daNote.y += (Note.swagWidth / 2) - (60.5 * (songSpeed - 1));
-							daNote.y += 27.5 * ((SONG.bpm / 100) - 1) * (songSpeed - 1);
+							else
+							{
+								if (PlayState.isPixelStage)
+									daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
+								else
+									daNote.y += 55 * maniaScale;
+							}
 						}
 					}
 
-					var center:Float = strumY + Note.swagWidth / 2;
+					var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
 					if (strum.sustainReduce && daNote.isSustainNote
 						&& (!daNote.mustPress || daNote.wasGoodHit || daNote.ignoreNote))
 					{
+						// Use the real drawn bottom/top for the receptor clip. The old
+						// y - offset.y*scale.y formula triggers hundreds of pixels early
+						// when scale.y is large (pixel sustains), squashing every piece.
+						var drawnTop:Float = daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
+							+ daNote.frame.offset.y * daNote.scale.y;
+						var drawnBottom:Float = drawnTop + daNote.height;
+						var swagRect:FlxRect = daNote.clipRect;
+						if (swagRect == null)
+							swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
+						swagRect.x = 0;
+						swagRect.width = daNote.frameWidth;
 						if (strumScroll)
 						{
-							if (daNote.y - daNote.offset.y * daNote.scale.y + daNote.height >= center)
+							if (drawnBottom >= center)
 							{
-								// 复用音符自身的 clipRect，避免每个长条每帧分配 FlxRect
-								var swagRect:FlxRect = daNote.clipRect;
-								if (swagRect == null)
-									swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
-								swagRect.x = 0;
-								swagRect.width = daNote.frameWidth;
-								swagRect.height = (center - daNote.y) / daNote.scale.y;
+								swagRect.height = (center - drawnTop) / daNote.scale.y;
 								swagRect.y = daNote.frameHeight - swagRect.height;
 								daNote.clipRect = swagRect;
 							}
 						}
 						else
 						{
-							if (daNote.y + daNote.offset.y * daNote.scale.y <= center)
+							if (drawnTop <= center)
 							{
-								var swagRect:FlxRect = daNote.clipRect;
-								if (swagRect == null)
-									swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
-								swagRect.x = 0;
-								swagRect.width = daNote.frameWidth;
-								swagRect.y = (center - daNote.y) / daNote.scale.y;
+								swagRect.y = (center - drawnTop) / daNote.scale.y;
 								swagRect.height = daNote.frameHeight - swagRect.y;
 								daNote.clipRect = swagRect;
 							}
@@ -4019,6 +4045,14 @@ class PlayState extends MusicBeatState
 						}
 						i--;
 					}
+				}
+
+				// Periodically release unused graphics to bound memory on long runs / mod-heavy sets.
+				_memoryPurgeFrameCounter++;
+				if (_memoryPurgeFrameCounter >= MEMORY_PURGE_INTERVAL)
+				{
+					_memoryPurgeFrameCounter = 0;
+					Paths.purgeUnusedGraphics();
 				}
 
 				// Sort for correct draw order (closer to strum on top)

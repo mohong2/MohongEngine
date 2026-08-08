@@ -84,6 +84,16 @@ class MP4Handler extends FlxInternalVideo
 		if (FileSystem.exists(fullPath))
 			return fullPath;
 
+		// Fallback: resolve relative paths against the executable's folder, since
+		// cwd may differ when launched via shortcut or externally.
+		var exeDir = haxe.io.Path.directory(Sys.programPath());
+		if (exeDir != null && exeDir.length > 0)
+		{
+			var exeFull = exeDir + "/" + fileName;
+			if (FileSystem.exists(exeFull))
+				return exeFull;
+		}
+
 		return fileName;
 		#else
 		return fileName;

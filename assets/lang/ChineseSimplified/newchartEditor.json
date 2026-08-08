@@ -325,5 +325,10 @@
 
   "newchartEditor_select_difficulty": "选择要加载的难度:",
   "newchartEditor_load_btn": "加载",
-  "newchartEditor_cancel_btn": "取消"
+  "newchartEditor_cancel_btn": "取消",
+
+  "newchartEditor_convert_sequential": "顺序映射",
+  "newchartEditor_convert_shuffle": "自动打乱",
+  "newchartEditor_convert_double": "自动补双押",
+  "newchartEditor_convert_shuffle_double": "打乱+双押"
 }

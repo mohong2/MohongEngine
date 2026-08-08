@@ -124,7 +124,9 @@ class Paths
 				MemoryMonitor.untrackGraphic(ck);
 			}
 		}
-		obj.destroy();
+		// Safety net: never destroy a graphic a live sprite still references.
+		if (obj.useCount <= 0)
+			obj.destroy();
 	}
 
 	public static function clearUnusedMemory() {
@@ -151,6 +153,50 @@ class Paths
 		}
 		// run the garbage collector for good measure lmfao
 		System.gc();
+	}
+
+	/**
+	 * Release every graphic with useCount<=0 (including the current level's),
+	 * removing it from both caches before destroying so no zombie remains.
+	 * @return number of graphics released.
+	 */
+	public static function purgeUnusedGraphics():Int
+	{
+		var purged:Int = 0;
+
+		var trackedKeys:Array<String> = [];
+		for (key in currentTrackedAssets.keys())
+		{
+			var obj = currentTrackedAssets.get(key);
+			if (obj != null && obj.useCount <= 0)
+				trackedKeys.push(key);
+		}
+		for (key in trackedKeys)
+		{
+			var obj = currentTrackedAssets.get(key);
+			if (obj != null && obj.useCount <= 0)
+			{
+				purgeGraphicFromCaches(obj, key);
+				purged++;
+			}
+		}
+
+		var cacheKeys:Array<String> = [];
+		@:privateAccess
+		for (key in FlxG.bitmap._cache.keys())
+			cacheKeys.push(key);
+		@:privateAccess
+		for (key in cacheKeys)
+		{
+			var obj = FlxG.bitmap._cache.get(key);
+			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key))
+			{
+				purgeGraphicFromCaches(obj);
+				purged++;
+			}
+		}
+
+		return purged;
 	}
 
 	// define the locally tracked assets

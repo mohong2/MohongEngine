@@ -102,7 +102,6 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			['Alt Idle Animation', Language.get('newchartEditor_alt_idle_animation', "Sets a specified postfix after the idle animation name.\nYou can use this to trigger 'idle-alt' if you set\nValue 2 to -alt\n\nValue 1: Character to set (Dad, BF or GF)\nValue 2: New postfix (Leave it blank to disable)")],
 			['Screen Shake', Language.get('newchartEditor_screen_shake', "Value 1: Camera shake\nValue 2: HUD shake\n\nEvery value works as the following example: \"1, 0.05\".\nThe first number (1) is the duration.\nThe second number (0.05) is the intensity.")],
 			['Change Character', Language.get('newchartEditor_change_character', "Value 1: Character to change (Dad, BF, GF)\nValue 2: New character's name")],
-			['Change Mania', Language.get('newchartEditor_change_mania', "多k: 中途切换谱面键数\nValue 1: 新的键数 (1-18, 如 9 = 9K)\nValue 2: 动画样式 fade/slide/zoom/spin (默认 fade),\n填 true 或 skip 跳过过渡动画")],
 			['Change Scroll Speed', Language.get('newchartEditor_change_scroll_speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds.")],
 			['Set Property', Language.get('newchartEditor_set_property', "Value 1: Variable name\nValue 2: New value")],
 			['Play Sound', Language.get('newchartEditor_play_sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1")]
@@ -542,29 +541,6 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		mainBox.scrollFactor.set();
 		mainBox.cameras = [camUI];
 		add(mainBox);
-
-		// 多k: 工具浮动窗口 (转换模式 / 一键写大粪 / 密度增强 集中在此)
-		toolsBox = new PsychUIBox(FlxG.width / 2 - 160, FlxG.height / 2 - 110, 320, 220, ['多k工具']);
-		toolsBox.scrollFactor.set();
-		toolsBox.cameras = [camUI];
-		toolsBox.visible = false;
-		var toolsMenu = toolsBox.getTab('多k工具').menu;
-		toolsMenu.add(new EditorsText(10, 10, 250, '切 K 转换模式 (切换键数时生效):', 13));
-		convertModeDropDown = new PsychUIDropDownMenu(10, 32, ['顺序映射', '自动打乱', '自动补双押', '打乱+双押'], function(id:Int, label:String) {}, 180);
-		convertModeDropDown.selectedIndex = 0;
-		toolsMenu.add(convertModeDropDown);
-		toolsMenu.add(new EditorsText(10, 66, 250, '一键写大粪 (4K 转多K, 匹配人声):', 13));
-		dumbChartButton = new PsychUIButton(10, 88, '一键写大粪', function() writeDumbChart(), 180, 24);
-		toolsMenu.add(dumbChartButton);
-		toolsMenu.add(new EditorsText(10, 124, 250, '密度增强阈值 (每拍 Note 数):', 13));
-		densityThresholdStepper = new PsychUINumericStepper(10, 146, 1, 6, 1, 32, 0, 45);
-		toolsMenu.add(densityThresholdStepper);
-		boostDensityButton = new PsychUIButton(70, 146, '塞一点', function() boostDensity(Std.int(densityThresholdStepper.value)), 120, 24);
-		toolsMenu.add(boostDensityButton);
-		// X 按钮最后添加, 并且文本宽度已避开其区域
-		var closeToolsBtn:PsychUIButton = new PsychUIButton(282, 8, 'X', function() toolsBox.visible = false, 26, 20);
-		toolsMenu.add(closeToolsBtn);
-		add(toolsBox);
 
 		autoSaveIcon = new FlxSprite(50).loadGraphic(Paths.image('editors/autosave'));
 		autoSaveIcon.screenCenter(Y);
@@ -2268,6 +2244,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 	function updateSelectedEventText()
 	{
+		// 事件标签页 UI 尚未创建（如 createGrids/loadSection 早期）时直接跳过，
+		// 避免 value1InputText 等为空导致 Null Object Reference 崩溃。
+		if (value1InputText == null || value2InputText == null || selectedEventText == null || eventDropDown == null)
+			return;
+
 		if(selectedNotes.length == 1 && selectedNotes[0].isEvent)
 		{
 			var eventNote:EventMetaNote = cast (selectedNotes[0], EventMetaNote);
@@ -3289,27 +3270,6 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	inline function songLengthMs():Float
 	{
 		return (FlxG.sound.music != null) ? FlxG.sound.music.length : Math.POSITIVE_INFINITY;
-	}
-
-	/** 打开/关闭 "多k工具" 浮动窗口。 */
-	function toggleToolsBox():Void
-	{
-		if (toolsBox == null) return;
-		toolsBox.visible = !toolsBox.visible;
-		toolsBox.active = toolsBox.visible;
-		if (toolsBox.visible)
-		{
-			// 重新加入状态 (隐藏时已移除)
-			if (FlxG.state.members.indexOf(toolsBox) < 0)
-				FlxG.state.add(toolsBox);
-		}
-		else
-		{
-			// 隐藏时彻底移出状态: 仅 active=false 时 PsychUI 子控件仍可能响应点击
-			if (FlxG.state.members.indexOf(toolsBox) >= 0)
-				FlxG.state.remove(toolsBox);
-		}
-		ignoreClickForThisFrame = true;
 	}
 
 	/**
@@ -4878,18 +4838,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	var scrollSpeedStepper:PsychUINumericStepper;
 	var audioOffsetStepper:PsychUINumericStepper;
 	var maniaStepper:PsychUINumericStepper;
-	/** 多k: 工具窗口入口按钮。 */
-	var openToolsButton:PsychUIButton;
-	/** 多k: 工具浮动窗口 (转换模式 / 一键写大粪 / 密度增强)。 */
-	var toolsBox:PsychUIBox;
-	/** 多k: 切 K 转换模式 (0=顺序映射 1=自动打乱 2=自动补双押 3=打乱+补双押)。 */
+	/** Key conversion mode. */
 	var convertModeDropDown:PsychUIDropDownMenu;
-	/** 多k: 一键写大粪按钮。 */
-	var dumbChartButton:PsychUIButton;
-	/** 多k: 密度增强 (玩家可调阈值)。 */
-	var densityThresholdStepper:PsychUINumericStepper;
-	var boostDensityButton:PsychUIButton;
-
 	var stageDropDown:PsychUIDropDownMenu;
 	var playerDropDown:PsychUIDropDownMenu;
 	var opponentDropDown:PsychUIDropDownMenu;
@@ -4964,10 +4914,16 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			updateWaveform();
 		};
 
-		// 多k: 键数 (显示 1-18, 内部 mania = 值-1)
+		// 键数 (显示 1-18, 内部 mania = 值-1): 作为整张谱面的单一键数映射保留
 		maniaStepper = new PsychUINumericStepper(objX, objY + 40, 1, (PlayState.SONG.mania != null ? PlayState.SONG.mania : Note.defaultMania) + 1, 1, Note.maxMania + 1, 0, 45);
-		// 多k: 工具入口 (与键数同行, 避免挤压下方下拉控件)
-		openToolsButton = new PsychUIButton(objX + 55, objY + 40, '多k工具', function() toggleToolsBox(), 120, 24);
+		// Key conversion mode: sequential / shuffle / auto-double / shuffle+double.
+		convertModeDropDown = new PsychUIDropDownMenu(objX + 55, objY + 40, [
+			Language.get('newchartEditor_convert_sequential', '顺序映射'),
+			Language.get('newchartEditor_convert_shuffle', '自动打乱'),
+			Language.get('newchartEditor_convert_double', '自动补双押'),
+			Language.get('newchartEditor_convert_shuffle_double', '打乱+双押')
+		], function(id:Int, label:String) {}, 110);
+		convertModeDropDown.selectedIndex = 0;
 		maniaStepper.onValueChange = function()
 		{
 			var newMania:Int = EKData.clampMania(Std.int(maniaStepper.value) - 1);
@@ -4975,7 +4931,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			if (PlayState.SONG.mania != null && newMania == PlayState.SONG.mania) return; // 防抖
 			var oldMania:Int = (PlayState.SONG.mania != null) ? EKData.clampMania(PlayState.SONG.mania) : Note.defaultMania;
 			_cacheSections(); // 先刷新 section 缓存, 避免转换/重排使用过期时间表
-			convertChartNoteData(oldMania, newMania, convertModeDropDown.selectedIndex);
+			convertChartNoteData(oldMania, newMania, (convertModeDropDown != null) ? convertModeDropDown.selectedIndex : 0);
 			PlayState.SONG.mania = newMania;
 			PlayState.mania = EKData.clampMania(PlayState.SONG.mania);
 			GRID_COLUMNS_PER_PLAYER = Note.ammo[PlayState.mania];
@@ -5060,7 +5016,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(scrollSpeedStepper);
 		tab_group.add(audioOffsetStepper);
 		tab_group.add(maniaStepper);
-		tab_group.add(openToolsButton);
+		tab_group.add(convertModeDropDown);
 
 		tab_group.add(new EditorsText(stageDropDown.x, stageDropDown.y - 15, 80, Language.get('newchartEditor_stage', 'Stage:')));
 		tab_group.add(new EditorsText(playerDropDown.x, playerDropDown.y - 15, 80, Language.get('newchartEditor_player', 'Player:')));

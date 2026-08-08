@@ -143,6 +143,9 @@ class MusicBeatSubstate extends FlxSubState
 	// ==================== UPDATE ====================
 
 	override function update(elapsed:Float) {
+		// 桌面端：驱动拖放安装/下载任务（子状态打开时也能处理）
+		ModInstaller.update(elapsed);
+
 		#if (HSCRIPT_ALLOWED || LUA_ALLOWED)
 		// Ctrl+Alt+1 → force-reload all HScripts and Lua scripts
 		if (FlxG.keys.pressed.CONTROL && FlxG.keys.pressed.ALT && FlxG.keys.justPressed.ONE) {

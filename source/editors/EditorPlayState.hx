@@ -210,6 +210,8 @@ class EditorPlayState extends MusicBeatState
 		var playerCounter:Int = 0;
 
 		var daBeats:Int = 0; // Not exactly representative of 'daBeats' lol, just how much it has looped
+		// Chain per (lane + side) so cross-side notes never link the sustain tail to the wrong piece.
+		var lastNotePerSide:Map<Int, Note> = new Map<Int, Note>();
 
 		for (section in noteData)
 		{
@@ -230,11 +232,8 @@ class EditorPlayState extends MusicBeatState
 							gottaHitNote = !section.mustHitSection;
 						}
 
-						var oldNote:Note;
-						if (unspawnNotes.length > 0)
-							oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
-						else
-							oldNote = null;
+						var linkKey:Int = daNoteData + (gottaHitNote ? 10000 : 0);
+						var oldNote:Note = lastNotePerSide.get(linkKey);
 
 						var swagNote:Note = new Note(daStrumTime, daNoteData, oldNote);
 						swagNote.mania = noteMania;
@@ -246,6 +245,7 @@ class EditorPlayState extends MusicBeatState
 						swagNote.scrollFactor.set();
 
 						var susLength:Float = swagNote.sustainLength;
+						lastNotePerSide.set(linkKey, swagNote);
 
 						susLength = susLength / Conductor.stepCrochet;
 						unspawnNotes.push(swagNote);
@@ -254,7 +254,7 @@ class EditorPlayState extends MusicBeatState
 						if(floorSus > 0) {
 							for (susNote in 0...floorSus+1)
 							{
-								oldNote = unspawnNotes[Std.int(unspawnNotes.length - 1)];
+								oldNote = lastNotePerSide.get(linkKey);
 
 								var sustainNote:Note = new Note(daStrumTime + (Conductor.stepCrochet * susNote) + (Conductor.stepCrochet / FlxMath.roundDecimal(PlayState.SONG.speed, 2)), daNoteData, oldNote, true);
 								sustainNote.mania = noteMania;
@@ -263,6 +263,7 @@ class EditorPlayState extends MusicBeatState
 								sustainNote.noteType = swagNote.noteType;
 								sustainNote.scrollFactor.set();
 								unspawnNotes.push(sustainNote);
+								lastNotePerSide.set(linkKey, sustainNote);
 
 								if (sustainNote.mustPress)
 								{
@@ -400,7 +401,7 @@ class EditorPlayState extends MusicBeatState
 
 				strumX += daNote.offsetX;
 				strumY += daNote.offsetY;
-				var center:Float = strumY + Note.swagWidth / 2;
+				var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
 
 				if(daNote.copyAlpha) {
 					daNote.alpha = strumAlpha * daNote.multAlpha;
@@ -410,28 +411,35 @@ class EditorPlayState extends MusicBeatState
 				}
 				if(daNote.copyY) {
 					if (ClientPrefs.data.downScroll) {
-						daNote.y = (strumY + 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed);
+						daNote.y = (strumY + 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed * Note.getManiaScale(daNote.mania));
 						if (daNote.isSustainNote) {
-							//Jesus fuck this took me so much mother fucking time AAAAAAAAAA
-							if (daNote.animation.curAnim.name.endsWith('end')) {
-								daNote.y += 10.5 * (fakeCrochet / 400) * 1.5 * PlayState.SONG.speed + (46 * (PlayState.SONG.speed - 1));
-								daNote.y -= 46 * (1 - (fakeCrochet / 600)) * PlayState.SONG.speed;
-								if(PlayState.isPixelStage) {
-									daNote.y += 8;
-								} else {
-									daNote.y -= 19;
-								}
-							} 
-							daNote.y += (Note.swagWidth / 2) - (60.5 * (PlayState.SONG.speed - 1));
-							daNote.y += 27.5 * ((PlayState.SONG.bpm / 100) - 1) * (PlayState.SONG.speed - 1);
+							// 0.6.3 原版定位：各段按自身 strumTime 摆放 + 原版常量修正。
+							// 多k: 常量按 getManiaScale 缩放。
+							var maniaScale:Float = Note.getManiaScale(daNote.mania);
+							var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+							var isEnd:Bool = (daNote.animation.curAnim != null
+								&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
+							if (isEnd) {
+								daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * PlayState.SONG.speed + (46 * (PlayState.SONG.speed - 1))) * maniaScale;
+								daNote.y -= (46 * (1 - (fakeCrochet / 600)) * PlayState.SONG.speed) * maniaScale;
+								if (PlayState.isPixelStage)
+									daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
+								else
+									daNote.y -= 19 * maniaScale;
+							}
+							daNote.y += ((Note.swagWidth / 2) - (60.5 * (PlayState.SONG.speed - 1))) * maniaScale;
+							daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (PlayState.SONG.speed - 1)) * maniaScale;
 
 							if(daNote.mustPress || !daNote.ignoreNote)
 							{
-								if(daNote.y - daNote.offset.y * daNote.scale.y + daNote.height >= center
+								var drawnTop:Float = daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
+									+ daNote.frame.offset.y * daNote.scale.y;
+								var drawnBottom:Float = drawnTop + daNote.height;
+								if(drawnBottom >= center
 									&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
 								{
 									var swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
-									swagRect.height = (center - daNote.y) / daNote.scale.y;
+									swagRect.height = (center - drawnTop) / daNote.scale.y;
 									swagRect.y = daNote.frameHeight - swagRect.height;
 
 									daNote.clipRect = swagRect;
@@ -439,16 +447,27 @@ class EditorPlayState extends MusicBeatState
 							}
 						}
 					} else {
-						daNote.y = (strumY - 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed);
+						daNote.y = (strumY - 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed * Note.getManiaScale(daNote.mania));
+
+						// Upscroll: 0.6.3 原版定位。
+						if (daNote.isSustainNote) {
+							var maniaScale:Float = Note.getManiaScale(daNote.mania);
+							if (PlayState.isPixelStage)
+								daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
+							else
+								daNote.y += 55 * maniaScale;
+						}
 
 						if(daNote.mustPress || !daNote.ignoreNote)
 						{
 							if (daNote.isSustainNote
-								&& daNote.y + daNote.offset.y * daNote.scale.y <= center
+								&& daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
+									+ daNote.frame.offset.y * daNote.scale.y <= center
 								&& (!daNote.mustPress || (daNote.wasGoodHit || (daNote.prevNote != null && daNote.prevNote.wasGoodHit && !daNote.canBeHit))))
 							{
 								var swagRect = new FlxRect(0, 0, daNote.width / daNote.scale.x, daNote.height / daNote.scale.y);
-								swagRect.y = (center - daNote.y) / daNote.scale.y;
+								swagRect.y = (center - (daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
+									+ daNote.frame.offset.y * daNote.scale.y)) / daNote.scale.y;
 								swagRect.height -= swagRect.y;
 
 								daNote.clipRect = swagRect;

@@ -75,9 +75,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		['Alt Idle Animation', "Sets a specified suffix after the idle animation name.\nYou can use this to trigger 'idle-alt' if you set\nValue 2 to -alt\n\nValue 1: Character to set (Dad, BF or GF)\nValue 2: New suffix (Leave it blank to disable)"],
 		['Screen Shake', "Value 1: Camera shake\nValue 2: HUD shake\n\nEvery value works as the following example: \"1, 0.05\".\nThe first number (1) is the duration.\nThe second number (0.05) is the intensity."],
 		['Change Character', "Value 1: Character to change (Dad, BF, GF)\nValue 2: New character's name"],
-		['Change Mania', "多k: 中途切换谱面键数\nValue 1: 新的键数 (1-18, 如 9 = 9K)\nValue 2: 动画样式 fade/slide/zoom/spin (默认 fade),\n填 true 或 skip 跳过过渡动画"],
 		['Change Scroll Speed', "Value 1: Scroll Speed Multiplier (1 is default)\nValue 2: Time it takes to change fully in seconds."],
-		['Set Property', "Value 1: Variable name\nValue 2: New value"]
+		['Set Property', "Value 1: Variable name\nValue 2: New value"],
+		['Play Sound', "Value 1: Sound file name\nValue 2: Volume (Default: 1), ranges from 0 to 1"]
 	];
 
 	var _file:FileDialogHandler;
@@ -251,18 +251,10 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		return Note.ammo[getMania()];
 	}
 
-	/** 多k: 切 K 转换模式 (0=顺序映射 1=自动打乱 2=自动补双押 3=打乱+补双押)。 */
-	var convertModeDropDown:PsychUIDropDownMenu;
 	/** 多k: 键数 stepper UI (类字段, 供 Change Mania 事件播放时同步显示)。 */
 	var uiManiaStepper:PsychUINumericStepper;
-	/** 多k: 一键写大粪按钮。 */
-	var dumbChartButton:PsychUIButton;
-	/** 多k: 密度增强 (阈值玩家可调)。 */
-	var densityThresholdStepper:PsychUINumericStepper;
-	var boostDensityButton:PsychUIButton;
-	/** 多k: 工具窗口入口按钮 + 浮动窗口。 */
-	var openToolsButton:PsychUIButton;
-	var toolsBox:PsychUIBox;
+	/** Key conversion mode. */
+	var convertModeDropDown:PsychUIDropDownMenu;
 
 	/**
 	 * 多k: 切 K 时转换谱面 Note 数据。
@@ -483,26 +475,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 				var sec:SwagSection = noteSection.get(grp[0].note);
 				if (sec != null && sec.sectionNotes != null) sec.sectionNotes.push(copyNote);
 			}
-		}
-	}
-
-	/** 打开/关闭 "多k工具" 浮动窗口 (关闭时停用, 防止点击原位置仍触发控件)。 */
-	function toggleToolsBox():Void
-	{
-		if (toolsBox == null) return;
-		toolsBox.visible = !toolsBox.visible;
-		toolsBox.active = toolsBox.visible;
-		if (toolsBox.visible)
-		{
-			// 重新加入状态 (隐藏时已移除)
-			if (FlxG.state.members.indexOf(toolsBox) < 0)
-				FlxG.state.add(toolsBox);
-		}
-		else
-		{
-			// 隐藏时彻底移出状态: 仅 active=false 时 PsychUI 子控件仍可能响应点击
-			if (FlxG.state.members.indexOf(toolsBox) >= 0)
-				FlxG.state.remove(toolsBox);
 		}
 	}
 
@@ -967,13 +939,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		add(UI_box);
 			for (tab in UI_box.tabs) tab.text.font = 'assets/fonts/editors.ttf';
 
-		// 多k: 工具浮动窗口 (转换模式 / 一键写大粪 / 密度增强)
-		toolsBox = new PsychUIBox(FlxG.width / 2 - 160, FlxG.height / 2 - 110, 320, 220, ['多k工具']);
-		toolsBox.scrollFactor.set();
-		toolsBox.visible = false;
-		toolsBox.active = false;
-		add(toolsBox);
-
 		addSongUI();
 		addSectionUI();
 		addNoteUI();
@@ -1130,27 +1095,14 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		uiManiaStepper.textObj.font = 'assets/fonts/editors.ttf';
 		uiManiaStepper.name = 'mania';
 		blockPressWhileTypingOnStepper.push(uiManiaStepper);
-
-		// 多k: 切 K 转换模式 (单选)
-		convertModeDropDown = new PsychUIDropDownMenu(200, 160, ['顺序映射', '自动打乱', '自动补双押', '打乱+双押'], function(id:Int, label:String) {}, 110);
+		// Key conversion mode: sequential / shuffle / auto-double / shuffle+double.
+		convertModeDropDown = new PsychUIDropDownMenu(250, 128, [
+			Language.get('newchartEditor_convert_sequential', '顺序映射'),
+			Language.get('newchartEditor_convert_shuffle', '自动打乱'),
+			Language.get('newchartEditor_convert_double', '自动补双押'),
+			Language.get('newchartEditor_convert_shuffle_double', '打乱+双押')
+		], function(id:Int, label:String) {}, 110);
 		convertModeDropDown.selectedIndex = 0;
-		// 多k: 一键写大粪
-		dumbChartButton = new PsychUIButton(320, 160, '一键写大粪', function() writeDumbChart(), 120, 24);
-		// 多k: 密度增强 (阈值玩家可调)
-		boostDensityButton = new PsychUIButton(200, 190, '塞一点', function() boostDensity(Std.int(densityThresholdStepper.value)), 90, 24);
-		densityThresholdStepper = new PsychUINumericStepper(300, 192, 1, 6, 1, 32, 0, 45);
-		// 多k: 工具入口 (算法工具集中到 "多k工具" 浮动窗口, 避免与角色/舞台下拉重叠)
-		openToolsButton = new PsychUIButton(250, 128, '多k工具', function() toggleToolsBox(), 110, 20);
-		// 把算法工具控件挂到浮动窗口
-		var toolsMenu = toolsBox.getTab('多k工具').menu;
-		toolsMenu.add(new EditorsText(10, 10, 250, '切 K 转换模式 (切换键数时生效):', 13));
-		toolsMenu.add(convertModeDropDown);
-		toolsMenu.add(new EditorsText(10, 66, 250, '一键写大粪 (4K 转多K, 匹配人声):', 13));
-		toolsMenu.add(dumbChartButton);
-		toolsMenu.add(new EditorsText(10, 124, 250, '密度增强阈值 (每拍 Note 数):', 13));
-		toolsMenu.add(densityThresholdStepper);
-		toolsMenu.add(boostDensityButton);
-		toolsMenu.add(new PsychUIButton(282, 8, 'X', function() { toolsBox.visible = false; toolsBox.active = false; }, 26, 20));
 		#if MODS_ALLOWED
 		var directories:Array<String> = [Paths.mods('characters/'), Paths.mods(Paths.currentModDirectory + '/characters/'), Paths.getPreloadPath('characters/')];
 		for(mod in Paths.getGlobalMods())
@@ -1290,7 +1242,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		tab_group_song.add(stepperBPM);
 		tab_group_song.add(stepperSpeed);
 		tab_group_song.add(uiManiaStepper);
-		tab_group_song.add(openToolsButton);
+		tab_group_song.add(convertModeDropDown);
 		tab_group_song.add(reloadNotesButton);
 		tab_group_song.add(noteSkinInputText);
 		tab_group_song.add(noteSplashesInputText);
@@ -1746,7 +1698,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 				// 多k: 事件改名 (含改为/改掉 Change Mania) 后按工具箱模式重编码受影响 Note
 				var oldEvents:Array<Dynamic> = EKData.deepCopyEvents(_song.events);
 				if (curSelectedNote[2] == null){
-					curSelectedNote[1][curEventSelected][0] = eventStuff[selectedEvent][0];
+				curSelectedNote[1][curEventSelected][0] = eventStuff[selectedEvent][0];
 				}
 				reencodeNotesForEventChange(oldEvents, _song.events, (convertModeDropDown != null) ? convertModeDropDown.selectedIndex : 0);
 				reloadGridLayer();
@@ -3916,7 +3868,7 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 			var partMania:Int = EKData.effectiveManiaAtTime(_song.events, (_song.mania != null) ? EKData.clampMania(_song.mania) : Note.defaultMania, noteStrum);
 			var partAmmo:Int = Note.ammo[partMania];
 			if (noteData >= partAmmo * 2) noteData = partAmmo * 2 - 1;
-			if (noteData < 0) noteData = 0;
+			// 事件列在最左 (x < GRID_SIZE → noteData = -1)：不能钳成 0，否则事件永远放不下
 		}
 		var noteSus = 0;
 		var daAlt = false;
