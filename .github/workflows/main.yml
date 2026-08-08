@@ -262,6 +262,12 @@ jobs:
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
 
+      - name: Patch hxcpp zlib for modern macOS SDK
+        run: |
+          ZUTIL="$HOME/haxelib/hxcpp/4,2,1/project/thirdparty/zlib-1.2.11/zutil.h"
+          sed -i.bak '/# *define fdopen(fd,mode) NULL/d' "$ZUTIL"
+          ! grep -q 'define fdopen' "$ZUTIL"
+
       - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
@@ -314,6 +320,12 @@ jobs:
         run: |
           haxelib setup ~/haxelib
           haxe -cp ./setup -main Main --interp
+
+      - name: Patch hxcpp zlib for iOS 18 SDK
+        run: |
+          ZUTIL="$HOME/haxelib/hxcpp/4,2,1/project/thirdparty/zlib-1.2.11/zutil.h"
+          sed -i.bak '/# *define fdopen(fd,mode) NULL/d' "$ZUTIL"
+          ! grep -q 'define fdopen' "$ZUTIL"
 
       - name: Init discord_rpc submodules
         run: |
