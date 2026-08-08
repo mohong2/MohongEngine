@@ -265,6 +265,7 @@ jobs:
       - name: Patch hxcpp zlib for modern macOS SDK
         run: |
           find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
           ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
 
       - name: Init discord_rpc submodules
@@ -287,8 +288,9 @@ jobs:
           retention-days: 14
 
   buildIOS:
-    name: Build iOS (simulator)
-    # 模拟器构建无需签名；真机 .ipa 需 Apple 证书（另行配置 secret）
+    name: Build iOS (device)
+    # Intel runner 编 x86_64 模拟器时 hxvlc 只有 arm64 库会链接失败，
+    # 真机 arm64 两个库都齐；用 ad-hoc 签名绕开证书
     if: github.event.inputs.platform == 'all' || github.event.inputs.platform == 'ios'
     runs-on: macos-15-intel
     steps:
@@ -340,12 +342,21 @@ jobs:
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
-      - name: Compile iOS (simulator)
-        run: haxelib run lime build ios -simulator --app-version="$APP_VERSION-${{ github.run_id }}"
+      - name: Configure ad-hoc iOS signing
+        run: |
+          CONF="$HOME/.lime/config.xml"
+          mkdir -p "$HOME/.lime"
+          if [ ! -f "$CONF" ]; then printf '<?xml version="1.0" encoding="utf-8"?>\n<config>\n</config>\n' > "$CONF"; fi
+          sed -i '' '/<set name="ios.identity"/d' "$CONF"
+          sed -i '' 's#</config>#<set name="ios.identity" value="-" /></config>#' "$CONF"
+          cat "$CONF"
+
+      - name: Compile iOS (device, arm64)
+        run: haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: SeiunEngine-ios-simulator
-          path: export/release/ios/bin
+          name: SeiunEngine-ios
+          path: export/release/ios/build/Release-iphoneos
           if-no-files-found: error
           retention-days: 14
