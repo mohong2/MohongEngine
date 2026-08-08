@@ -1,0 +1,60 @@
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 要发布的构建 run 编号（Actions 运行编号，留空则用最新一次 Build）
+        required: false
+        type: string
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Publish alpha release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - name: Resolve build run
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          RUN_ID="${{ github.event.inputs.run_id }}"
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID="$(gh run list --workflow main.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')"
+          fi
+          echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
+          echo "using build run: $RUN_ID"
+
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+      - name: Download artifacts
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          path: release
+          run-id: ${{ env.RUN_ID }}
+
+      - name: Package assets
+        run: |
+          cd release
+          for d in */; do
+            if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+              zip -r "${d%/}.zip" "$d"
+            fi
+          done
+          ls -la
+
+      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
+        with:
+          tag_name: v${{ env.APP_VERSION }}-alpha.${{ env.RUN_ID }}
+          name: Alpha v${{ env.APP_VERSION }} (build ${{ env.RUN_ID }})
+          prerelease: true
+          body: |
+            自动构建的 alpha 预发布版，极不稳定，谨慎使用。
+            产物来自 Build workflow 的 run：${{ env.RUN_ID }}
+          files: release/*.zip
