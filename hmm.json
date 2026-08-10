@@ -1,5 +1,4 @@
 {
-  "_comment": "flixel/extension-androidtools/hxvlc/linc_luajit 为 mohong2 私有 fork，需 GH_PAT；hscript-seiun 已切为 git 类型，本地安装在 .haxelib/hscript-seiun/git，改动可直接提交到仓库",
   "dependencies": [
     {
       "name": "lime",
@@ -26,6 +25,11 @@
       "name": "flixel-tools",
       "type": "haxelib",
       "version": "1.5.1"
+    },
+    {
+      "name": "flxanimate",
+      "type": "haxelib",
+      "version": "4.0.0"
     },
     {
       "name": "flixel-ui",

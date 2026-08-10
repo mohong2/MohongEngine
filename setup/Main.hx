@@ -12,49 +12,83 @@ typedef Library = {
 
 class Main {
 	public static function main():Void {
-		// 本地创建项目内 .haxelib；CI 不创建（避免劫持 ~/haxelib 仓库）
 		if (!FileSystem.exists(".haxelib") && Sys.getEnv("GITHUB_ACTIONS") == null)
 			FileSystem.createDirectory(".haxelib");
 
-		// brief explanation: first we parse a json containing the library names, data, and such
 		final libs:Array<Library> = Json.parse(File.getContent('./hmm.json')).dependencies;
 
-		// now we loop through the data we currently have
 		for (data in libs) {
-			// and install the libraries, based on their type
 			switch (data.type) {
-				case "install", "haxelib": // for libraries only available in the haxe package manager
+				case "install", "haxelib":
 					var version:String = data.version == null ? "" : data.version;
-					// CI 下 --never：已装版本保持不变，避免交互询问卡住
 					var extraArgs:String = Sys.getEnv("GITHUB_ACTIONS") == null ? "" : " --never";
 					if (Sys.command('haxelib --quiet install ${data.name} ${version}${extraArgs}') != 0) {
 						Sys.println('[SEIUN ENGINE SETUP]: Failed to install ${data.name}');
 						Sys.exit(1);
 					}
-				case "git": // for libraries that contain git repositories
+				case "git":
 					var ref:String = data.ref == null ? "" : data.ref;
 					if (Sys.command('haxelib --quiet git ${data.name} ${data.url} ${data.ref}') != 0) {
 						Sys.println('[SEIUN ENGINE SETUP]: Failed to install ${data.name} from ${data.url}');
 						Sys.exit(1);
 					}
-				case "dev": // local development directory (e.g. hscript-seiun before it's published)
+				case "dev":
 					if (Sys.command('haxelib --quiet dev ${data.name} ${data.url}') != 0) {
 						Sys.println('[SEIUN ENGINE SETUP]: Failed to link ${data.name} to ${data.url}');
 						Sys.exit(1);
 					}
-				default: // and finally, throw an error if the library has no type
+				default:
 					Sys.println('[SEIUN ENGINE SETUP]: Unable to resolve library of type "${data.type}" for library "${data.name}"');
 			}
 		}
 
-		// 兜底：git 库的空版本依赖会把 hxcpp/lime 拉成最新版，这里重新钉回 hmm.json 声明的版本
 		for (data in libs) {
 			if ((data.type == "install" || data.type == "haxelib") && data.version != null && data.version != "") {
 				Sys.command('haxelib --quiet set ${data.name} ${data.version}');
 			}
 		}
 
-		// after the loop, we can leave
+		applyFlxanimatePatch();
+
 		Sys.exit(0);
+	}
+
+	static function applyFlxanimatePatch():Void
+	{
+		var patchDir:String = './setup/flxanimate_haxe425_patch';
+		if (!FileSystem.exists(patchDir)) return;
+
+		var libPath:String = '';
+		try
+		{
+			var proc = new sys.io.Process('haxelib', ['path', 'flxanimate']);
+			libPath = StringTools.trim(proc.stdout.readLine());
+			proc.close();
+		}
+		catch (e:Dynamic)
+		{
+			Sys.println('[SEIUN ENGINE SETUP]: Cannot resolve flxanimate path, skip patch.');
+			return;
+		}
+
+		if (libPath.length < 1 || StringTools.startsWith(libPath, '-D')) return;
+		libPath = StringTools.replace(libPath, '\\', '/');
+		while (StringTools.endsWith(libPath, '/')) libPath = libPath.substr(0, libPath.length - 1);
+
+		var files:Array<Array<String>> = [
+			['FlxElement.hx', 'flxanimate/animate/FlxElement.hx'],
+			['MacroAnimationData.hx', 'flxanimate/data/MacroAnimationData.hx'],
+			['FlxAnimateFrames.hx', 'flxanimate/frames/FlxAnimateFrames.hx']
+		];
+		for (pair in files)
+		{
+			var src:String = '$patchDir/${pair[0]}';
+			var dst:String = '$libPath/${pair[1]}';
+			if (FileSystem.exists(src))
+			{
+				File.saveContent(dst, File.getContent(src));
+				Sys.println('[SEIUN ENGINE SETUP]: Patched $dst');
+			}
+		}
 	}
 }
