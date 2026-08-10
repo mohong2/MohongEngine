@@ -43,6 +43,13 @@ See `hmm.json`. Four of them are forks of mine:
 
 Drop mods into `mods/`. See `Modding.md`.
 
+## Modding tools
+
+Official companion tools for making SeiunEngine mods:
+
+- **vscode-seiun-lua** — a VS Code extension with completions, hover docs, signature help, version-aware API filtering and syntax highlighting for Lua / HScript / Haxe mod scripts. Repo: <https://github.com/mohong2/vscode-seiun-lua>
+- **SeiunEngine Lua Script API** — a trilingual, searchable API reference covering Psych Engine 0.6.3 / 0.7.3 / 1.0.4 and SeiunEngine. Live site: <https://mohong2.github.io/SeiunEngine-Lua-API/> (update the link once the docs repo is published)
+
 ## Credits
 
 - **mo_hong** — modifications and Chinese translation

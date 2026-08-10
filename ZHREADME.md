@@ -43,6 +43,13 @@ lime build windows
 
 把 mod 放进 `mods/`，参见 `Modding.md`。
 
+## Mod 工具
+
+制作 SeiunEngine mod 的官方配套工具：
+
+- **vscode-seiun-lua** —— VS Code 扩展：补全、悬停文档、签名帮助、按版本过滤 API、语法高亮，支持 Lua / HScript / Haxe。仓库：<https://github.com/mohong2/vscode-seiun-lua>
+- **SeiunEngine Lua 脚本 API** —— 三语（English / 简体中文 / 繁體中文）可搜索的 API 参考站，覆盖 Psych 0.6.3 / 0.7.3 / 1.0.4 与 SeiunEngine。在线地址：<https://mohong2.github.io/SeiunEngine-Lua-API/>（文档站发布后，把链接换成实际地址即可）
+
 ## 制作人员
 
 - **mo_hong** — 修改与中文翻译

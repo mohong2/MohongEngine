@@ -68,6 +68,9 @@ a { color:inherit;
 {
     color: #fa5c5c;
 }
+
+#modtools a { color: #4FC3F7; }
+#modtools a:hover { color: #ffb50e; }
 #twitter a:hover
 {
     color: #00acee;
