@@ -10,11 +10,9 @@ import flixel.input.actions.FlxActionSet;
 import flixel.input.gamepad.FlxGamepadButton;
 import flixel.input.gamepad.FlxGamepadInputID;
 import flixel.input.keyboard.FlxKey;
-#if TOUCH_CONTROLS
 import android.flixel.FlxButton;
 import android.flixel.FlxHitbox;
 import android.flixel.FlxVirtualPad;
-#end
 #if (haxe >= "4.0.0")
 enum abstract Action(String) to String from String
 {
@@ -387,7 +385,6 @@ class Controls extends FlxActionSet
 	public var trackedinputsUI:Array<FlxActionInput> = [];
 	public var trackedinputsNOTES:Array<FlxActionInput> = [];
 
-	#if TOUCH_CONTROLS
 	public function addButtonNOTES(action:FlxActionDigital, button:FlxButton, state:FlxInputState):Void
 	{
 		if (button == null)
@@ -525,15 +522,6 @@ class Controls extends FlxActionSet
 			}
 		}
 	}
-	#else
-	public function addButtonNOTES(action:FlxActionDigital, button:Dynamic, state:FlxInputState):Void {}
-	public function addButtonUI(action:FlxActionDigital, button:Dynamic, state:FlxInputState):Void {}
-	public function setHitBox(Hitbox:Dynamic):Void {}
-	public function setVirtualPadUI(VirtualPad:Dynamic, DPad:Dynamic, Action:Dynamic):Void {}
-	public function setVirtualPadNOTES(VirtualPad:Dynamic, DPad:Dynamic, Action:Dynamic):Void {}
-	public function removeVirtualControlsInput(Tinputs:Array<FlxActionInput>):Void {}
-	#end
-
 	override function update()
 	{
 		super.update();
@@ -738,7 +726,7 @@ class Controls extends FlxActionSet
 	{
 		var copyKeys:Array<FlxKey> = keys.copy();
 		for (i in 0...copyKeys.length)
-			if(i == NONE)
+			if(i == FlxKey.NONE)
 				copyKeys.remove(i);
 
 		#if (haxe >= "4.0.0")
@@ -752,7 +740,7 @@ class Controls extends FlxActionSet
 	{
 		var copyKeys:Array<FlxKey> = keys.copy();
 		for (i in 0...copyKeys.length)
-			if(i == NONE)
+			if(i == FlxKey.NONE)
 				copyKeys.remove(i);
 
 		#if (haxe >= "4.0.0")
@@ -784,7 +772,7 @@ class Controls extends FlxActionSet
 	inline static function addKeys(action:FlxActionDigital, keys:Array<FlxKey>, state:FlxInputState)
 	{
 		for (key in keys)
-			if(key != NONE)
+			if(key != FlxKey.NONE)
 				action.addKey(key, state);
 	}
 

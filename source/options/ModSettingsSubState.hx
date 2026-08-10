@@ -238,7 +238,7 @@ class ModSettingsSubState extends MusicBeatSubstate
 		changeSelection();
 		reloadCheckboxes();
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C);
 		addPadCamera();
 		#end
@@ -252,8 +252,8 @@ class ModSettingsSubState extends MusicBeatSubstate
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 
-		// 鼠标点击
-		if (FlxG.mouse.justPressed)
+		// 鼠标点击 (虚拟按键上点击不穿透)
+		if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 		{
 			for (checkbox in checkboxGroup)
 			{
@@ -408,7 +408,7 @@ class ModSettingsSubState extends MusicBeatSubstate
 					clearHold();
 			}
 
-			if (#if TOUCH_CONTROLS virtualPad.buttonC.justPressed || #end controls.RESET)
+			if (#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.justPressed) || #end controls.RESET)
 			{
 				for (i in 0...optionsArray.length)
 				{

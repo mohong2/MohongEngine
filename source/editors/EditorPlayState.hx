@@ -104,10 +104,8 @@ class EditorPlayState extends MusicBeatState
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
 		else
 			vocals = new FlxSound();
-		#if TOUCH_CONTROLS
 		addAndroidControls();
-		androidControls.visible = true;
-		#end
+		if (androidControls != null) androidControls.visible = true;
 		generateSong(PlayState.SONG.song);
 		#if (LUA_ALLOWED && MODS_ALLOWED)
 		for (notetype in noteTypeMap.keys()) {
@@ -333,7 +331,7 @@ class EditorPlayState extends MusicBeatState
 	override function update(elapsed:Float) {
 		if (#if android FlxG.android.justReleased.BACK || #end FlxG.keys.justPressed.ESCAPE)
 		{
-			#if TOUCH_CONTROLS androidControls.visible = false; #end
+			if (androidControls != null) androidControls.visible = false;
 			FlxG.sound.music.pause();
 			vocals.pause();
 			if(ClientPrefs.data.newchartingstate)
@@ -1095,7 +1093,8 @@ class EditorPlayState extends MusicBeatState
 		}
 
 		var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);
-		splash.setupNoteSplash(x, y, data, skin, hue, sat, brt);
+		// 与 PlayState 一致: 传 Note 对象, 0.7.3 白底溅射按该 Note 的轨道色板染色
+		splash.setupNoteSplash(x, y, data, skin, hue, sat, brt, note);
 		grpNoteSplashes.add(splash);
 	}
 	

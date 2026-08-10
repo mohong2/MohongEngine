@@ -59,8 +59,15 @@ class VideoHandler extends FlxInternalVideo
 
 		if (canUseAutoResize && (videoWidth > 0 && videoHeight > 0))
 		{
-			width = calcSize(0);
-			height = calcSize(1);
+			var newWidth:Int = calcSize(0);
+			var newHeight:Int = calcSize(1);
+			if (newWidth != _lastResizeWidth || newHeight != _lastResizeHeight)
+			{
+				_lastResizeWidth = newWidth;
+				_lastResizeHeight = newHeight;
+				width = newWidth;
+				height = newHeight;
+			}
 		}
 	}
 	#end
@@ -203,6 +210,12 @@ class VideoHandler extends FlxInternalVideo
 	{
 		return _location;
 	}
+
+	// Perf: cache the last applied auto-resize size so unchanged frames don't
+	// re-trigger width/height assignment (each assignment walks the display
+	// bounds in OpenFL).
+	var _lastResizeWidth:Int = -1;
+	var _lastResizeHeight:Int = -1;
 
 	override public function dispose():Void
 	{

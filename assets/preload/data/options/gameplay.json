@@ -9,13 +9,14 @@
 		"defaultValue": false
 	},
 	{
-		"nameKey": "option.compatibility_mode",
-		"defaultName": "0.7.3 Compatibility mode",
-		"descKey": "option.compatibility_mode.desc",
-		"defaultDesc": "If checked, lua will use the Psych Engine 0.7.3 method\nto be compatible with Psych Engine 0.7.3 mods",
-		"variable": "compatibility_mode",
-		"type": "bool",
-		"defaultValue": false
+		"nameKey": "option.compatEngine",
+		"defaultName": "Engine Compatibility",
+		"descKey": "option.compatEngine.desc",
+		"defaultDesc": "Choose which Psych Engine version's mod API/UI to emulate.\nAuto keeps the previous behavior (0.6.3, or 0.7.3 if the old compatibility toggle was on).\nNote-related callbacks (onSpawnNote, goodNoteHit, note splash...) adapt automatically.",
+		"variable": "compatEngine",
+		"type": "string",
+		"defaultValue": "Auto",
+		"options": ["Auto", "0.6.3", "0.7.3", "1.0.4"]
 	},
 	{
 		"nameKey": "option.hscriptErrorHandling",

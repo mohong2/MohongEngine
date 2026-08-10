@@ -67,7 +67,6 @@ class OptionsState extends MusicBeatState
 				#if android
 				removeVirtualPad();
 				#end
-				// === 使用现代化 UI 重写的设置页面 ===
 				openSubState(new options.GameplaySettings());
 			case 'extra_settings':
 				#if android

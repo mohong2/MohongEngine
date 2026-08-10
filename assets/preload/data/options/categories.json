@@ -7,6 +7,13 @@
 		"substateClass": "options.NotesSubState"
 	},
 	{
+		"id": "notecolor_rgb",
+		"nameKey": "option.notecolor_rgb",
+		"defaultName": "Note Colors (0.7.3)",
+		"type": "substate",
+		"substateClass": "options.NotesSubStateNew"
+	},
+	{
 		"id": "controls",
 		"nameKey": "option.controls",
 		"defaultName": "Controls",
@@ -66,5 +73,13 @@
 		"type": "settings",
 		"optionsFile": "android_settings",
 		"rpcTitleKey": "option.androidSettings.rctitle"
+	},
+	{
+		"id": "touch_controls",
+		"nameKey": "option.touchControlsMenu",
+		"defaultName": "Touch Controls",
+		"type": "substate",
+		"substateClass": "android.AndroidControlsSubState",
+		"platform": "desktop"
 	}
 ]

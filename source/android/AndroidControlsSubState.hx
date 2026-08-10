@@ -149,62 +149,21 @@ override function update(elapsed:Float)
         else if (touch.overlaps(rightArrow) && touch.justPressed)
             changeSelection(1);
 
-        if (controlsItems[Math.floor(curSelected)] == 'Pad-Custom')
-        {
-            if (buttonBinded)
-            {
-                if (touch.justReleased)
-                {
-                    bindButton = null;
-                    buttonBinded = false;
-                }
-                else
-                    moveButton(touch, bindButton);
-            }
-            else
-            {
-                virtualPad.forEachAlive((button:FlxButton) ->
-                {
-                    if (button.justPressed)
-                        moveButton(touch, button);
-                });
-            }
-            virtualPad.forEachAlive((button:FlxButton) ->
-            {
-                if (button != bindButton && buttonBinded)
-                {
-                    var snapDistance = 15; 
-                    
-                    if (Math.abs(bindButton.y - button.y) < snapDistance)
-                    {
-                        bindButton.y = button.y;
-                    }
-
-                    if (Math.abs(bindButton.x - button.x) < snapDistance)
-                    {
-                        bindButton.x = button.x;
-                    }
-
-                    if (Math.abs(bindButton.x - (button.x - bindButton.width - 5)) < snapDistance)
-                    {
-                        bindButton.x = button.x - bindButton.width - 5;
-                    }
-                    if (Math.abs(bindButton.x - (button.x + button.width + 5)) < snapDistance)
-                    {
-                        bindButton.x = button.x + button.width + 5;
-                    }
-                    if (Math.abs(bindButton.y - (button.y - bindButton.height - 5)) < snapDistance)
-                    {
-                        bindButton.y = button.y - bindButton.height - 5;
-                    }
-                    if (Math.abs(bindButton.y - (button.y + button.height + 5)) < snapDistance)
-                    {
-                        bindButton.y = button.y + button.height + 5;
-                    }
-                }
-            });
-        }
+        handlePadCustomDrag(touch, touch.x, touch.y);
     }
+
+    // 桌面端触屏支持: 鼠标也当作触摸处理
+    #if desktop
+    if (FlxG.mouse != null)
+    {
+        if (FlxG.mouse.overlaps(leftArrow) && FlxG.mouse.justPressed)
+            changeSelection(-1);
+        else if (FlxG.mouse.overlaps(rightArrow) && FlxG.mouse.justPressed)
+            changeSelection(1);
+
+        handlePadCustomDrag(FlxG.mouse, FlxG.mouse.x, FlxG.mouse.y);
+    }
+    #end
 
     if (virtualPad != null && controlsItems[Math.floor(curSelected)] == 'Pad-Custom')
     {
@@ -224,6 +183,73 @@ override function update(elapsed:Float)
             exPosition.text = 'Button Extra X:' + virtualPad.buttonEx.x + ' Y:' + virtualPad.buttonEx.y;
     }
 }
+
+	/** Pad-Custom 模式下用指针 (触摸/鼠标) 拖动按钮。 */
+	private function handlePadCustomDrag(input:Dynamic, px:Float, py:Float):Void
+	{
+		if (controlsItems[Math.floor(curSelected)] != 'Pad-Custom')
+			return;
+
+		if (buttonBinded)
+		{
+			if (input.justReleased)
+			{
+				bindButton = null;
+				buttonBinded = false;
+			}
+			else
+				moveButton(px, py, bindButton);
+		}
+		else
+		{
+			virtualPad.forEachAlive((button:FlxButton) ->
+			{
+				if (button.justPressed)
+					moveButton(px, py, button);
+			});
+		}
+
+		snapBindButton();
+	}
+
+	/** 让被拖动的按钮吸附到其他按钮旁边, 方便对齐。 */
+	private function snapBindButton():Void
+	{
+		virtualPad.forEachAlive((button:FlxButton) ->
+		{
+			if (button != bindButton && buttonBinded)
+			{
+				var snapDistance = 15;
+
+				if (Math.abs(bindButton.y - button.y) < snapDistance)
+				{
+					bindButton.y = button.y;
+				}
+
+				if (Math.abs(bindButton.x - button.x) < snapDistance)
+				{
+					bindButton.x = button.x;
+				}
+
+				if (Math.abs(bindButton.x - (button.x - bindButton.width - 5)) < snapDistance)
+				{
+					bindButton.x = button.x - bindButton.width - 5;
+				}
+				if (Math.abs(bindButton.x - (button.x + button.width + 5)) < snapDistance)
+				{
+					bindButton.x = button.x + button.width + 5;
+				}
+				if (Math.abs(bindButton.y - (button.y - bindButton.height - 5)) < snapDistance)
+				{
+					bindButton.y = button.y - bindButton.height - 5;
+				}
+				if (Math.abs(bindButton.y - (button.y + button.height + 5)) < snapDistance)
+				{
+					bindButton.y = button.y + button.height + 5;
+				}
+			}
+		});
+	}
 
 	private function changeSelection(change:Int = 0):Void
 	{
@@ -253,11 +279,11 @@ override function update(elapsed:Float)
 		exPosition.visible = daChoice == 'Pad-Custom';
 	}
 
-	private function moveButton(touch:FlxTouch, button:FlxButton):Void
+	private function moveButton(px:Float, py:Float, button:FlxButton):Void
 	{
 		bindButton = button;
-		bindButton.x = touch.x - Std.int(bindButton.width / 2);
-		bindButton.y = touch.y - Std.int(bindButton.height / 2);
+		bindButton.x = px - Std.int(bindButton.width / 2);
+		bindButton.y = py - Std.int(bindButton.height / 2);
 
 		if (!buttonBinded)
 			buttonBinded = true;

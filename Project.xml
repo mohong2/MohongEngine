@@ -129,7 +129,10 @@
 	<haxedev set='webgl'/>
 
 	<haxelib name="flixel-addons"/>
-	<haxelib name="hscript-iris"/>
+	<!-- hscript-seiun: hscript-iris + improved classes/config + plus inheritance (all MIT) -->
+	<haxelib name="hscript-seiun"/>
+	<!-- Comment this out to disable extending Haxe classes in scripts (CUSTOM_CLASSES) -->
+	<define name="CUSTOM_CLASSES" unless="STRIPPED_COMPILE" />
 	<haxedef name="hscriptPos"/>
 
 	<!--In case you want to use the ui package-->
@@ -138,6 +141,10 @@
 	<haxelib name="hxvlc" if="desktop || android || ios"/>
 	<haxelib name="faxe" if='switch'/>
 	<haxelib name="tjson"/>
+	<!-- 0.7.3/1.0.4 模组兼容：FlxAnimate 精灵（makeFlxAnimateSprite 等 Lua API） -->
+	<!-- 0.7.3/1.0.4 mod compat: FlxAnimate sprites (makeFlxAnimateSprite etc.) -->
+	<haxelib name="flxanimate" version="4.0.0"/>
+	<define name="flxanimate"/>
 	<haxelib name="extension-androidtools" if="android" />
 	<haxelib name="discord_rpc" if="desktop"/>
 	<!-- <haxelib name="extension-webm" if="VIDEOS_ALLOWED" /> -->

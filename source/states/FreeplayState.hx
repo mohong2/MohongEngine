@@ -401,7 +401,7 @@ class FreeplayState extends SeiunMenuState
 		var leText:String = Language.get("FreeplayState.leText", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		var leText:String = Language.get("FreeplayState.leText.android", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 		#end
@@ -410,7 +410,7 @@ class FreeplayState extends SeiunMenuState
 		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
 		var size:Int = 18;
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL.android", "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
 		var size:Int = 16;
 		#end
@@ -420,7 +420,7 @@ class FreeplayState extends SeiunMenuState
 		text.setFormat(Paths.languageFont(), size, FlxColor.WHITE, RIGHT);
 		text.scrollFactor.set();
 		add(text);
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
@@ -442,7 +442,7 @@ class FreeplayState extends SeiunMenuState
 		changeSelection(0, false);
 		persistentUpdate = true;
 		canInput = true;
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
@@ -514,7 +514,7 @@ class FreeplayState extends SeiunMenuState
 
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 50, 0,
-			#if TOUCH_CONTROLS
+			#if (TOUCH_CONTROLS || desktop)
 			Language.get('Mod.hint.android', '[G] Switch Mod'),
 			#else
 			Language.get('Mod.hint', '[TAB] Switch Mod'),
@@ -811,20 +811,24 @@ class FreeplayState extends SeiunMenuState
 		var upP = controls.UI_UP_P;
 		var downP = controls.UI_DOWN_P;
 		var accepted = controls.ACCEPT;
-		var space = #if TOUCH_CONTROLS virtualPad.buttonX.justPressed  || #end	FlxG.keys.justPressed.SPACE;
-		var ctrl = #if TOUCH_CONTROLS virtualPad.buttonC.justPressed   || #end FlxG.keys.justPressed.CONTROL;
-		var history = #if TOUCH_CONTROLS virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.H;
+		var space = #if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonX.justPressed)  || #end	FlxG.keys.justPressed.SPACE;
+		var ctrl = #if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.justPressed)   || #end FlxG.keys.justPressed.CONTROL;
+		var history = #if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonV.justPressed) || #end FlxG.keys.justPressed.H;
 		// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
 		if (!playingMusic)
 		{
 			if (FlxG.keys.justPressed.TAB
-				#if TOUCH_CONTROLS || virtualPad.buttonEx.justPressed #end)
+				#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonEx.justPressed) #end)
 			{
 				openModSelect();
 				return;
 			}
 		}
 		#if !TOUCH_CONTROLS
+		// 防穿透: 鼠标在虚拟按键上时, 下层歌曲列表不做悬停/点击判定
+		var overControls:Bool = (virtualPad != null && virtualPad.isMouseOverAnyButton());
+		if (!overControls)
+		{
 		var newMouseOverlapIndex = -1;
 		for (i in 0...grpSongs.length) {
 			var song = grpSongs.members[i];
@@ -856,15 +860,17 @@ class FreeplayState extends SeiunMenuState
 			changeDiff();
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 		}
+		}
 		#end
-		if (FlxG.mouse.justPressed && mouseOverlapIndex == curSelected && !playingMusic) {
+		// 开启触屏支持后, 鼠标点击不再直接进歌, 防止误触 (用虚拟按键/键盘确认)
+		if (FlxG.mouse.justPressed && mouseOverlapIndex == curSelected && !playingMusic && !ClientPrefs.data.touchControls) {
 			if (canInput) {
 				accepted = true; 
 			}
 		}
 
 		var shiftMult:Int = 1;
-		if(#if TOUCH_CONTROLS virtualPad.buttonZ.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
+		if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonZ.pressed) || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 		if (!playingMusic){
 		if(filteredSongIndices.length > 1)
 		{
@@ -1020,7 +1026,7 @@ class FreeplayState extends SeiunMenuState
     }
 	    if (playingMusic)
    		 {
-			if (FlxG.keys.justPressed.UP #if TOUCH_CONTROLS || virtualPad.buttonUp.justPressed #end)
+			if (FlxG.keys.justPressed.UP #if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end)
 			{
 				playbackRate += 0.05;
 				if (playbackRate > 3.0) playbackRate = 3.0;
@@ -1028,7 +1034,7 @@ class FreeplayState extends SeiunMenuState
 				updatePreviewTexts();
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
 			}
-			else if (FlxG.keys.justPressed.DOWN	#if TOUCH_CONTROLS || virtualPad.buttonDown.justPressed #end)
+			else if (FlxG.keys.justPressed.DOWN	#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end)
 			{
 				playbackRate -= 0.05;
 				if (playbackRate < 0.25) playbackRate = 0.25;
@@ -1146,7 +1152,7 @@ class FreeplayState extends SeiunMenuState
 			missingText.visible = false;
 			missingTextBG.visible = false;
 
-			#if TOUCH_CONTROLS
+			#if (TOUCH_CONTROLS || desktop)
 			// 在切换状态前移除虚拟手柄，防止按键状态残留到 PlayState
 			removeVirtualPad();
 			#end
@@ -1182,7 +1188,7 @@ class FreeplayState extends SeiunMenuState
 			}
 			trace(poop);
 		}
-		else if(#if TOUCH_CONTROLS virtualPad.buttonY.justPressed ||#end controls.RESET)
+		else if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonY.justPressed) ||#end controls.RESET)
 		{
 			persistentUpdate = false;
 			var resetSong = getCurrentSong();

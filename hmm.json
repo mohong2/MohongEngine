@@ -1,5 +1,5 @@
 {
-  "_comment": "flixel/extension-androidtools/hxvlc/linc_luajit 为 mohong2 私有 fork，需 GH_PAT",
+  "_comment": "flixel/extension-androidtools/hxvlc/linc_luajit 为 mohong2 私有 fork，需 GH_PAT；hscript-seiun 已切为 git 类型，本地安装在 .haxelib/hscript-seiun/git，改动可直接提交到仓库",
   "dependencies": [
     {
       "name": "lime",
@@ -38,9 +38,11 @@
       "version": "4.2.1"
     },
     {
-      "name": "hscript-iris",
-      "type": "haxelib",
-      "version": "1.1.3"
+      "name": "hscript-seiun",
+      "type": "git",
+      "version": "1.1.0",
+      "url": "https://github.com/mohong2/hscript-seiun.git",
+      "ref": "master"
     },
     {
       "name": "extension-androidtools",

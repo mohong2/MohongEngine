@@ -9,6 +9,7 @@ import haxe.io.Bytes;
 import haxe.io.BytesInput;
 import haxe.io.BytesOutput;
 import mohong.TraceManager;
+import SUtil;
 
 /**
  * Backup utility for FNF-SeiunEngine game data.
@@ -268,23 +269,23 @@ class BackupUtil
 			var scoreDir:String = "./.scores/";
 			if (FileSystem.exists(scoreDir))
 			{
-				var files:Array<String> = FileSystem.readDirectory(scoreDir);
-				for (file in files)
+				// 递归收集 (兼容 歌曲/难度/ 子目录布局)
+				var files:Array<String> = [];
+				collectScoreFiles(scoreDir, files);
+				for (filePath in files)
 				{
-					if (!file.endsWith(".json")) continue;
 					try
 					{
-						var filePath:String = scoreDir + file;
 						var bytes:Bytes = File.getBytes(filePath);
 						entries.push({
 							type: "score",
-							fileName: file,
+							fileName: filePath.substring(scoreDir.length), // 相对路径: 歌曲/难度/文件.json
 							data: base64Encode(bytes)  // 加密的二进制, base64 存储
 						});
 					}
 					catch (e:Dynamic)
 					{
-						TraceManager.error('trace.backup.readScoreFileFailed', 'BackupUtil: Failed to read score file {}: {}', [file, e]);
+						TraceManager.error('trace.backup.readScoreFileFailed', 'BackupUtil: Failed to read score file {}: {}', [filePath, e]);
 					}
 				}
 			}
@@ -295,6 +296,28 @@ class BackupUtil
 			TraceManager.error('trace.backup.readAllscoreDirsFailed', 'BackupUtil: Could not read Allscore directories: {}', [e]);
 		}
 		return entries;
+	}
+
+	/** 递归收集 .scores 下所有 .json 文件路径 */
+	private static function collectScoreFiles(dir:String, into:Array<String>):Void
+	{
+		#if sys
+		if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir)) return;
+		var items:Array<String> = FileSystem.readDirectory(dir);
+		for (item in items)
+		{
+			if (item == '.' || item == '..') continue;
+			var path:String = dir + item;
+			try
+			{
+				if (FileSystem.isDirectory(path))
+					collectScoreFiles(path + '/', into);
+				else if (item.endsWith('.json'))
+					into.push(path);
+			}
+			catch (e:Dynamic) {}
+		}
+		#end
 	}
 
 	private static function captureClientPrefs():Dynamic
@@ -435,7 +458,13 @@ class BackupUtil
 
 					var bytes:Bytes = base64Decode(entry.data);
 					if (bytes != null)
+					{
+						// 兼容新格式相对路径 (歌曲/难度/文件.json) 与旧格式扁平文件名
+						var slash:Int = fileName.lastIndexOf('/');
+						var dirPart:String = slash > -1 ? fileName.substr(0, slash + 1) : '';
+						SUtil.mkDirs(scoreDir + dirPart);
 						File.saveBytes(scoreDir + fileName, bytes);
+					}
 				}
 				catch (e:Dynamic)
 				{

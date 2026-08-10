@@ -162,7 +162,7 @@ class CreditsState extends MusicBeatState
 		bg.color = getCurrentBGColor();
 		intendedColor = bg.color;
 		changeSelection();
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 		super.create();
@@ -194,7 +194,7 @@ class CreditsState extends MusicBeatState
 			if(creditsStuff.length > 1)
 			{
 				var shiftMult:Int = 1;
-				if(#if TOUCH_CONTROLS virtualPad.buttonC.pressed || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
+				if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.pressed) || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 
 				var upP = controls.UI_UP_P;
 				var downP = controls.UI_DOWN_P;

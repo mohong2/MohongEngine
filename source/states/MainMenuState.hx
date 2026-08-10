@@ -301,7 +301,7 @@ class MainMenuState extends SeiunMenuState
 			}
 		}
 		#end
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 		super.create();
@@ -406,6 +406,10 @@ class MainMenuState extends SeiunMenuState
 
 		var lerpVal:Float = CoolUtil.boundTo(elapsed * 7.5, 0, 1);
 		camFollowPos.setPosition(FlxMath.lerp(camFollowPos.x, camFollow.x, lerpVal), FlxMath.lerp(camFollowPos.y, camFollow.y, lerpVal));
+		// 防穿透: 鼠标在虚拟按键上时, 下层菜单不做悬停/点击判定
+		var overControls:Bool = (virtualPad != null && virtualPad.isMouseOverAnyButton());
+		if (!overControls)
+		{
 		var newMouseOverlapIndex = -1;
 		for (item in menuItems) {
 			if (FlxG.mouse.overlaps(item)) {
@@ -433,6 +437,7 @@ class MainMenuState extends SeiunMenuState
 			curSelected = mouseOverlapIndex;
 			changeItem(0);
 			FlxG.sound.play(Paths.sound('scrollMenu'));
+		}
 		}
 		if (!selectedSomethin)
 		{
@@ -463,7 +468,8 @@ class MainMenuState extends SeiunMenuState
 			}
 			#end
 
-			if (FlxG.mouse.justPressed && mouseOverlapIndex == curSelected && !selectedSomethin || controls.ACCEPT) {
+			// 开启触屏支持后, 鼠标点击不再直接确认, 防止误触 (用虚拟按键/键盘确认)
+			if (FlxG.mouse.justPressed && mouseOverlapIndex == curSelected && !selectedSomethin && !ClientPrefs.data.touchControls || controls.ACCEPT) {
 				if (optionShit[curSelected] == 'donate') {
 					CoolUtil.browserLoad('https://ninja-muffin24.itch.io/funkin');
 				} else {
@@ -519,7 +525,7 @@ class MainMenuState extends SeiunMenuState
 					});
 				}
 			}
-			else if (#if TOUCH_CONTROLS virtualPad.buttonC.justPressed ||	#end FlxG.keys.anyJustPressed(debugKeys))
+			else if (#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.justPressed) ||	#end FlxG.keys.anyJustPressed(debugKeys))
 			{
 				selectedSomethin = true;
 				MusicBeatState.switchState(new MasterEditorMenu());

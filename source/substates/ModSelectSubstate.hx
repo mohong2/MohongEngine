@@ -106,7 +106,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 		FlxTween.tween(modIconCenter.scale, {x: 1.0, y: 1.0}, 0.3, {ease: FlxEase.backOut});
 		FlxTween.tween(modNameCenter, {alpha: 1.0}, 0.3);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_RIGHT, A_B);
 		addPadCamera();
 		#end
@@ -189,7 +189,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 			modNameRight.visible = false;
 		}
 
-		hintText.text = #if TOUCH_CONTROLS
+		hintText.text = #if (TOUCH_CONTROLS || desktop)
 			Language.get('Mod.selectHint.android', '← →  Switch Mod    A  Confirm    B  Cancel')
 		#else
 			Language.get('Mod.selectHint', '← →  Switch Mod    ENTER / TAB  Confirm    ESC  Cancel')
@@ -282,7 +282,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 
 		// ENTER or TAB to confirm
 		if (FlxG.keys.justPressed.ENTER || FlxG.keys.justPressed.TAB
-			#if TOUCH_CONTROLS || virtualPad.buttonA.justPressed #end)
+			#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonA.justPressed) #end)
 		{
 			transitioning = true;
 			FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
@@ -301,7 +301,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 
 		// ESC or BACKSPACE to cancel
 		if (FlxG.keys.justPressed.ESCAPE || FlxG.keys.justPressed.BACKSPACE
-			#if TOUCH_CONTROLS || virtualPad.buttonB.justPressed #end)
+			#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonB.justPressed) #end)
 		{
 			transitioning = true;
 			FlxG.sound.play(Paths.sound('cancelMenu'), 0.6);
@@ -319,7 +319,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 
 		// Left/Right to cycle mods with smooth transition
 		if (FlxG.keys.justPressed.LEFT
-			#if TOUCH_CONTROLS || virtualPad.buttonLeft.justPressed #end)
+			#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonLeft.justPressed) #end)
 		{
 			var prev = curSelectedMod - 1;
 			if (prev < 0) prev = modList.length - 1;
@@ -329,7 +329,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 			FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 		}
 		if (FlxG.keys.justPressed.RIGHT
-			#if TOUCH_CONTROLS || virtualPad.buttonRight.justPressed #end)
+			#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonRight.justPressed) #end)
 		{
 			curSelectedMod = (curSelectedMod + 1) % modList.length;
 			updatePositions(false);
@@ -340,7 +340,7 @@ class ModSelectSubstate extends MusicBeatSubstate
 		super.update(elapsed);
 	}
 
-	#if TOUCH_CONTROLS
+	#if (TOUCH_CONTROLS || desktop)
 	override function destroy() {
 		removeVirtualPad();
 		super.destroy();

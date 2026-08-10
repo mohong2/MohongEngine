@@ -19,13 +19,51 @@
 		"options": ["Bottom", "Top"]
 	},
 	{
+		"nameKey": "option.hitboxPressAlpha",
+		"defaultName": "Hitbox Press Opacity",
+		"descKey": "option.hitboxPressAlpha.desc",
+		"defaultDesc": "How visible the hitbox blocks become while you are pressing them.\nThe blocks stay fully transparent when not pressed.",
+		"variable": "hitboxPressAlpha",
+		"type": "percent",
+		"defaultValue": 0.6,
+		"minValue": 0.05,
+		"maxValue": 1,
+		"changeValue": 0.01,
+		"decimals": 2,
+		"scrollSpeed": 0.5
+	},
+	{
+		"nameKey": "option.hitboxBorder",
+		"defaultName": "Hitbox Borders",
+		"descKey": "option.hitboxBorder.desc",
+		"defaultDesc": "Show thin borders around each hitbox block.\nHelps you locate the tap zones even when the blocks are transparent.",
+		"variable": "hitboxBorder",
+		"type": "bool",
+		"defaultValue": true
+	},
+	{
+		"nameKey": "option.mobileCAlpha",
+		"defaultName": "Mobile Controls Opacity",
+		"descKey": "option.mobileCAlpha.desc",
+		"defaultDesc": "How transparent the virtual pad buttons are when not pressed.",
+		"variable": "mobileCAlpha",
+		"type": "percent",
+		"defaultValue": 0.6,
+		"minValue": 0.1,
+		"maxValue": 1,
+		"changeValue": 0.01,
+		"decimals": 2,
+		"scrollSpeed": 0.5
+	},
+	{
 		"nameKey": "option.autoExtractAssets",
 		"defaultName": "Auto-Extract Assets",
 		"descKey": "option.autoExtractAssets.desc",
 		"defaultDesc": "If enabled, the game will automatically extract necessary assets from the APK on first launch.",
 		"variable": "autoExtractAssets",
 		"type": "bool",
-		"defaultValue": true
+		"defaultValue": true,
+		"platform": "mobile"
 	},
 	{
 		"nameKey": "option.storageType",
@@ -35,6 +73,17 @@
 		"variable": "storageType",
 		"type": "string",
 		"defaultValue": "EXTERNAL_DATA",
-		"options": ["EXTERNAL_DATA", "EXTERNAL", "EXTERNAL_OBB", "EXTERNAL_MEDIA"]
+		"options": ["EXTERNAL_DATA", "EXTERNAL", "EXTERNAL_OBB", "EXTERNAL_MEDIA"],
+		"platform": "mobile"
+	},
+	{
+		"nameKey": "option.adaptiveResolution",
+		"defaultName": "Adaptive Resolution",
+		"descKey": "option.adaptiveResolution.desc",
+		"defaultDesc": "Use the device's full resolution instead of the fixed 1280x720,\nfilling the whole screen with sharper visuals.\nTakes effect after restarting the game.\nMay lower performance on weak devices.",
+		"variable": "adaptiveResolution",
+		"type": "bool",
+		"defaultValue": false,
+		"platform": "mobile"
 	}
 ]

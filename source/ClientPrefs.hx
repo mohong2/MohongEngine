@@ -18,14 +18,29 @@ import sys.io.Process;
 		[0xFFC24B99, 0xFFFFFFFF, 0xFF3C1F56],
 		[0xFF00FFFF, 0xFFFFFFFF, 0xFF1542B7],
 		[0xFF12FA05, 0xFFFFFFFF, 0xFF0A4447],
-		[0xFFF9393F, 0xFFFFFFFF, 0xFF651038]];
+		[0xFFF9393F, 0xFFFFFFFF, 0xFF651038],
+		// 多k: 后 5 项对应 space/leftex1/downex1/upex1/rightex1,
+		// 每轨独立一色 (与 0.6.3 多k noteColors 一致), 不是基底镜像
+		[0xFFCCCCCC, 0xFFFFFFFF, 0xFF4C4C4C],
+		[0xFFFFFF00, 0xFFFFFFFF, 0xFF4C4C00],
+		[0xFF8B4AFF, 0xFFFFFFFF, 0xFF2B0066],
+		[0xFFFF0000, 0xFFFFFFFF, 0xFF4C0000],
+		[0xFF0033FF, 0xFFFFFFFF, 0xFF00004C]];
 	public var arrowRGBPixel:Array<Array<FlxColor>> = [
 		[0xFFE276FF, 0xFFFFF9FF, 0xFF60008D],
 		[0xFF3DCAFF, 0xFFF4FFFF, 0xFF003060],
 		[0xFF71E300, 0xFFF6FFE6, 0xFF003100],
-		[0xFFFF884E, 0xFFFFFAF5, 0xFF6C0000]];
+		[0xFFFF884E, 0xFFFFFAF5, 0xFF6C0000],
+		// 多k: 每轨独立一色 (与 0.6.3 多k 语义一致)
+		[0xFFCCCCCC, 0xFFFFFFFF, 0xFF4C4C4C],
+		[0xFFFFFF00, 0xFFFFFFFF, 0xFF4C4C00],
+		[0xFF8B4AFF, 0xFFFFFFFF, 0xFF2B0066],
+		[0xFFFF0000, 0xFFFFFFFF, 0xFF4C0000],
+		[0xFF0033FF, 0xFFFFFFFF, 0xFF00004C]];
 	public var noteSkin:String = 'Default';
 	public var splashSkin:String = 'Psych';
+	/** Note 风格: Old = 0.6.3 flat NOTE_assets, New = 0.7.3 noteSkins/NOTE_assets。独立于兼容模式。 */
+	public var noteStyle:String = 'Old';
 
 	public var modSettings:Map<String, Map<String, Dynamic>> = new Map();
 
@@ -41,6 +56,14 @@ import sys.io.Process;
 	public var mobileCEx:Bool = false;
 	public var hitboxExtraToggle:Bool = true;
 	public var hitboxExtraPos:String = "Bottom";
+	/** 按下 Hitbox 色块时显示的透明度 (未按下时完全透明)。 */
+	public var hitboxPressAlpha:Float = 0.6;
+	/** 是否在 Hitbox 各色块之间绘制边框, 帮助定位触摸区域。 */
+	public var hitboxBorder:Bool = true;
+	/** 桌面端触屏支持: 开启后把安卓移动端控件(虚拟按键/Hitbox)带到电脑上, 可用鼠标或触屏操作。 */
+	public var touchControls:Bool = false;
+	/** 安卓自适应分辨率: 不锁 1280x720, 启动时按设备最大分辨率扩展世界并填满屏幕 (重启生效)。 */
+	public var adaptiveResolution:Bool = false;
 	public var downScroll:Bool = false;
 	public var middleScroll:Bool = false;
 	public var opponentStrums:Bool = true;
@@ -87,11 +110,14 @@ import sys.io.Process;
 	// 关闭动画：样式 (off/squeeze/zoom/drop/slide) + 速度倍率
 	public var closeAnimStyle:String = 'squeeze';
 	public var closeAnimSpeed:Float = 1.0;
+	/** 三引擎兼容模式: Auto / 0.6.3 / 0.7.3 / 1.0.4 (见 backend.CompatEngine)。 */
+	public var compatEngine:String = 'Auto';
+	/** 旧版 0.7.3 兼容开关, 保留用于老存档迁移; 新逻辑请走 CompatEngine。 */
 	public var compatibility_mode:Bool = false; 
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	public var cacheOnGPU:Bool = false;
+	public var cacheOnGPU:Bool = true;
 	public var preloadAssets:Bool = false;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
@@ -173,6 +199,7 @@ class ClientPrefs {
 	public static var arrowRGBPixel(get, never):Array<Array<FlxColor>>;
 	public static var noteSkin(get, never):String;
 	public static var splashSkin(get, never):String;
+	public static var noteStyle(get, never):String;
 	public static var modSettings(get, never):Map<String, Map<String, Dynamic>>;
 	public static var keyboardAlpha(get, never):Float;
 	public static var keyboardTimeDisplay(get, never):Bool;
@@ -186,6 +213,9 @@ class ClientPrefs {
 	public static var mobileCEx(get, never):Bool;
 	public static var hitboxExtraToggle(get, never):Bool;
 	public static var hitboxExtraPos(get, never):String;
+	public static var hitboxPressAlpha(get, never):Float;
+	public static var hitboxBorder(get, never):Bool;
+	public static var touchControls(get, never):Bool;
 	public static var downScroll(get, never):Bool;
 	public static var middleScroll(get, never):Bool;
 	public static var opponentStrums(get, never):Bool;
@@ -226,6 +256,7 @@ class ClientPrefs {
 	public static var windowedmode(get, never):String;
 	public static var closeAnimStyle(get, never):String;
 	public static var closeAnimSpeed(get, never):Float;
+	public static var compatEngine(get, never):String;
 	public static var compatibility_mode(get, never):Bool;
 	public static var guitarHeroSustains(get, never):Bool;
 	public static var smoothhpbar(get, never):Bool;
@@ -261,6 +292,7 @@ class ClientPrefs {
 	static inline function get_arrowRGBPixel() return data.arrowRGBPixel;
 	static inline function get_noteSkin() return data.noteSkin;
 	static inline function get_splashSkin() return data.splashSkin;
+	static inline function get_noteStyle() return data.noteStyle;
 	static inline function get_modSettings() return data.modSettings;
 	static inline function get_keyboardAlpha() return data.keyboardAlpha;
 	static inline function get_keyboardTimeDisplay() return data.keyboardTimeDisplay;
@@ -274,6 +306,9 @@ class ClientPrefs {
 	static inline function get_mobileCEx() return data.mobileCEx;
 	static inline function get_hitboxExtraToggle() return data.hitboxExtraToggle;
 	static inline function get_hitboxExtraPos() return data.hitboxExtraPos;
+	static inline function get_hitboxPressAlpha() return data.hitboxPressAlpha;
+	static inline function get_hitboxBorder() return data.hitboxBorder;
+	static inline function get_touchControls() return data.touchControls;
 	static inline function get_downScroll() return data.downScroll;
 	static inline function get_middleScroll() return data.middleScroll;
 	static inline function get_opponentStrums() return data.opponentStrums;
@@ -314,6 +349,7 @@ class ClientPrefs {
 	static inline function get_windowedmode() return data.windowedmode;
 	static inline function get_closeAnimStyle() return data.closeAnimStyle;
 	static inline function get_closeAnimSpeed() return data.closeAnimSpeed;
+	static inline function get_compatEngine() return data.compatEngine;
 	static inline function get_compatibility_mode() return data.compatibility_mode;
 	static inline function get_guitarHeroSustains() return data.guitarHeroSustains;
 	static inline function get_smoothhpbar() return data.smoothhpbar;
@@ -640,6 +676,25 @@ class ClientPrefs {
 			if (data.arrowHSV != null) for (hsv in data.arrowHSV) padded.push(hsv != null ? hsv : [0, 0, 0]);
 			while (padded.length < 9) padded.push([0, 0, 0]);
 			data.arrowHSV = padded;
+		}
+
+		// 多k: 老存档 arrowRGB 只有 4 项, 补足到 9 项 (与 arrowHSV 同布局:
+		// space 默认镜像 up, leftex1=left, downex1=down, upex1=up, rightex1=right)
+		if (data.arrowRGB == null || data.arrowRGB.length < 9)
+		{
+			var paddedRGB:Array<Array<FlxColor>> = [];
+			if (data.arrowRGB != null) for (rgb in data.arrowRGB) paddedRGB.push(rgb != null ? rgb : [0, 0, 0]);
+			while (paddedRGB.length < 4) paddedRGB.push(defaultData.arrowRGB[paddedRGB.length]);
+			while (paddedRGB.length < 9) paddedRGB.push(defaultData.arrowRGB[paddedRGB.length]);
+			data.arrowRGB = paddedRGB;
+		}
+		if (data.arrowRGBPixel == null || data.arrowRGBPixel.length < 9)
+		{
+			var paddedRGB:Array<Array<FlxColor>> = [];
+			if (data.arrowRGBPixel != null) for (rgb in data.arrowRGBPixel) paddedRGB.push(rgb != null ? rgb : [0, 0, 0]);
+			while (paddedRGB.length < 4) paddedRGB.push(defaultData.arrowRGBPixel[paddedRGB.length]);
+			while (paddedRGB.length < 9) paddedRGB.push(defaultData.arrowRGBPixel[paddedRGB.length]);
+			data.arrowRGBPixel = paddedRGB;
 		}
 
 		// 判定手感迁移: 老存档没有 judgementTimings, 从原 Psych 窗口初始化

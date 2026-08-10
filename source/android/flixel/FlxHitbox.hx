@@ -5,9 +5,9 @@ import EKData.Keybinds;
 import states.PlayState;
 import flixel.util.FlxDestroyUtil;
 import android.flixel.FlxButton;
+import flixel.FlxSprite;
 import openfl.display.BitmapData;
 import openfl.display.Shape;
-import openfl.geom.Matrix;
 import Replay;
 
 /**
@@ -41,13 +41,18 @@ class FlxHitbox extends FlxSpriteGroup
 		if (colors == null || (colors != null && colors.length < ammo))
 			colors = [0xFFFFFF, 0xFFFFFF, 0xFFFFFF, 0xFFFFFF];
 
+		// 多k: 强制 Hitbox 时只保留轨道色块, SPACE/SHIFT 附加块和移动额外键块一律不参与,
+		// 也不为它们预留上/下空带 (否则多k 会在顶部或底部留下一整条空白)。
+		var isMultiK:Bool = (PlayState.SONG != null && PlayState.SONG.mania != null && PlayState.SONG.mania != Note.defaultMania);
+		var canShowExtras:Bool = !isMultiK && ammo <= 4;
+		var showExtra:Bool = ClientPrefs.data.hitboxExtraToggle && canShowExtras;
+
 		var topHeight = perHintHeight - bottomHeight;
 		var halfWidth = Std.int(FlxG.width / 2);
 
 		var mainY:Int;
 		var mainH:Int;
 		var extraY:Int = 0;
-		var showExtra:Bool = ClientPrefs.data.hitboxExtraToggle;
 
 		if (showExtra)
 		{
@@ -80,32 +85,36 @@ class FlxHitbox extends FlxSpriteGroup
 				extraY = mainY + mainH;
 			}
 		}
+		else if (ClientPrefs.data.mobileCEx && canShowExtras)
+		{
+			mainY = offsetSec;
+			mainH = Std.int(FlxG.height / ammo) * 3;
+		}
 		else
 		{
-			if (ClientPrefs.data.mobileCEx)
-			{
-				mainY = offsetSec;
-				mainH = Std.int(FlxG.height / ammo) * 3;
-			}
-			else
-			{
-				mainY = 0;
-				mainH = perHintHeight;
-			}
+			mainY = 0;
+			mainH = perHintHeight;
 		}
 
 		for (i in 0...ammo)
+		{
 			add(hints[i] = createHint(i * perHintWidth, mainY, perHintWidth, mainH, colors[i], i));
+			addHintBorder(i * perHintWidth, mainY, perHintWidth, mainH, colors[i]);
+		}
 
-		// 多k: 轨道数 >4 时不再叠加额外的 2 个功能键, 避免覆盖轨道色块
-		if (showExtra && ammo <= 4)
+		if (showExtra)
 		{
 			add(hints[4] = createHint(0, extraY, halfWidth, bottomHeight, 0xFFFF00));
 			add(hints[5] = createHint(halfWidth, extraY, halfWidth, bottomHeight, 0x00FFFF));
+			addHintBorder(0, extraY, halfWidth, bottomHeight, 0xFFFF00);
+			addHintBorder(halfWidth, extraY, halfWidth, bottomHeight, 0x00FFFF);
 		}
 
-		if (ClientPrefs.data.mobileCEx && ammo <= 4)
+		if (ClientPrefs.data.mobileCEx && canShowExtras)
+		{
 			add(hints[6] = createHint(0, offsetFir, FlxG.width, Std.int(FlxG.height / 4), 0xFF0066FF));
+			addHintBorder(0, offsetFir, FlxG.width, Std.int(FlxG.height / 4), 0xFF0066FF);
+		}
 
 		scrollFactor.set();
 	}
@@ -126,8 +135,8 @@ class FlxHitbox extends FlxSpriteGroup
 
 	private function createHint(X:Float, Y:Float, Width:Int, Height:Int, Color:Int = 0xFFFFFF, ?hintIndex:Int = -1):FlxButton
 	{
-		final guh2:Float = 0.00001;
-		final guh:Float = ClientPrefs.data.mobileCAlpha >= 0.9 ? ClientPrefs.data.mobileCAlpha - 0.2 : ClientPrefs.data.mobileCAlpha;
+		// 未按下时完全透明, 按下后才显示色块 (透明度由 hitboxPressAlpha 控制)。
+		final idleAlpha:Float = 0.00001;
 		var hint:FlxButton = new FlxButton(X, Y);
 		hint.loadGraphic(createHintGraphic(Width, Height, Color));
 		hint.solid = false;
@@ -136,7 +145,7 @@ class FlxHitbox extends FlxSpriteGroup
 		hint.moves = false;
 		hint.antialiasing = ClientPrefs.data.globalAntialiasing;
 		hint.scrollFactor.set();
-		hint.alpha = guh2;
+		hint.alpha = idleAlpha;
 
 		var notifyKeyName:String = null;
 		var isMultiK:Bool = (PlayState.SONG != null && PlayState.SONG.mania != null && PlayState.SONG.mania != Note.defaultMania);
@@ -220,17 +229,18 @@ class FlxHitbox extends FlxSpriteGroup
 			hint.onDown.callback = function()
 			{
 				if (oldDown != null) oldDown();
-				if (hint.alpha != guh) hint.alpha = guh;
+				var pressAlpha:Float = ClientPrefs.data.hitboxPressAlpha;
+				if (hint.alpha != pressAlpha) hint.alpha = pressAlpha;
 			}
 			hint.onUp.callback = function()
 			{
 				if (oldUp != null) oldUp();
-				if (hint.alpha != guh2) hint.alpha = guh2;
+				if (hint.alpha != idleAlpha) hint.alpha = idleAlpha;
 			}
 			hint.onOut.callback = function()
 			{
 				if (oldOut != null) oldOut();
-				if (hint.alpha != guh2) hint.alpha = guh2;
+				if (hint.alpha != idleAlpha) hint.alpha = idleAlpha;
 			}
 		}
 		#if FLX_DEBUG
@@ -241,37 +251,43 @@ class FlxHitbox extends FlxSpriteGroup
 
 	private function createHintGraphic(Width:Int, Height:Int, Color:Int = 0xFFFFFF):BitmapData
 	{
-		var guh:Float = ClientPrefs.data.mobileCAlpha;
-		if (guh >= 0.9)
-			guh = ClientPrefs.data.mobileCAlpha - 0.07;
+		// 柔和色块: 中心实色、边缘渐隐, 比硬矩形更贴近原版 Hitbox 观感。
+		// 可见性完全交给 hint.alpha 控制 (未按下≈0, 按下=hitboxPressAlpha)。
 		var shape:Shape = new Shape();
-		shape.graphics.beginFill(Color);
-		if (ClientPrefs.data.hitboxType == "No Gradient")
-		{
-			var matrix:Matrix = new Matrix();
-			matrix.createGradientBox(Width, Height, 0, 0, 0);
+		shape.graphics.beginGradientFill(RADIAL, [Color, FlxColor.TRANSPARENT], [1, 0], [0, 255], null, null, null, 0.5);
+		shape.graphics.drawRect(0, 0, Width, Height);
+		shape.graphics.endFill();
+		var bitmap:BitmapData = new BitmapData(Width, Height, true, 0);
+		bitmap.draw(shape, true);
+		return bitmap;
+	}
 
-			shape.graphics.beginGradientFill(RADIAL, [Color, Color], [0, guh], [60, 255], matrix, PAD, RGB, 0);
-			shape.graphics.drawRect(0, 0, Width, Height);
-			shape.graphics.endFill();
-		}
-		else if (ClientPrefs.data.hitboxType == "No Gradient (Old)")
-		{
-			shape.graphics.lineStyle(10, Color, 1);
-			shape.graphics.drawRect(0, 0, Width, Height);
-			shape.graphics.endFill();
-		}
-		else
-		{
-			shape.graphics.lineStyle(3, Color, 1);
-			shape.graphics.drawRect(0, 0, Width, Height);
-			shape.graphics.lineStyle(0, 0, 0);
-			shape.graphics.drawRect(3, 3, Width - 6, Height - 6);
-			shape.graphics.endFill();
-			shape.graphics.beginGradientFill(RADIAL, [Color, FlxColor.TRANSPARENT], [guh, 0], [0, 255], null, null, null, 0.5);
-			shape.graphics.drawRect(3, 3, Width - 6, Height - 6);
-			shape.graphics.endFill();
-		}
+	/** 色块边框 (仅帮助定位触摸区域, 不参与触摸判定)。 */
+	private function addHintBorder(X:Float, Y:Float, Width:Int, Height:Int, Color:Int):Void
+	{
+		if (!ClientPrefs.data.hitboxBorder)
+			return;
+
+		var border:FlxSprite = new FlxSprite(X, Y);
+		border.loadGraphic(createBorderGraphic(Width, Height, Color));
+		border.solid = false;
+		border.moves = false;
+		border.scrollFactor.set();
+		border.alpha = 0.2;
+		border.antialiasing = ClientPrefs.data.globalAntialiasing;
+		#if FLX_DEBUG
+		border.ignoreDrawDebug = true;
+		#end
+		add(border);
+	}
+
+	private function createBorderGraphic(Width:Int, Height:Int, Color:Int):BitmapData
+	{
+		final thickness:Int = 1;
+		var shape:Shape = new Shape();
+		// 边框与色块同色, 细且浅, 便于定位又不抢视觉。
+		shape.graphics.lineStyle(thickness, Color, 1);
+		shape.graphics.drawRect(thickness * 0.5, thickness * 0.5, Width - thickness, Height - thickness);
 		var bitmap:BitmapData = new BitmapData(Width, Height, true, 0);
 		bitmap.draw(shape, true);
 		return bitmap;

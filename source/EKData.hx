@@ -214,7 +214,7 @@ class EKData
 	];
 
 	/**
-	 * 多k颜色表 (与 0.6.3 多k版/EK 一致, 近似即可):
+	 * 多k颜色表 (0.6.3 多k版原始配色, 每个扩展轨道独立一色, 不是基底镜像):
 	 * 0 left / 1 down / 2 up / 3 right / 4 space / 5 leftex1 / 6 downex1 / 7 upex1 / 8 rightex1
 	 */
 	public static var noteColors:Array<Array<Int>> = [

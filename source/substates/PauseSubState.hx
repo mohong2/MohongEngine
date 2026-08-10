@@ -96,7 +96,7 @@ class PauseSubState extends MusicBeatSubstate
 			menuItemsOG.insert(5 + num, 'Toggle Botplay');
 		}
 		
-		#if TOUCH_CONTROLS 
+		#if (TOUCH_CONTROLS || desktop) 
 		menuItemsOG.insert(2, 'Chart Editor');
 		#end
 		
@@ -305,13 +305,13 @@ class PauseSubState extends MusicBeatSubstate
 
 		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
 		
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A);
 		addPadCamera();
 		#end
 	}
 
-	#if TOUCH_CONTROLS
+	#if (TOUCH_CONTROLS || desktop)
 	var _padLeftRight:Bool = false;
 
 	function updateVirtualPadForSelection():Void
@@ -372,14 +372,20 @@ class PauseSubState extends MusicBeatSubstate
 
 		if (mouseActive)
 		{
+			// 防穿透: 鼠标/触摸在虚拟按键上时, 下层暂停菜单不做悬停/点击判定
+			var overControls:Bool = (virtualPad != null && virtualPad.isMouseOverAnyButton());
+			if (!overControls)
+			{
 			var hoverIdx:Int = getItemIndexUnderCursor();
 			if (hoverIdx >= 0 && hoverIdx != curSelected)
 			{
 				changeSelection(hoverIdx - curSelected);
 			}
-			if (mouseClicked && hoverIdx >= 0 && hoverIdx == curSelected && (cantUnpause <= 0 || !ClientPrefs.data.controllerMode))
+			// 开启触屏支持后, 鼠标点击不再直接执行暂停菜单项, 防止误触
+			if (mouseClicked && hoverIdx >= 0 && hoverIdx == curSelected && !ClientPrefs.data.touchControls && (cantUnpause <= 0 || !ClientPrefs.data.controllerMode))
 			{
 				executeSelectedItem();
+			}
 			}
 		}
 
@@ -468,7 +474,7 @@ class PauseSubState extends MusicBeatSubstate
 			case "Leave Charting Mode":
 				restartSong();
 				PlayState.chartingMode = false;
-			#if TOUCH_CONTROLS
+			#if (TOUCH_CONTROLS || desktop)
 			case 'Chart Editor':
 				PlayState.instance.openChartEditor();
 			#end
@@ -754,7 +760,7 @@ class PauseSubState extends MusicBeatSubstate
 			idx++;
 		}
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		updateVirtualPadForSelection();
 		#end
 	}
@@ -835,7 +841,7 @@ class PauseSubState extends MusicBeatSubstate
 			selectionIndicator.alpha = 0;
 		}
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		updateVirtualPadForSelection();
 		#end
 	}

@@ -215,6 +215,10 @@ class ModsMenuState extends MusicBeatState
 			setOnLuas('state', this);
 			callOnLuas('onCreatePost', []);
 			#end
+			#if (TOUCH_CONTROLS || desktop)
+			// 无模组也必须加载虚拟按键, 否则 B/返回控件缺失会导致玩家卡死
+			addVirtualPad(UP_DOWN, B);
+			#end
 			return super.create();
 		}
 		
@@ -338,7 +342,7 @@ class ModsMenuState extends MusicBeatState
 
 		add(modsGroup);
 						 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, B);
 		#end
 
@@ -405,8 +409,8 @@ override function update(elapsed:Float)
 		var lastMode = hoveringOnMods;
 		if(modsList.length > 1)
 		{
-			// Mouse pressed → detect click on mod items
-			if(FlxG.mouse.justPressed)
+			// Mouse pressed → detect click on mod items (虚拟按键上点击不穿透, 否则会误切换 hover 状态)
+			if(FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 			{
 				hoveringOnMods = false;
 				for (i in centerMod-2...centerMod+3)

@@ -15,6 +15,35 @@ import flixel.input.touch.FlxTouch;
 import flixel.util.FlxDestroyUtil;
 import flixel.system.FlxSound;
 
+#if desktop
+/**
+ * 桌面端触屏支持: 让鼠标像触摸一样驱动 FlxButton。
+ * 状态完全由 flixel 的 FlxG.mouse 维护, 这里只做只读代理。
+ */
+private class FlxMouseInput implements IFlxInput
+{
+	public var justReleased(get, never):Bool;
+	public var released(get, never):Bool;
+	public var pressed(get, never):Bool;
+	public var justPressed(get, never):Bool;
+	public var justPressedPosition:FlxPoint = FlxPoint.get();
+
+	public function new() {}
+
+	inline function get_justReleased():Bool return FlxG.mouse.justReleased;
+	inline function get_released():Bool return FlxG.mouse.released;
+	inline function get_pressed():Bool return FlxG.mouse.pressed;
+	inline function get_justPressed():Bool return FlxG.mouse.justPressed;
+
+	/** 每帧更新一次按下时的屏幕坐标 (模拟 FlxTouch.justPressedPosition)。 */
+	public function update():Void
+	{
+		if (FlxG.mouse.justPressed)
+			justPressedPosition.set(FlxG.mouse.screenX, FlxG.mouse.screenY);
+	}
+}
+#end
+
 /**
  * A simple button class that calls a function when clicked by the touch.
  */
@@ -210,6 +239,11 @@ class FlxTypedButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 
 	var lastStatus = -1;
 
+	#if desktop
+	/** 桌面端触屏支持: 把 FlxG.mouse 包装成 IFlxInput 供按钮输入逻辑使用 (惰性创建)。 */
+	var mouseInput:FlxMouseInput;
+	#end
+
 	/**
 	 * Creates a new `FlxTypedButton` object with a gray background.
 	 *
@@ -390,6 +424,18 @@ class FlxTypedButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 			for (touch in FlxG.touches.list)
 				if (checkInput(touch, touch, touch.justPressedPosition, camera))
 					overlap = true;
+
+		// 桌面端触屏支持: 鼠标也按触摸处理, 这样虚拟按键/Hitbox 在电脑上可以直接用鼠标点。
+		#if desktop
+		if (!overlap && FlxG.mouse != null)
+		{
+			if (mouseInput == null) mouseInput = new FlxMouseInput();
+			mouseInput.update();
+			for (camera in cameras)
+				if (checkInput(FlxG.mouse, mouseInput, mouseInput.justPressedPosition, camera))
+					overlap = true;
+		}
+		#end
 
 		return overlap;
 	}

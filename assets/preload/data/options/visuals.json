@@ -9,6 +9,37 @@
 		"defaultValue": true
 	},
 	{
+		"nameKey": "option.noteSkin",
+		"defaultName": "Note Skin",
+		"descKey": "option.noteSkin.desc",
+		"defaultDesc": "Select the Note texture. (0.7.3+ only)\nThe list comes from images/noteSkins/list.txt, so mods can add their own skins.\nOnly shown when the engine compatibility mode is 0.7.3 or 1.0.4.",
+		"variable": "noteSkin",
+		"type": "string",
+		"defaultValue": "Default",
+		"options": ["Default"],
+		"compat": "0.7.3+"
+	},
+	{
+		"nameKey": "option.noteStyle",
+		"defaultName": "Note Style",
+		"descKey": "option.noteStyle.desc",
+		"defaultDesc": "Choose which base Note material to use.\nOld: classic 0.6.3 NOTE_assets.\nNew: 0.7.3 noteSkins/NOTE_assets.\nIndependent of the engine compatibility mode.",
+		"variable": "noteStyle",
+		"type": "string",
+		"defaultValue": "Old",
+		"options": ["Old", "New"]
+	},
+	{
+		"nameKey": "option.splashSkin",
+		"defaultName": "Splash Skin",
+		"descKey": "option.splashSkin.desc",
+		"defaultDesc": "Select the Note Splash texture.\nThe list comes from images/noteSplashes/list.txt, so mods can add their own splashes.\nWorks in every engine compatibility mode.",
+		"variable": "splashSkin",
+		"type": "string",
+		"defaultValue": "Psych",
+		"options": ["Psych"]
+	},
+	{
 		"nameKey": "option.hideHud",
 		"defaultName": "Hide HUD",
 		"descKey": "option.hideHud.desc",

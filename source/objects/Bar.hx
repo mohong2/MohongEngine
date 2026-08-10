@@ -25,7 +25,8 @@ class Bar extends FlxSpriteGroup
 		this.valueFunction = valueFunction;
 		setBounds(boundX, boundY);
 		
-		bg = new FlxSprite().loadGraphic(Paths.image(image));
+		// bars get tinted/clipped; keep the bg on CPU
+		bg = new FlxSprite().loadGraphic(Paths.image(image, null, false));
 		bg.antialiasing = ClientPrefs.data.globalAntialiasing;
 		barWidth = Std.int(bg.width - 6);
 		barHeight = Std.int(bg.height - 6);

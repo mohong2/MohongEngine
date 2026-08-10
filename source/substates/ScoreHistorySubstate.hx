@@ -85,7 +85,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		this.difficulty = difficulty;
 		try
 		{
-			Allscore.load();
+			// getHistory 现在只读对应歌曲/难度子目录, 无需全量扫描
 			entries = Allscore.getHistory(songName, difficulty);
 		}
 		catch(e:Dynamic)
@@ -772,6 +772,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			{
 				frames = Replay.dynamicToFrames(entry.replayData);
 			}
+			Replay.dbgLog('[DEBUG-rpl] playReplay frames=' + frames.length + ' song=' + entry.songName + ' diff=' + entry.difficulty);
 
 			// 构造 StateRecord
 			var details:Array<Dynamic> = entry.details;
@@ -804,6 +805,10 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 				goodWindow: details != null && details.length > 21 ? details[21] : 90,
 				badWindow: details != null && details.length > 22 ? details[22] : 135,
 				safeFrames: details != null && details.length > 23 ? details[23] : 10,
+				// LeatherEngine 移植: 从成绩详情恢复判定手感 (与结果界面一致)
+				judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
+				judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
+				marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
 				replayVersion: 2
 			};
 
@@ -813,6 +818,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			var tempPath:String = tempDir + 'replay_temp.rsd';
 			Replay.saveToFile(frames, stateRecord, tempPath);
 			Replay.preparedPath = tempPath;
+			Replay.dbgLog('[DEBUG-rpl] playReplay wrote temp=' + tempPath);
 			#end
 
 			PlayState.replayMode = true;
@@ -822,12 +828,15 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			var songLowercase:String = Paths.formatToSongPath(entry.songName);
 			var poop:String = Highscore.formatSong(songLowercase, entry.difficulty);
 			PlayState.SONG = Song.loadFromJson(poop, songLowercase);
+			Replay.dbgLog('[DEBUG-rpl] playReplay loaded song=' + (PlayState.SONG != null ? PlayState.SONG.song : 'NULL'));
 			PlayState.changedDifficulty = false;
 			close();
+			Replay.dbgLog('[DEBUG-rpl] playReplay switching to PlayState');
 			LoadingState.loadAndSwitchState(new PlayState());
 		}
 		catch(e:Dynamic)
 		{
+			Replay.dbgLog('[DEBUG-rpl] playReplay EXCEPTION: ' + Std.string(e));
 			TraceManager.error('trace.scoreHistory.playReplay', 'ScoreHistorySubstate - Failed to play replay: {}', [e]);
 		}
 	}

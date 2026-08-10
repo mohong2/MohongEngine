@@ -963,7 +963,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		zoomTxt.scrollFactor.set();
 		add(zoomTxt);
 		updateGrid();
-		#if android
+		#if (android || desktop)
 		addVirtualPad(LEFT_FULL, CHART_EDITOR);
 		#end
 		super.create();
@@ -2371,7 +2371,7 @@ function generateSong() {
 		{
 			dummyArrow.visible = true;
 			dummyArrow.x = Math.floor(FlxG.mouse.x / GRID_SIZE) * GRID_SIZE;
-			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT)
 				dummyArrow.y = FlxG.mouse.y;
 			else
 			{
@@ -2383,7 +2383,7 @@ function generateSong() {
 		}
 
 		if (FlxG.mouse.justPressed
-			#if android
+			#if (android || desktop)
 			&& !(virtualPad != null && virtualPad.isMouseOverAnyButton())
 			#end
 		)
@@ -2394,7 +2394,7 @@ function generateSong() {
 				{
 					if (FlxG.mouse.overlaps(note))
 					{
-						if (#if android virtualPad.buttonF.pressed || #end FlxG.keys.pressed.CONTROL)
+						if (#if (android || desktop) (virtualPad != null && virtualPad.buttonF.pressed) || #end FlxG.keys.pressed.CONTROL)
 						{
 							selectNote(note);
 						}
@@ -2417,7 +2417,7 @@ function generateSong() {
 					}
 				});
 			}
-			else #if android if(!virtualPad.buttonF.pressed) #end
+			else #if (android || desktop) if(virtualPad == null || !virtualPad.buttonF.pressed) #end
 			{
 				if (FlxG.mouse.x > gridBG.x
 					// 多k: 点击范围按当前小节最大宽度
@@ -2466,41 +2466,41 @@ function generateSong() {
 
 		if (!blockInput)
 		{
-			if (#if android virtualPad.buttonC.justPressed || #end FlxG.keys.justPressed.ESCAPE)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonC.justPressed) || #end FlxG.keys.justPressed.ESCAPE)
 			{
 				confirmPreview();
 			}
-			if (#if android virtualPad.buttonA.justPressed || #end FlxG.keys.justPressed.ENTER)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) || #end FlxG.keys.justPressed.ENTER)
 			{
 				confirmPlaytest();
 			}
 
 			if(curSelectedNote != null && curSelectedNote[1] > -1) {
-				if (#if android virtualPad.buttonDown2.justPressed || #end FlxG.keys.justPressed.E)
+				if (#if (android || desktop) (virtualPad != null && virtualPad.buttonDown2.justPressed) || #end FlxG.keys.justPressed.E)
 				{
 					changeNoteSustain(Conductor.stepCrochet);
 				}
-				if (#if android virtualPad.buttonUp2.justPressed || #end FlxG.keys.justPressed.Q)
+				if (#if (android || desktop) (virtualPad != null && virtualPad.buttonUp2.justPressed) || #end FlxG.keys.justPressed.Q)
 				{
 					changeNoteSustain(-Conductor.stepCrochet);
 				}
 			}
 
 
-			if (#if android virtualPad.buttonB.justPressed ||#end FlxG.keys.justPressed.BACKSPACE) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) ||#end FlxG.keys.justPressed.BACKSPACE) {
 				confirmExit();
 				return;
 			}
 
-			if(#if android virtualPad.buttonZ.justPressed ||#end (FlxG.keys.justPressed.Z && FlxG.keys.pressed.CONTROL)) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) ||#end (FlxG.keys.justPressed.Z && FlxG.keys.pressed.CONTROL)) {
 				undo();
 			}
 
-			if (#if android virtualPad.buttonZ.justPressed || #end (FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL)) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end (FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL)) {
 				--curZoom;
 				updateZoom();
 			}
-			if (#if android virtualPad.buttonD.justPressed || #end FlxG.keys.justPressed.X && curZoom < zoomList.length-1) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) || #end FlxG.keys.justPressed.X && curZoom < zoomList.length-1) {
 				curZoom++;
 				updateZoom();
 			}
@@ -2521,7 +2521,7 @@ function generateSong() {
 				}
 			}
 
-			if (#if android virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.SPACE)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonX.justPressed) || #end FlxG.keys.justPressed.SPACE)
 			{
 				if (FlxG.sound.music.playing)
 				{
@@ -2589,17 +2589,17 @@ function generateSong() {
 
 
 
-			if ((FlxG.keys.pressed.W || FlxG.keys.pressed.S) #if android || (virtualPad.buttonUp.pressed || virtualPad.buttonDown.pressed) #end)
+			if ((FlxG.keys.pressed.W || FlxG.keys.pressed.S) #if (android || desktop) || (virtualPad != null && (virtualPad.buttonUp.pressed || virtualPad.buttonDown.pressed)) #end)
 			{
 				FlxG.sound.music.pause();
 
 				var holdingShift:Float = 1;
 				if (FlxG.keys.pressed.CONTROL) holdingShift = 0.25;
-				else if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT) holdingShift = 4;
+				else if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT) holdingShift = 4;
 
 				var daTime:Float = 700 * FlxG.elapsed * holdingShift;
 
-				if (#if android virtualPad.buttonUp.pressed ||#end FlxG.keys.pressed.W)
+				if (#if (android || desktop) (virtualPad != null && virtualPad.buttonUp.pressed) ||#end FlxG.keys.pressed.W)
 				{
 					FlxG.sound.music.time -= daTime;
 				}
@@ -2638,7 +2638,7 @@ function generateSong() {
 
 			var style = currentType;
 
-			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT){
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT){
 				style = 3;
 			}
 
@@ -2737,12 +2737,12 @@ function generateSong() {
 				}
 			}
 			var shiftThing:Int = 1;
-			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT)
 				shiftThing = 4;
 
-			if (#if android virtualPad.buttonRight.justPressed || #end FlxG.keys.justPressed.D)
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed) || #end FlxG.keys.justPressed.D)
 				changeSection(curSec + shiftThing);
-			if (#if android virtualPad.buttonLeft.justPressed ||#end FlxG.keys.justPressed.A) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed) ||#end FlxG.keys.justPressed.A) {
 				if(curSec <= 0) {
 					changeSection(_song.notes.length-1);
 				} else {
@@ -2789,7 +2789,7 @@ function generateSong() {
 			playbackSpeed -= 0.01;
 		if (!holdingShift && pressedRB || holdingShift && holdingRB)
 			playbackSpeed += 0.01;
-		if (#if android virtualPad.buttonG.justPressed || #end (FlxG.keys.pressed.ALT && (pressedLB || pressedRB || holdingLB || holdingRB)))
+		if (#if (android || desktop) (virtualPad != null && virtualPad.buttonG.justPressed) || #end (FlxG.keys.pressed.ALT && (pressedLB || pressedRB || holdingLB || holdingRB)))
 			playbackSpeed = 1;
 		//
 

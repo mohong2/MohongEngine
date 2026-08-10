@@ -8,6 +8,7 @@ import sys.FileSystem;
 #end
 import flixel.FlxG;
 import flixel.util.FlxSave;
+import SUtil;
 
 using StringTools;
 
@@ -16,6 +17,91 @@ class Allscore
 	public static var entries:Map<String, Array<ScoreEntry>> = new Map();
 
 	private static inline var SCORE_DIR:String = "./.scores/";
+	/** 旧扁平目录是否已完成迁移 (一次会话只做一次) */
+	private static var legacyMigrated:Bool = false;
+
+	/** 难度名转目录安全名 (小写、空格转-, 与歌曲名同一套规则) */
+	private static function difficultyFolder(diffName:String):String
+	{
+		if (diffName == null || diffName.length == 0)
+			return 'unknown';
+		return Paths.formatToSongPath(diffName);
+	}
+
+	/** 根据难度索引取当前会话的难度名 (模组自定义难度同样生效) */
+	private static function difficultyNameFor(difficulty:Int):String
+	{
+		if (CoolUtil.difficulties == null || CoolUtil.difficulties.length == 0)
+			return CoolUtil.defaultDifficulty;
+		if (difficulty < 0 || difficulty >= CoolUtil.difficulties.length)
+			return CoolUtil.defaultDifficulty;
+		return CoolUtil.difficulties[difficulty];
+	}
+
+	/** 歌曲/难度名对应的子目录 (如 ./.scores/songname/normal/) */
+	private static function entryDir(songName:String, diffName:String):String
+	{
+		return SCORE_DIR + Paths.formatToSongPath(songName) + '/' + difficultyFolder(diffName) + '/';
+	}
+
+	/** 递归收集目录下所有 .json 文件路径 */
+	private static function collectJsonFiles(dir:String, into:Array<String>):Void
+	{
+		#if sys
+		if (!FileSystem.exists(dir) || !FileSystem.isDirectory(dir)) return;
+		var items:Array<String> = FileSystem.readDirectory(dir);
+		for (item in items)
+		{
+			if (item == '.' || item == '..') continue;
+			var path:String = dir + item;
+			try
+			{
+				if (FileSystem.isDirectory(path))
+					collectJsonFiles(path + '/', into);
+				else if (item.endsWith('.json'))
+					into.push(path);
+			}
+			catch (e:Dynamic) {}
+		}
+		#end
+	}
+
+	/**
+	 * 把旧扁平目录 (./.scores/*.json) 的成绩/回放迁移到
+	 * ./.scores/<歌曲>/<难度>/ 子目录, 迁移成功才删除旧文件。
+	 */
+	private static function migrateLegacyFiles():Void
+	{
+		if (legacyMigrated) return;
+		legacyMigrated = true;
+
+		#if sys
+		if (!FileSystem.exists(SCORE_DIR)) return;
+		var items:Array<String> = FileSystem.readDirectory(SCORE_DIR);
+		for (item in items)
+		{
+			if (!item.endsWith('.json')) continue;
+			var src:String = SCORE_DIR + item;
+			try
+			{
+				var entry:ScoreEntry = readEntryFromJson(src);
+				if (entry == null || entry.songName == null) continue;
+
+				var dir:String = entryDir(entry.songName, difficultyNameFor(entry.difficulty));
+				SUtil.mkDirs(dir);
+				var dest:String = dir + item;
+				if (FileSystem.exists(dest)) continue; // 目标已存在则跳过, 不覆盖
+
+				writeEntryToJson(entry, dest);
+				FileSystem.deleteFile(src); // 新文件写成功后才删旧文件
+			}
+			catch (e:Dynamic)
+			{
+				CoolUtil.traceMsg('trace.errScoreMigrate', 'Failed to migrate score file {}: {}', [src, e]);
+			}
+		}
+		#end
+	}
 
 	public static function load():Void
 	{
@@ -28,12 +114,12 @@ class Allscore
 		}
 		else
 		{
-			var files = FileSystem.readDirectory(SCORE_DIR);
+			migrateLegacyFiles();
+			var files:Array<String> = [];
+			collectJsonFiles(SCORE_DIR, files);
 			for (file in files)
 			{
-				if (!StringTools.endsWith(file, ".json")) continue;
-
-				var filePath = SCORE_DIR + file;
+				var filePath:String = file;
 				try
 				{
 					var entry = readEntryFromJson(filePath);
@@ -76,11 +162,16 @@ class Allscore
 
 		// 统一文件名：歌曲_难度_时间戳_随机数.json
 		var fileName = '${safeName}_${difficulty}_${timestamp}_${random}.json';
-		var filePath = SCORE_DIR + fileName;
+		// 按 歌曲/难度名 子目录存放 (模组自定义难度用名字归档, 避免数字索引错位)
+		var diffName:String = difficultyNameFor(difficulty);
+		var dir:String = entryDir(songName, diffName);
+		SUtil.mkDirs(dir);
+		var filePath = dir + fileName;
 
 		var entry:ScoreEntry = {
 			songName: songName,
 			difficulty: difficulty,
+			difficultyName: diffName,
 			date: date != null ? date : Date.now().toString(),
 			ratingPercent: rating,
 			ratingFC: ratingFC,
@@ -114,13 +205,57 @@ class Allscore
 
 	public static function getHistory(songName:String, difficulty:Int):Array<ScoreEntry>
 	{
-		load();
+		// 只读取该歌曲/难度子目录, 不再全量扫描所有成绩文件
+		var list:Array<ScoreEntry> = [];
+		#if sys
+		migrateLegacyFiles();
+		if (!FileSystem.exists(SCORE_DIR))
+			FileSystem.createDirectory(SCORE_DIR);
 
-		var key:String = Highscore.formatSong(songName, difficulty);
-		if (!entries.exists(key)) return [];
-
-		// 所有数据已从 JSON 完全加载，无需额外加载 replay 文件
-		var list = entries.get(key).copy();
+		var diffName:String = difficultyNameFor(difficulty);
+		var dir:String = entryDir(songName, diffName);
+		if (FileSystem.exists(dir) && FileSystem.isDirectory(dir))
+		{
+			var files:Array<String> = FileSystem.readDirectory(dir);
+			for (file in files)
+			{
+				if (!file.endsWith('.json')) continue;
+				try
+				{
+					var entry:ScoreEntry = readEntryFromJson(dir + file);
+					if (entry != null) list.push(entry);
+				}
+				catch (e:Dynamic)
+				{
+					CoolUtil.traceMsg('trace.errScoreRead', 'Error reading score file {}{}: {}', [dir, file, e]);
+				}
+			}
+		}
+		// 兼容上一版本的数字难度目录 (./.scores/<song>/2/): 名字目录为空时回退读取
+		if (list.length == 0)
+		{
+			var legacyDir:String = SCORE_DIR + Paths.formatToSongPath(songName) + '/' + difficulty + '/';
+			if (FileSystem.exists(legacyDir) && FileSystem.isDirectory(legacyDir))
+			{
+				var files:Array<String> = FileSystem.readDirectory(legacyDir);
+				for (file in files)
+				{
+					if (!file.endsWith('.json')) continue;
+					try
+					{
+						var entry:ScoreEntry = readEntryFromJson(legacyDir + file);
+						if (entry != null) list.push(entry);
+					}
+					catch (e:Dynamic)
+					{
+						CoolUtil.traceMsg('trace.errScoreRead', 'Error reading score file {}{}: {}', [legacyDir, file, e]);
+					}
+				}
+				list.sort((a, b) -> Reflect.compare(b.date, a.date));
+			}
+		}
+		list.sort((a, b) -> Reflect.compare(b.date, a.date));
+		#end
 		return list;
 	}
 
@@ -177,6 +312,7 @@ class Allscore
 		var jsonObj:Dynamic = {
 			songName: entry.songName,
 			difficulty: entry.difficulty,
+			difficultyName: entry.difficultyName,
 			date: entry.date,
 			score: entry.score,
 			ratingPercent: entry.ratingPercent,
@@ -214,6 +350,7 @@ class Allscore
 		var entry:ScoreEntry = {
 			songName: data.songName,
 			difficulty: data.difficulty,
+			difficultyName: data.difficultyName,
 			date: data.date,
 			ratingPercent: data.ratingPercent,
 			ratingFC: data.ratingFC,
@@ -266,6 +403,7 @@ class Allscore
 typedef ScoreEntry = {
 	var songName:String;
 	var difficulty:Int;
+	@:optional var difficultyName:String;
 	var date:String;
 	var score:Int;
 	var ratingPercent:Float;

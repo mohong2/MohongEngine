@@ -188,7 +188,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		FlxG.mouse.visible = true;
 		reloadCharacterOptions();
-		#if android
+		#if (android || desktop)
 		addVirtualPad(LEFT_FULL, CHARACTER_EDITOR);
 		addPadCamera();
 		#end
@@ -1031,48 +1031,48 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 
 		if(PsychUIInputText.focusOn == null) {
-			if (#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end FlxG.keys.justPressed.ESCAPE) {
 				confirmExit();
 				return;
 			}
 
-			if (#if android virtualPad.buttonZ.justPressed || #end FlxG.keys.justPressed.R) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end FlxG.keys.justPressed.R) {
 				FlxG.camera.zoom = 1;
 			}
 
-			if (#if android virtualPad.buttonX.pressed || #end FlxG.keys.pressed.E && FlxG.camera.zoom < 3) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonX.pressed) || #end FlxG.keys.pressed.E && FlxG.camera.zoom < 3) {
 				FlxG.camera.zoom += elapsed * FlxG.camera.zoom;
 				if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3;
 			}
-			if (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) {
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) {
 				FlxG.camera.zoom -= elapsed * FlxG.camera.zoom;
 				if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1;
 			}
 
-			if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed) || #end FlxG.keys.pressed.I || FlxG.keys.pressed.J || FlxG.keys.pressed.K || FlxG.keys.pressed.L)
+			if (#if (android || desktop) (virtualPad != null && ((virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed) || (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed))) || #end FlxG.keys.pressed.I || FlxG.keys.pressed.J || FlxG.keys.pressed.K || FlxG.keys.pressed.L)
 			{
 				var addToCam:Float = 500 * elapsed;
 				if (FlxG.keys.pressed.SHIFT)
 					addToCam *= 4;
 
-				if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed) || #end FlxG.keys.pressed.I)
+				if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonG.pressed && virtualPad.buttonUp.pressed)) || #end FlxG.keys.pressed.I)
 					camFollow.y -= addToCam;
-				else if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed) || #end FlxG.keys.pressed.K)
+				else if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonG.pressed && virtualPad.buttonDown.pressed)) || #end FlxG.keys.pressed.K)
 					camFollow.y += addToCam;
 
-				if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed) || #end FlxG.keys.pressed.J)
+				if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonG.pressed && virtualPad.buttonLeft.pressed)) || #end FlxG.keys.pressed.J)
 					camFollow.x -= addToCam;
-				else if (#if android (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed) ||	#end FlxG.keys.pressed.L)
+				else if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonG.pressed && virtualPad.buttonRight.pressed)) ||	#end FlxG.keys.pressed.L)
 					camFollow.x += addToCam;
 			}
 
 			if(char.animationsArray.length > 0) {
-				if (#if android (virtualPad.buttonV.justPressed && !virtualPad.buttonG.pressed) ||  #end FlxG.keys.justPressed.W)
+				if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonV.justPressed && !virtualPad.buttonG.pressed)) ||  #end FlxG.keys.justPressed.W)
 				{
 					curAnim -= 1;
 				}
 
-				if (#if android (virtualPad.buttonD.justPressed && !virtualPad.buttonG.pressed ) || #end FlxG.keys.justPressed.S)
+				if (#if (android || desktop) (virtualPad != null && (virtualPad.buttonD.justPressed && !virtualPad.buttonG.pressed)) || #end FlxG.keys.justPressed.S)
 				{
 					curAnim += 1;
 				}
@@ -1083,12 +1083,12 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 				if (curAnim >= char.animationsArray.length)
 					curAnim = 0;
 
-				if ((#if android virtualPad.buttonD.justPressed ||	#end FlxG.keys.justPressed.S) || (#if android virtualPad.buttonV.justPressed || #end FlxG.keys.justPressed.W) ||  FlxG.keys.justPressed.SPACE)
+				if ((#if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) ||	#end FlxG.keys.justPressed.S) || (#if (android || desktop) (virtualPad != null && virtualPad.buttonV.justPressed) || #end FlxG.keys.justPressed.W) ||  FlxG.keys.justPressed.SPACE)
 				{
 					char.playAnim(char.animationsArray[curAnim].anim, true);
 					genBoyOffsets();
 				}
-				if (#if android  virtualPad.buttonA.justPressed ||  #end FlxG.keys.justPressed.T)
+				if (#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) ||  #end FlxG.keys.justPressed.T)
 				{
 					char.animationsArray[curAnim].offsets = [0, 0];
 
@@ -1097,11 +1097,11 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 					genBoyOffsets();
 				}
 
-				var controlArray:Array<Bool> = [#if android (virtualPad.buttonLeft.justPressed && !virtualPad.buttonG.pressed ) || #end FlxG.keys.justPressed.LEFT,#if android (virtualPad.buttonRight.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.RIGHT,#if android (virtualPad.buttonUp.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.UP, #if android (virtualPad.buttonDown.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.DOWN];
+				var controlArray:Array<Bool> = [#if (android || desktop) (virtualPad != null && (virtualPad.buttonLeft.justPressed && !virtualPad.buttonG.pressed)) || #end FlxG.keys.justPressed.LEFT,#if (android || desktop) (virtualPad != null && (virtualPad.buttonRight.justPressed && !virtualPad.buttonG.pressed)) || #end FlxG.keys.justPressed.RIGHT,#if (android || desktop) (virtualPad != null && (virtualPad.buttonUp.justPressed && !virtualPad.buttonG.pressed)) || #end FlxG.keys.justPressed.UP, #if (android || desktop) (virtualPad != null && (virtualPad.buttonDown.justPressed && !virtualPad.buttonG.pressed)) || #end FlxG.keys.justPressed.DOWN];
 
 				for (i in 0...controlArray.length) {
 					if(controlArray[i]) {
-						var holdShift = #if android virtualPad.buttonC.pressed || #end  FlxG.keys.pressed.SHIFT;
+						var holdShift = #if (android || desktop) (virtualPad != null && virtualPad.buttonC.pressed) || #end  FlxG.keys.pressed.SHIFT;
 						var multiplier = 1;
 						if (holdShift)
 							multiplier = 10;

@@ -25,9 +25,7 @@ import flixel.addons.display.FlxRuntimeShader;
 
 import flixel.input.actions.FlxActionInput;
 import flixel.util.FlxDestroyUtil;
-#if TOUCH_CONTROLS
 import android.flixel.FlxVirtualPad;
-#end
 import mohong.TraceManager;
 
 class MusicBeatSubstate extends FlxSubState
@@ -77,15 +75,17 @@ class MusicBeatSubstate extends FlxSubState
 	public function getCurStep():Int return curStep;
 	public function getCurBeat():Int return curBeat;
 
-	#if TOUCH_CONTROLS
 	var virtualPad:FlxVirtualPad;
-	#else
-	var virtualPad:Dynamic;
-	#end
 	var trackedinputsUI:Array<FlxActionInput> = [];
 
-	#if TOUCH_CONTROLS
+	/**
+	 * 创建菜单虚拟按键。安卓/iOS 始终启用; 桌面端只有开启"触屏支持"后才显示。
+	 */
 	public function addVirtualPad(DPad:FlxDPadMode, Action:FlxActionMode) {
+		#if !TOUCH_CONTROLS
+		if (!ClientPrefs.data.touchControls)
+			return;
+		#end
 		virtualPad = new FlxVirtualPad(DPad, Action);
 		add(virtualPad);
 		controls.setVirtualPadUI(virtualPad, DPad, Action);
@@ -95,7 +95,11 @@ class MusicBeatSubstate extends FlxSubState
 
 	public function removeVirtualPad() {
 		if (trackedinputsUI.length > 0) controls.removeVirtualControlsInput(trackedinputsUI);
-		if (virtualPad != null) remove(virtualPad);
+		if (virtualPad != null)
+		{
+			remove(virtualPad);
+			virtualPad = FlxDestroyUtil.destroy(virtualPad);
+		}
 	}
 
 	public function addPadCamera(DefaultDrawTarget:Bool = false) {
@@ -106,11 +110,6 @@ class MusicBeatSubstate extends FlxSubState
 			virtualPad.cameras = [camControls];
 		}
 	}
-	#else
-	public function addVirtualPad(DPad:Dynamic, Action:Dynamic) {}
-	public function removeVirtualPad() {}
-	public function addPadCamera(DefaultDrawTarget:Bool = false) {}
-	#end
 
 	// ==================== CREATE ====================
 
@@ -434,9 +433,7 @@ class MusicBeatSubstate extends FlxSubState
 	// ==================== DESTROY ====================
 
 	override function destroy():Void {
-		#if TOUCH_CONTROLS
 		if (trackedinputsUI.length > 0) controls.removeVirtualControlsInput(trackedinputsUI);
-		#end
 		#if HSCRIPT_ALLOWED
 		if (hscriptArray != null) {
 			for (script in hscriptArray) script.stop();
@@ -455,8 +452,6 @@ class MusicBeatSubstate extends FlxSubState
 		#end
 
 		super.destroy();
-		#if TOUCH_CONTROLS
 		if (virtualPad != null) virtualPad = FlxDestroyUtil.destroy(virtualPad);
-		#end
 	}
 }

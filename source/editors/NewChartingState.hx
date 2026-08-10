@@ -702,7 +702,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
     
 		fullTipText.screenCenter();
 		add(fullTipText);
-		#if android
+		#if (android || desktop)
 		addVirtualPad(LEFT_FULL, NEW_CHART_EDITOR);
 		#end
 	}
@@ -1125,14 +1125,14 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 					softReloadNotes(true);
 				}
-				else if((#if android virtualPad.buttonLeft.justPressed || #end FlxG.keys.justPressed.A) != (#if android virtualPad.buttonRight.justPressed || #end FlxG.keys.justPressed.D) && !holdingAlt)
+				else if((#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed) || #end FlxG.keys.justPressed.A) != (#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed) || #end FlxG.keys.justPressed.D) && !holdingAlt)
 				{
 					if(FlxG.sound.music.playing)
 						setSongPlaying(false);
 
-					var shiftAdd:Int = (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT) ? 4 : 1;
+					var shiftAdd:Int = (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT) ? 4 : 1;
 
-					if(#if android virtualPad.buttonLeft.justPressed || #end FlxG.keys.justPressed.A)
+					if(#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed) || #end FlxG.keys.justPressed.A)
 					{
 						if(curSec - shiftAdd < 0) shiftAdd = curSec;
 
@@ -1145,7 +1145,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 							Conductor.songPosition = targetTime;
 						}
 					}
-					else if(#if android virtualPad.buttonRight.justPressed || #end FlxG.keys.justPressed.D)
+					else if(#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed) || #end FlxG.keys.justPressed.D)
 					{
 						if(curSec + shiftAdd >= PlayState.SONG.notes.length) shiftAdd = PlayState.SONG.notes.length - curSec - 1;
                         
@@ -1176,13 +1176,13 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				else if(FlxG.keys.justPressed.R)
 				{
 					var timeToGoBack:Float = 0;
-					if(#if android !virtualPad.buttonY.pressed || #end !FlxG.keys.pressed.SHIFT) timeToGoBack = cachedSectionTimes[curSec] + (curSec > 0 ? 0.000001 : 0);
+					if(#if (android || desktop) (virtualPad == null || !virtualPad.buttonY.pressed) || #end !FlxG.keys.pressed.SHIFT) timeToGoBack = cachedSectionTimes[curSec] + (curSec > 0 ? 0.000001 : 0);
 					else loadSection(0);
 					FlxTween.cancelTweensOf(FlxG.sound.music);
 					FlxTween.tween(FlxG.sound.music, {time: timeToGoBack}, 0.2, {ease: FlxEase.circOut});
 					Conductor.songPosition = timeToGoBack;
 				}
-				else if(!PsychUIDropDownMenu.anyDropdownOpen && ((FlxG.keys.pressed.W #if android || virtualPad.buttonUp.pressed #end) != (FlxG.keys.pressed.S #if android || virtualPad.buttonDown.pressed #end) || FlxG.mouse.wheel != 0))
+				else if(!PsychUIDropDownMenu.anyDropdownOpen && ((FlxG.keys.pressed.W #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.pressed) #end) != (FlxG.keys.pressed.S #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.pressed) #end) || FlxG.mouse.wheel != 0))
 				{
 					if(FlxG.sound.music.playing)
 						setSongPlaying(false);
@@ -1190,7 +1190,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					if(mouseSnapCheckBox.checked && FlxG.mouse.wheel != 0)
 					{
 						var snap:Float = Conductor.stepCrochet / (curQuant/16) / curZoom;
-						var timeAdd:Float = (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT ? 4 : 1) / (holdingAlt ? 4 : 1) * -FlxG.mouse.wheel * snap;
+						var timeAdd:Float = (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT ? 4 : 1) / (holdingAlt ? 4 : 1) * -FlxG.mouse.wheel * snap;
 						var targetTime:Float = Math.round((FlxG.sound.music.time + timeAdd) / snap) * snap;
 						if(targetTime > 0) targetTime += 0.000001;
 						FlxTween.cancelTweensOf(FlxG.sound.music);
@@ -1198,17 +1198,17 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					}
 					else
 					{
-						var speedMult:Float = (#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT ? 4 : 1) * (FlxG.mouse.wheel != 0 ? 4 : 1) / (holdingAlt ? 4 : 1);
-						if((FlxG.keys.pressed.W #if android || virtualPad.buttonUp.pressed #end) || FlxG.mouse.wheel > 0)
+						var speedMult:Float = (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT ? 4 : 1) * (FlxG.mouse.wheel != 0 ? 4 : 1) / (holdingAlt ? 4 : 1);
+						if((FlxG.keys.pressed.W #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.pressed) #end) || FlxG.mouse.wheel > 0)
 							FlxG.sound.music.time -= Conductor.crochet * speedMult * 1.5 * elapsed / curZoom;
-						else if((FlxG.keys.pressed.S #if android || virtualPad.buttonDown.pressed #end) || FlxG.mouse.wheel < 0)
+						else if((FlxG.keys.pressed.S #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.pressed) #end) || FlxG.mouse.wheel < 0)
 							FlxG.sound.music.time += Conductor.crochet * speedMult * 1.5 * elapsed / curZoom;
 					}
 
 					FlxG.sound.music.time = FlxMath.bound(FlxG.sound.music.time, 0, FlxG.sound.music.length - 1);
 					if(FlxG.sound.music.playing) setSongPlaying(!FlxG.sound.music.playing);
 				}
-				else if(#if android virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.SPACE)
+				else if(#if (android || desktop) (virtualPad != null && virtualPad.buttonX.justPressed) || #end FlxG.keys.justPressed.SPACE)
 				{
 					setSongPlaying(!FlxG.sound.music.playing);
 				}
@@ -1243,7 +1243,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			var doCut:Bool = false;
 			var canContinue:Bool = true;
-			if(#if android virtualPad.buttonA.justPressed || #end FlxG.keys.justPressed.ENTER)
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) || #end FlxG.keys.justPressed.ENTER)
 			{
 				goToPlayState();
 				return;
@@ -1388,9 +1388,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						curQuant = quantizations[Std.int(Math.min(quantizations.indexOf(curQuant) + 1, quantizations.length - 1))];
 					forceDataUpdate = true;
 				}
-			if (#if android virtualPad.buttonZ.justPressed || #end FlxG.keys.justPressed.Z != #if android virtualPad.buttonD.justPressed || #end FlxG.keys.justPressed.X) //Decrease/Increase Zoom
+			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end FlxG.keys.justPressed.Z != #if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) || #end FlxG.keys.justPressed.X) //Decrease/Increase Zoom
 				{
-					if (#if android virtualPad.buttonZ.justPressed || #end FlxG.keys.justPressed.Z)
+					if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end FlxG.keys.justPressed.Z)
 						curZoom = zoomList[Std.int(Math.max(zoomList.indexOf(curZoom) - 1, 0))];
 					else
 						curZoom = zoomList[Std.int(Math.min(zoomList.indexOf(curZoom) + 1, zoomList.length - 1))];
@@ -1429,7 +1429,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			{
 				var sel = selectedNotes.copy();
 				updateSelectionBox();
-				if(#if android !virtualPad.buttonY.pressed || #end !FlxG.keys.pressed.SHIFT && !holdingAlt)
+				if(#if (android || desktop) (virtualPad == null || !virtualPad.buttonY.pressed) || #end !FlxG.keys.pressed.SHIFT && !holdingAlt)
 					resetSelectedNotes();
 
 				var selectionBounds = selectionBox.getScreenBounds(null, camUI);
@@ -1471,7 +1471,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		}
 		
 		if(FlxG.mouse.justPressed && (FlxG.mouse.overlaps(mainBox.bg) || FlxG.mouse.overlaps(infoBox.bg)
-			#if android
+			#if (android || desktop)
 			|| (virtualPad != null && virtualPad.isMouseOverAnyButton())
 			#end
 		))
@@ -1488,7 +1488,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			var diffX:Float = FlxG.mouse.x - gridBg.x;
 			var diffY:Float = FlxG.mouse.y - gridBg.y;
-			if(#if android !virtualPad.buttonY.pressed || #end !FlxG.keys.pressed.SHIFT)
+			if(#if (android || desktop) (virtualPad == null || !virtualPad.buttonY.pressed) || #end !FlxG.keys.pressed.SHIFT)
 				diffY -= diffY % (GRID_SIZE / (curQuant/16));
 
 			// 多k: 高度边界按各小节总高度 (含事件切分段) 计算
@@ -1519,7 +1519,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			else
 				dummyArrow.x = gridBg.x + eventColW + noteData * GRID_SIZE + (GRID_SIZE - dummyArrow.width) / 2;
 
-			if(#if android virtualPad.buttonY.pressed || #end FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= gridBg.y || !prevGridBg.visible)
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT || FlxG.mouse.y >= gridBg.y || !prevGridBg.visible)
 				dummyArrow.y = gridBg.y + diffY;
 			else
 			{
@@ -1854,8 +1854,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			var sineValue:Float = 0.75 + Math.cos(Math.PI * noteSelectionSine * (isMovingNotes ? 8 : 2)) / 4;
 			//trace(sineValue);
 
-			var qPress = #if android virtualPad.buttonUp2.justPressed  || #end FlxG.keys.justPressed.Q;
-			var ePress = #if android virtualPad.buttonDown2.justPressed  || #end FlxG.keys.justPressed.E;
+			var qPress = #if (android || desktop) (virtualPad != null && virtualPad.buttonUp2.justPressed)  || #end FlxG.keys.justPressed.Q;
+			var ePress = #if (android || desktop) (virtualPad != null && virtualPad.buttonDown2.justPressed)  || #end FlxG.keys.justPressed.E;
 			var addSus = (FlxG.keys.pressed.SHIFT ? 4 : 1) * (Conductor.stepCrochet / 2);
 			if(qPress) addSus *= -1;
 

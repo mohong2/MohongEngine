@@ -35,10 +35,8 @@ import flixel.addons.display.FlxRuntimeShader;
 
 import flixel.input.actions.FlxActionInput;
 import flixel.util.FlxDestroyUtil;
-#if TOUCH_CONTROLS
 import android.AndroidControls;
 import android.flixel.FlxVirtualPad;
-#end
 import mohong.TraceManager;
 
 class MusicBeatState extends FlxUIState
@@ -86,19 +84,20 @@ class MusicBeatState extends FlxUIState
 		return PlayerSettings.player1.controls;
 
 
-	#if TOUCH_CONTROLS
 	var androidControls:AndroidControls;
 	var virtualPad:FlxVirtualPad;
-	#else
-	var androidControls:Dynamic;
-	var virtualPad:Dynamic;
-	#end
 	var trackedinputsUI:Array<FlxActionInput> = [];
 	var trackedinputsNOTES:Array<FlxActionInput> = [];
 
-	#if TOUCH_CONTROLS
+	/**
+	 * 创建菜单虚拟按键。安卓/iOS 始终启用; 桌面端只有开启"触屏支持"后才显示。
+	 */
 	public function addVirtualPad(DPad:FlxDPadMode, Action:FlxActionMode)
 	{
+		#if !TOUCH_CONTROLS
+		if (!ClientPrefs.data.touchControls)
+			return;
+		#end
 		if (virtualPad != null) removeVirtualPad();
 		virtualPad = new FlxVirtualPad(DPad, Action);
 		add(virtualPad);
@@ -110,11 +109,33 @@ class MusicBeatState extends FlxUIState
 	public function removeVirtualPad()
 	{
 		if (trackedinputsUI != []) controls.removeVirtualControlsInput(trackedinputsUI);
-		if (virtualPad != null) remove(virtualPad);
+		if (virtualPad != null)
+		{
+			remove(virtualPad);
+			virtualPad = FlxDestroyUtil.destroy(virtualPad);
+		}
 	}
 
+	public function addPadCamera(DefaultDrawTarget:Bool = false)
+	{
+		if (virtualPad != null) {
+			var camControls:FlxCamera = new FlxCamera();
+			FlxG.cameras.add(camControls, DefaultDrawTarget);
+			camControls.bgColor.alpha = 0;
+			virtualPad.cameras = [camControls];
+		}
+	}
+
+	/**
+	 * 创建安卓移动端控件 (虚拟按键/Hitbox)。
+	 * 安卓/iOS 始终启用; 桌面端只有开启"触屏支持"设置后才创建。
+	 */
 	public function addAndroidControls(DefaultDrawTarget:Bool = false)
 	{
+		#if !TOUCH_CONTROLS
+		if (!ClientPrefs.data.touchControls)
+			return;
+		#end
 		if (androidControls != null) removeAndroidControls();
 		androidControls = new AndroidControls();
 		switch (AndroidControls.mode)
@@ -139,23 +160,6 @@ class MusicBeatState extends FlxUIState
 		if (trackedinputsNOTES != []) controls.removeVirtualControlsInput(trackedinputsNOTES);
 		if (androidControls != null) remove(androidControls);
 	}
-
-	public function addPadCamera(DefaultDrawTarget:Bool = false)
-	{
-		if (virtualPad != null) {
-			var camControls:FlxCamera = new FlxCamera();
-			FlxG.cameras.add(camControls, DefaultDrawTarget);
-			camControls.bgColor.alpha = 0;
-			virtualPad.cameras = [camControls];
-		}
-	}
-	#else
-	public function addVirtualPad(DPad:Dynamic, Action:Dynamic) {}
-	public function removeVirtualPad() {}
-	public function addAndroidControls(DefaultDrawTarget:Bool = false) {}
-	public function removeAndroidControls() {}
-	public function addPadCamera(DefaultDrawTarget:Bool = false) {}
-	#end
 
 	// ==================== CREATE ====================
 
@@ -566,10 +570,8 @@ class MusicBeatState extends FlxUIState
 	// ==================== DESTROY ====================
 
 	override function destroy():Void {
-		#if TOUCH_CONTROLS
 		if (trackedinputsNOTES != []) controls.removeVirtualControlsInput(trackedinputsNOTES);
 		if (trackedinputsUI != []) controls.removeVirtualControlsInput(trackedinputsUI);
-		#end
 		#if HSCRIPT_ALLOWED
 		if (hscriptArray != null) {
 			for (script in hscriptArray) script.stop();
@@ -588,10 +590,8 @@ class MusicBeatState extends FlxUIState
 		#end
 
 		super.destroy();
-		#if TOUCH_CONTROLS
 		if (virtualPad != null) { virtualPad = FlxDestroyUtil.destroy(virtualPad); virtualPad = null; }
 		if (androidControls != null) { androidControls = FlxDestroyUtil.destroy(androidControls); androidControls = null; }
-		#end
 
 	}
 }

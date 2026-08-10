@@ -99,6 +99,16 @@
 		"onChange": "onChangeTouchSwipe"
 	},
 	{
+		"nameKey": "option.touchControls",
+		"defaultName": "Touch Support",
+		"descKey": "option.touchControls.desc",
+		"defaultDesc": "Bring the Android mobile controls (virtual pad / hitbox) to PC, usable with mouse or touchscreen.\nMode and layout can be changed in the Touch Controls menu.",
+		"variable": "touchControls",
+		"type": "bool",
+		"defaultValue": false,
+		"platform": "desktop"
+	},
+	{
 		"nameKey": "option.oldPauseMenu",
 		"defaultName": "Old Pause Menu",
 		"descKey": "option.oldPauseMenu.desc",

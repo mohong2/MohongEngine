@@ -10,6 +10,7 @@ import mohong.TraceManager;
 import Language;
 import ClientPrefs;
 import Paths;
+import backend.CompatEngine;
 #if (desktop && cpp && windows)
 import mohong.Windows;
 #end
@@ -25,6 +26,7 @@ typedef OptionCategoryDef =
 	@:optional var stateClass:String;
 	@:optional var rpcTitleKey:String;
 	@:optional var modSource:String;
+	@:optional var platform:String;
 }
 
 /** Single option JSON definition */
@@ -50,6 +52,8 @@ typedef OptionDef =
 	@:optional var onChangeHscript:String;
 	@:optional var platform:String;
 	@:optional var define:String;
+	/** 引擎兼容模式门控: "0.7.3+" 仅 0.7.3/1.0.4 模式显示, "0.6.3" 仅 0.6.3 模式显示。 */
+	@:optional var compat:String;
 	@:optional var modSource:String;
 	@:optional var useModSettings:Bool;
 }
@@ -97,14 +101,28 @@ class OptionLoader
 			reloadCategories();
 
 		var result = _cachedCategories.copy();
-		#if !mobile
-		result = result.filter(function(c) return c.id != 'android_settings');
-		#else
+		#if mobile
 		if (!includeAndroid)
 			result = result.filter(function(c) return c.id != 'android_settings');
 		#end
+		result = result.filter(function(c) return categoryAllowedOnPlatform(c));
 
 		return result;
+	}
+
+	/** 按平台过滤分类 (与选项的 platform 字段一致)。 */
+	static function categoryAllowedOnPlatform(cat:OptionCategoryDef):Bool
+	{
+		if (cat.platform == null)
+			return true;
+
+		return switch (cat.platform.toLowerCase())
+		{
+			case 'desktop': #if (desktop && !html5) true #else false #end;
+			case 'mobile': #if mobile true #else false #end;
+			case 'html5': #if html5 true #else false #end;
+			default: true;
+		};
 	}
 
 	/** Reload categories from all sources. */
@@ -286,6 +304,30 @@ class OptionLoader
 					}
 					var num:Int = presets.indexOf(curPreset);
 					if (num > -1) opt.curOption = num;
+
+				case 'noteSkin':
+					// 0.7.3+ 自由切换 Note 皮肤: 列表来自 images/noteSkins/list.txt (模组可追加)
+					var skins:Array<String> = Paths.mergeAllTextsNamed('images/noteSkins/list.txt');
+					if (skins != null && skins.length > 0)
+					{
+						if (skins.indexOf(ClientPrefs.defaultData.noteSkin) < 0)
+							skins.insert(0, ClientPrefs.defaultData.noteSkin);
+						opt.options = skins;
+						var num:Int = skins.indexOf(opt.getValue());
+						if (num > -1) opt.curOption = num;
+					}
+
+				case 'splashSkin':
+					// 0.7.3+ 自由切换溅射皮肤: 列表来自 images/noteSplashes/list.txt
+					var skins:Array<String> = Paths.mergeAllTextsNamed('images/noteSplashes/list.txt');
+					if (skins != null && skins.length > 0)
+					{
+						if (skins.indexOf(ClientPrefs.defaultData.splashSkin) < 0)
+							skins.insert(0, ClientPrefs.defaultData.splashSkin);
+						opt.options = skins;
+						var num:Int = skins.indexOf(opt.getValue());
+						if (num > -1) opt.curOption = num;
+					}
 
 				case 'traceConsoleEnabled':
 					#if (desktop && cpp && windows)
@@ -472,6 +514,18 @@ class OptionLoader
 
 	static function createOptionFromDef(def:OptionDef, ?extraCallbacks:Map<String, Void->Void>):Option
 	{
+		// 引擎兼容模式门控: 皮肤切换等 0.7.3+ 专属选项只在对应兼容模式显示
+		if (def.compat != null && def.compat.length > 0)
+		{
+			var show:Bool = switch (def.compat.toLowerCase())
+			{
+				case '0.7.3+' | 'modern': CompatEngine.isModern();
+				case '0.6.3' | '063': CompatEngine.is063();
+				default: true;
+			}
+			if (!show) return null;
+		}
+
 		if (def.platform != null)
 		{
 			var shouldInclude = switch (def.platform.toLowerCase())

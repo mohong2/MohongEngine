@@ -104,7 +104,7 @@ class CreditsEditorState extends MusicBeatState implements PsychUIEventHandler.P
 		changeSelection();
 
 		FlxG.mouse.visible = true;
-		#if android
+		#if (android || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C);
 		#end
 		super.create();
@@ -456,7 +456,7 @@ class CreditsEditorState extends MusicBeatState implements PsychUIEventHandler.P
 				changeSelection(1);
 			}
 
-			if(#if android virtualPad.buttonB.justPressed || #end controls.BACK) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end controls.BACK) {
 				confirmExitCredits();
 			}
 		}

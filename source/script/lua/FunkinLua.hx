@@ -2,6 +2,8 @@ package script.lua;
 
 import backend.ModConfig;
 import backend.MusicBeatState;
+import backend.CompatEngine;
+import backend.Difficulty;
 import haxe.Constraints.Function;
 import script.hscript.HScript;
 import substates.PauseSubState;
@@ -9,6 +11,8 @@ import states.FreeplayState;
 import states.StoryMenuState;
 import substates.GameOverSubstate;
 import states.MainMenuState;
+import states.ModState;
+import substates.ModSubState;
 import openfl.display.BitmapData;
 import backend.MusicBeatSubstate;
 import animateatlas.AtlasFrameMaker;
@@ -24,8 +28,15 @@ import openfl.utils.Assets;
 import flixel.util.FlxSave;
 import flixel.util.FlxTimer;
 import flixel.tweens.FlxTween;
+import flixel.tweens.FlxTween.FlxTweenType;
+import flixel.tweens.FlxEase.EaseFunction;
 import flixel.addons.transition.FlxTransitionableState;
 import flixel.system.FlxAssets.FlxShader;
+import haxe.io.Path;
+
+#if flxanimate
+import flxanimate.FlxAnimate;
+#end
  
 #if (!flash && sys)
 import flixel.addons.display.FlxRuntimeShader;
@@ -41,9 +52,9 @@ import Controls;
 import DialogueBoxPsych;
 
 #if HSCRIPT_ALLOWED
-import crowplexus.hscript.Parser;
-import crowplexus.hscript.Interp;
-import crowplexus.hscript.Expr;
+import hscript.Parser;
+import hscript.Interp;
+import hscript.Expr;
 #end
 
 #if cpp
@@ -95,6 +106,19 @@ class FunkinLua {
 	public static var hscript:HScript = null;
 	#end
 
+	/**
+	 * require 支持：本实例注册的解析回调名 / chunk 表名。
+	 * English: require support — unique resolver callback name & chunk table name
+	 * for this instance (cleaned up on stop() to avoid leaking the global callback map).
+	 */
+	var __requireResolveName:String = null;
+	var __requireChunksName:String = null;
+	static var __requireUid:Int = 0;
+	static var __requireChunkRef:Int = 0;
+
+	/** import 支持：本实例注册的解析回调名（stop 时清理）。 English: import support — unique resolver callback name (cleaned up on stop()). */
+	var __importResolveName:String = null;
+	static var __importUid:Int = 0;
 
 	/**
 	 * 从多个文件夹收集所有 .lua 文件并加载，filesPushed 用于跨批次去重。
@@ -153,8 +177,8 @@ class FunkinLua {
 
 		//LuaL.dostring(lua, CLENSE);
 
-		// In compatibility_mode, suppress unsupported type traces (old behavior)
-		Convert.enableUnsupportedTraces = ClientPrefs.data.compatibility_mode;
+		// In compatibility mode, suppress unsupported type traces (old behavior)
+		Convert.enableUnsupportedTraces = CompatEngine.compatMode();
 
 		initHaxeModule();
 		scriptName = script;
@@ -183,6 +207,11 @@ class FunkinLua {
 
 		set('language', ClientPrefs.data.language);
 
+		// Lua require() 支持：把脚本目录 / 模组 lua 目录接入模块搜索链
+		setupRequireSupport();
+		// Lua import() 支持：加载并立即执行目标 Lua 文件（include 语义）
+		setupImportSupport();
+
 		// PlayState-specific variables (only set when PlayState is active)
 		if (PlayState.instance != null && PlayState.SONG != null)
 		{
@@ -197,7 +226,8 @@ class FunkinLua {
 			set('songPath', Paths.formatToSongPath(PlayState.SONG.song));
 			set('startedCountdown', false);
 			set('curStage', PlayState.SONG.stage);
-			set('compatibility_mode', ClientPrefs.data.compatibility_mode);
+			set('compatibility_mode', CompatEngine.compatMode());
+			set('compatEngine', CompatEngine.current());
 			set('isStoryMode', PlayState.isStoryMode);
 			set('difficulty', PlayState.storyDifficulty);
 
@@ -243,6 +273,17 @@ class FunkinLua {
 			set('hasVocals', PlayState.SONG.needsVoices);
 			set('curSection', 0);
 			set('combo', 0);
+
+			// 0.7.3+/1.0.4 新增的全局变量（兼容旧模组）
+			// Globals added in 0.7.3+/1.0.4 (kept for mod compatibility)
+			set('deaths', PlayState.deathCounter);
+			set('totalPlayed', PlayState.instance.totalPlayed);
+			set('totalNotesHit', PlayState.instance.totalNotesHit);
+			set('controls', PlayState.instance.controls);
+			set('loadedSongName', Song.loadedSongName);
+			set('loadedSongPath', Paths.formatToSongPath(Song.loadedSongName));
+			set('chartPath', Song.chartPath);
+			set('difficultyNameTranslation', Difficulty.getString(true));
 		}
 
 		// Camera poo
@@ -278,6 +319,7 @@ class FunkinLua {
 		set('shadersEnabled', ClientPrefs.data.shaders);
 		set('scriptName', scriptName);
 		set('currentModDirectory', Paths.currentModDirectory);
+		set('modFolder', modFolder);
 
 		set('guitarHeroSustains', ClientPrefs.data.guitarHeroSustains);
 		set('noteSkin', ClientPrefs.data.noteSkin);
@@ -308,8 +350,13 @@ class FunkinLua {
 		set('buildTarget', 'unknown');
 		#end
 
-		// custom substate
+		// ── 自定义 substate（CustomSubstate，脚本通过 onCustomSubstate* 事件控制内容）
+		// ── Custom substate: content is driven by the onCustomSubstate* script events
 		Lua_helper.add_callback(lua, "openCustomSubstate", function(name:String, pauseGame:Bool = false) {
+			if (PlayState.instance == null) {
+				luaTrace("openCustomSubstate: only available during gameplay!", false, false, FlxColor.RED);
+				return false;
+			}
 			if(pauseGame)
 			{
 				PlayState.instance.persistentUpdate = false;
@@ -317,20 +364,92 @@ class FunkinLua {
 				PlayState.instance.paused = true;
 				if(FlxG.sound.music != null) {
 					FlxG.sound.music.pause();
-					PlayState.instance.vocals.pause();
+					if (PlayState.instance.vocals != null) PlayState.instance.vocals.pause();
 				}
 			}
 			PlayState.instance.openSubState(new CustomSubstate(name));
+			return true;
 		});
 
 		Lua_helper.add_callback(lua, "closeCustomSubstate", function() {
 			if(CustomSubstate.instance != null)
 			{
-				PlayState.instance.closeSubState();
+				var target:Dynamic = (PlayState.instance != null) ? PlayState.instance : FlxG.state;
+				if (target != null) target.closeSubState();
 				CustomSubstate.instance = null;
 				return true;
 			}
 			return false;
+		});
+
+		// 把已创建的 Lua 对象（makeLuaSprite 等）插入 CustomSubstate
+		// Insert an already-created Lua object (e.g. makeLuaSprite) into the CustomSubstate
+		Lua_helper.add_callback(lua, "insertToCustomSubstate", function(tag:String, ?pos:Int = -1) {
+			if(CustomSubstate.instance == null || PlayState.instance == null)
+				return false;
+			var tagObject:Dynamic = PlayState.instance.getLuaObject(tag, true);
+			if(tagObject != null && Std.isOfType(tagObject, FlxObject))
+			{
+				if(pos < 0) CustomSubstate.instance.add(cast tagObject);
+				else CustomSubstate.instance.insert(pos, cast tagObject);
+				return true;
+			}
+			return false;
+		});
+
+		// ── 自定义完整 state（ModState，从 data/states/<name> 加载 Lua/hscript）
+		// ── Custom full state (ModState): loads Lua/hscript from data/states/<name>
+		Lua_helper.add_callback(lua, "switchToModState", function(stateName:String, ?data:Dynamic = null) {
+			if (stateName == null || stateName.length == 0) return false;
+			MusicBeatState.switchState(new ModState(stateName, data));
+			return true;
+		});
+
+		// ── 自定义 substate（ModSubState，从 data/states/<name> 加载 Lua/hscript）
+		// ── Custom substate (ModSubState): loads Lua/hscript from data/states/<name>
+		Lua_helper.add_callback(lua, "openModSubState", function(stateName:String, ?data:Dynamic = null) {
+			if (stateName == null || stateName.length == 0) return false;
+			if (FlxG.state == null) return false;
+			FlxG.state.openSubState(new ModSubState(stateName, data));
+			return true;
+		});
+
+		Lua_helper.add_callback(lua, "closeModSubState", function() {
+			if (FlxG.state == null || FlxG.state.subState == null) return false;
+			if (Std.isOfType(FlxG.state.subState, ModSubState)) {
+				FlxG.state.closeSubState();
+				return true;
+			}
+			return false;
+		});
+
+		// ── state 信息 / 导航工具 ── State info & navigation helpers
+		Lua_helper.add_callback(lua, "getStateName", function():String {
+			if (FlxG.state == null) return '';
+			var cls:String = Type.getClassName(Type.getClass(FlxG.state));
+			return (cls == null) ? '' : cls.substr(cls.lastIndexOf('.') + 1);
+		});
+
+		Lua_helper.add_callback(lua, "getSubStateName", function():String {
+			if (FlxG.state == null || FlxG.state.subState == null) return '';
+			var cls:String = Type.getClassName(Type.getClass(FlxG.state.subState));
+			return (cls == null) ? '' : cls.substr(cls.lastIndexOf('.') + 1);
+		});
+
+		Lua_helper.add_callback(lua, "switchToState", function(stateName:String) {
+			if (stateName == null || stateName.length == 0) return false;
+			var cls:Class<Dynamic> = Type.resolveClass('states.' + stateName);
+			if (cls == null) cls = Type.resolveClass(stateName);
+			if (cls == null) return false;
+			try {
+				var st:Dynamic = Type.createInstance(cls, []);
+				if (st == null) return false;
+				MusicBeatState.switchState(cast st);
+				return true;
+			} catch (e:Dynamic) {
+				luaTrace("switchToState: failed to create '" + stateName + "': " + e, false, false, FlxColor.RED);
+				return false;
+			}
 		});
 
 		// shader shit
@@ -1028,6 +1147,99 @@ class FunkinLua {
 			}
 			luaTrace("removeLuaScript: Script doesn't exist!", false, false, FlxColor.RED);
 		});
+
+		// 0.7.3+/1.0.4: addHScript / removeHScript
+		Lua_helper.add_callback(lua, "addHScript", function(scriptFile:String, ?ignoreAlreadyRunning:Bool = false) {
+			#if HSCRIPT_ALLOWED
+			var scriptPath:String = scriptFile + ".hx";
+			if(scriptFile.endsWith(".hx")) scriptPath = scriptFile;
+			var doPush:Bool = false;
+			#if MODS_ALLOWED
+			if(FileSystem.exists(Paths.modFolders(scriptPath)))
+			{
+				scriptPath = Paths.modFolders(scriptPath);
+				doPush = true;
+			}
+			else if(FileSystem.exists(scriptPath))
+			{
+				doPush = true;
+			}
+			else {
+				scriptPath = Paths.getPreloadPath(scriptPath);
+				if(FileSystem.exists(scriptPath)) doPush = true;
+			}
+			#else
+			scriptPath = Paths.getPreloadPath(scriptPath);
+			if(Assets.exists(scriptPath)) doPush = true;
+			#end
+
+			if(doPush && PlayState.instance != null)
+			{
+				if(!ignoreAlreadyRunning)
+				{
+					for (script in PlayState.instance.hscriptArray)
+					{
+						if(script != null && script.scriptName == scriptPath)
+						{
+							luaTrace('addHScript: The script "' + scriptPath + '" is already running!');
+							return;
+						}
+					}
+				}
+				PlayState.instance.initHScript(scriptPath);
+				return;
+			}
+			luaTrace("addHScript: Script doesn't exist!", false, false, FlxColor.RED);
+			#else
+			luaTrace("addHScript: HScript is not supported on this platform!", false, false, FlxColor.RED);
+			#end
+		});
+		Lua_helper.add_callback(lua, "removeHScript", function(scriptFile:String) {
+			#if HSCRIPT_ALLOWED
+			var scriptPath:String = scriptFile + ".hx";
+			if(scriptFile.endsWith(".hx")) scriptPath = scriptFile;
+			var doPush:Bool = false;
+			#if MODS_ALLOWED
+			if(FileSystem.exists(Paths.modFolders(scriptPath)))
+			{
+				scriptPath = Paths.modFolders(scriptPath);
+				doPush = true;
+			}
+			else if(FileSystem.exists(scriptPath))
+			{
+				doPush = true;
+			}
+			else {
+				scriptPath = Paths.getPreloadPath(scriptPath);
+				if(FileSystem.exists(scriptPath)) doPush = true;
+			}
+			#else
+			scriptPath = Paths.getPreloadPath(scriptPath);
+			if(Assets.exists(scriptPath)) doPush = true;
+			#end
+
+			if(doPush && PlayState.instance != null)
+			{
+				var foundAny:Bool = false;
+				for (script in PlayState.instance.hscriptArray)
+				{
+					if(script != null && script.scriptName == scriptPath)
+					{
+						script.stop();
+						foundAny = true;
+					}
+				}
+				if(foundAny) return true;
+			}
+
+			luaTrace('removeHScript: Script ' + scriptFile + ' isn\'t running!', false, false, FlxColor.RED);
+			return false;
+			#else
+			luaTrace("removeHScript: HScript is not supported on this platform!", false, false, FlxColor.RED);
+			return false;
+			#end
+		});
+
 		Lua_helper.add_callback(lua, "runHaxeCode", function(codeToRun:String) {
 			var retVal:Dynamic = null;
 
@@ -1043,9 +1255,61 @@ class FunkinLua {
 			luaTrace("runHaxeCode: HScript isn't supported on this platform!", false, false, FlxColor.RED);
 			#end
 
-			if(retVal != null && !isOfTypes(retVal, [Bool, Int, Float, String, Array])) retVal = null;
+			// 返回值支持 Map/表（此前只有 Bool/Int/Float/String/Array）。
+			// English: return values now also support Map/table (previously only Bool/Int/Float/String/Array).
+			if(retVal != null && !isOfTypes(retVal, [Bool, Int, Float, String, Array]) && !isMap(retVal)) retVal = null;
 			if(retVal == null) Lua.pushnil(lua);
 			return retVal;
+		});
+
+		// 0.7.3+/1.0.4: runHaxeFunction — call a function defined by a previous runHaxeCode
+		Lua_helper.add_callback(lua, "runHaxeFunction", function(funcToRun:String, ?funcArgs:Array<Dynamic> = null) {
+			var retVal:Dynamic = null;
+
+			#if HSCRIPT_ALLOWED
+			initHaxeModule();
+			try {
+				retVal = hscript.call(funcToRun, funcArgs);
+			}
+			catch (e:Dynamic) {
+				luaTrace(scriptName + ":" + lastCalledFunction + " - " + e, false, false, FlxColor.RED);
+			}
+
+			if(retVal != null && !isOfTypes(retVal, [Bool, Int, Float, String, Array]) && !isMap(retVal)) retVal = null;
+			if(retVal == null) Lua.pushnil(lua);
+			return retVal;
+			#else
+			luaTrace("runHaxeFunction: HScript isn't supported on this platform!", false, false, FlxColor.RED);
+			Lua.pushnil(lua);
+			return null;
+			#end
+		});
+
+		// 写入共享 hscript 环境变量。English: write a variable into the shared hscript environment.
+		Lua_helper.add_callback(lua, "setHaxeVar", function(varName:String, value:Dynamic) {
+			#if HSCRIPT_ALLOWED
+			initHaxeModule();
+			try {
+				hscript.set(varName, value);
+			}
+			catch (e:Dynamic) {
+				luaTrace(scriptName + ":" + lastCalledFunction + " - " + e, false, false, FlxColor.RED);
+			}
+			#end
+		});
+
+		// 读取共享 hscript 环境变量。English: read a variable from the shared hscript environment.
+		Lua_helper.add_callback(lua, "getHaxeVar", function(varName:String):Dynamic {
+			#if HSCRIPT_ALLOWED
+			initHaxeModule();
+			try {
+				return hscript.get(varName);
+			}
+			catch (e:Dynamic) {
+				luaTrace(scriptName + ":" + lastCalledFunction + " - " + e, false, false, FlxColor.RED);
+			}
+			#end
+			return null;
 		});
 
 		Lua_helper.add_callback(lua, "addHaxeLibrary", function(libName:String, ?libPackage:String = '') {
@@ -1126,9 +1390,96 @@ class FunkinLua {
 			}
 		});
 
+		// 1.0.4: loadMultipleFrames — 多图集拼接
+		// 1.0.4-only: loadMultipleFrames — merge multiple sparrow atlases into one
+		Lua_helper.add_callback(lua, "loadMultipleFrames", function(variable:String, images:Array<String>) {
+			var killMe:Array<String> = variable.split('.');
+			var spr:FlxSprite = getObjectDirectly(killMe[0]);
+			if(killMe.length > 1) {
+				spr = getVarInArray(getPropertyLoopThingWhatever(killMe), killMe[killMe.length-1]);
+			}
+
+			if(spr != null && images != null && images.length > 0)
+			{
+				spr.frames = Paths.getMultiAtlas(images);
+			}
+		});
+
+		// 0.7.3+/1.0.4: FlxAnimate 精灵（需要 flxanimate 库）
+		// FlxAnimate sprites (0.7.3+) — requires the flxanimate library
+		#if (LUA_ALLOWED && flxanimate)
+		Lua_helper.add_callback(lua, "makeFlxAnimateSprite", function(tag:String, ?x:Float = 0, ?y:Float = 0, ?loadFolder:String = null) {
+			tag = tag.replace('.', '');
+			var stateVars = getStateVars();
+			if(stateVars == null) return;
+
+			var lastSprite:Dynamic = stateVars.get(tag);
+			if(lastSprite != null)
+			{
+				lastSprite.kill();
+				if(getInstance() != null) getInstance().remove(lastSprite);
+				lastSprite.destroy();
+			}
+
+			var mySprite:ModchartAnimateSprite = new ModchartAnimateSprite(x, y);
+			if(loadFolder != null) Paths.loadAnimateAtlas(mySprite, loadFolder);
+			stateVars.set(tag, mySprite);
+			mySprite.active = true;
+		});
+
+		Lua_helper.add_callback(lua, "loadAnimateAtlas", function(tag:String, folderOrImg:String, ?spriteJson:String = null, ?animationJson:String = null) {
+			var stateVars = getStateVars();
+			if(stateVars == null) return;
+			var spr:flxanimate.PsychFlxAnimate = cast stateVars.get(tag);
+			if(spr != null) Paths.loadAnimateAtlas(spr, folderOrImg, spriteJson, animationJson);
+		});
+
+		Lua_helper.add_callback(lua, "addAnimationBySymbol", function(tag:String, name:String, symbol:String, ?framerate:Float = 24, ?loop:Bool = false, ?matX:Float = 0, ?matY:Float = 0) {
+			var stateVars = getStateVars();
+			if(stateVars == null) return false;
+			var obj:FlxAnimate = cast stateVars.get(tag);
+			if(obj == null) return false;
+
+			obj.anim.addBySymbol(name, symbol, framerate, loop, matX, matY);
+			if(obj.anim.curSymbol == null)
+			{
+				var obj2:ModchartAnimateSprite = cast (obj, ModchartAnimateSprite);
+				if(obj2 != null) obj2.playAnim(name, true);
+				else obj.anim.play(name, true);
+			}
+			return true;
+		});
+
+		Lua_helper.add_callback(lua, "addAnimationBySymbolIndices", function(tag:String, name:String, symbol:String, ?indices:Any = null, ?framerate:Float = 24, ?loop:Bool = false, ?matX:Float = 0, ?matY:Float = 0) {
+			var stateVars = getStateVars();
+			if(stateVars == null) return false;
+			var obj:FlxAnimate = cast stateVars.get(tag);
+			if(obj == null) return false;
+
+			if(indices == null)
+				indices = [0];
+			else if(Std.isOfType(indices, String))
+			{
+				var strIndices:Array<String> = cast (indices, String).trim().split(',');
+				var myIndices:Array<Int> = [];
+				for (i in 0...strIndices.length) myIndices.push(Std.parseInt(strIndices[i]));
+				indices = myIndices;
+			}
+
+			obj.anim.addBySymbolIndices(name, symbol, indices, framerate, loop, matX, matY);
+			if(obj.anim.curSymbol == null)
+			{
+				var obj2:ModchartAnimateSprite = cast (obj, ModchartAnimateSprite);
+				if(obj2 != null) obj2.playAnim(name, true);
+				else obj.anim.play(name, true);
+			}
+			return true;
+		});
+		#end
+
 
 		Lua_helper.add_callback(lua, "getProperty", function(variable:String, ?allowMaps:Bool = false) {
-			if (ClientPrefs.data.compatibility_mode) {
+			if (CompatEngine.compatMode()) {
 				if (replaceMap.exists(variable)) {
 					variable = replaceMap.get(variable);
 				}
@@ -1141,7 +1492,7 @@ class FunkinLua {
 			
 		});
 		Lua_helper.add_callback(lua, "setProperty", function(variable:String, value:Dynamic, allowMaps:Bool = false) {
-			if (ClientPrefs.data.compatibility_mode) {
+			if (CompatEngine.compatMode()) {
 				if (extraMap.exists(variable)) {
 					for (item in extraMap.get(variable)) {
 						var extraVal = (item.val != null) ? item.val : value;
@@ -1245,6 +1596,36 @@ class FunkinLua {
 				return;
 			}
 			Reflect.getProperty(getInstance(), obj).remove(Reflect.getProperty(getInstance(), obj)[index]);
+		});
+
+		// 1.0.4: addToGroup（把已创建的 Lua 对象塞进任意 Group/Array）
+		// 1.0.4-only: addToGroup — insert a created Lua object into any group/array
+		Lua_helper.add_callback(lua, "addToGroup", function(group:String, tag:String, ?index:Int = -1) {
+			var obj:Dynamic = getObjectDirectly(tag);
+			if(obj == null || obj.destroy == null)
+			{
+				luaTrace('addToGroup: Object ' + tag + ' is not valid!', false, false, FlxColor.RED);
+				return;
+			}
+
+			var groupOrArray:Dynamic = Reflect.getProperty(getInstance(), group);
+			if(groupOrArray == null)
+			{
+				luaTrace('addToGroup: Group/Array ' + group + ' is not valid!', false, false, FlxColor.RED);
+				return;
+			}
+
+			if(index < 0)
+			{
+				switch(Type.typeof(groupOrArray))
+				{
+					case TClass(Array): //Is Array
+						groupOrArray.push(obj);
+					default: //Is Group
+						groupOrArray.add(obj);
+				}
+			}
+			else groupOrArray.insert(index, obj);
 		});
 
 		Lua_helper.add_callback(lua, "callMethod", function(funcToRun:String, ?args:Array<Dynamic> = null) {
@@ -1464,6 +1845,63 @@ class FunkinLua {
 			} else {
 				luaTrace('doTweenColor: Couldnt find object: ' + vars, false, false, FlxColor.RED);
 			}
+		});
+
+		// 0.7.3+/1.0.4: startTween（带 options 表的高级 tween）
+		// startTween (0.7.3+) — advanced tween with an options table
+		Lua_helper.add_callback(lua, "startTween", function(tag:String, vars:String, values:Dynamic = null, duration:Float, ?options:Dynamic = null) {
+			var penisExam:Dynamic = tweenShit(tag, vars);
+			if(penisExam != null)
+			{
+				if(values != null)
+				{
+					var type:FlxTweenType = FlxTweenType.ONESHOT;
+					var ease:EaseFunction = FlxEase.linear;
+					var startDelay:Float = 0;
+					var loopDelay:Float = 0;
+					var onUpdate:String = null;
+					var onStart:String = null;
+					var onComplete:String = null;
+
+					if(options != null)
+					{
+						type = getTweenTypeByString(Reflect.field(options, 'type'));
+						ease = getFlxEaseByString(Reflect.field(options, 'ease'));
+						if(Reflect.field(options, 'startDelay') != null) startDelay = Reflect.field(options, 'startDelay');
+						if(Reflect.field(options, 'loopDelay') != null) loopDelay = Reflect.field(options, 'loopDelay');
+						if(Reflect.field(options, 'onUpdate') != null) onUpdate = Reflect.field(options, 'onUpdate');
+						if(Reflect.field(options, 'onStart') != null) onStart = Reflect.field(options, 'onStart');
+						if(Reflect.field(options, 'onComplete') != null) onComplete = Reflect.field(options, 'onComplete');
+					}
+
+					var stateVars = getStateVars();
+					var originalTag:String = 'tween_' + formatVariable(tag);
+					var myTween:FlxTween = FlxTween.tween(penisExam, values, duration, {
+						type: type,
+						ease: ease,
+						startDelay: startDelay,
+						loopDelay: loopDelay,
+						onUpdate: function(twn:FlxTween) {
+							if(onUpdate != null) callOnStateLuas(onUpdate, [originalTag, vars]);
+						},
+						onStart: function(twn:FlxTween) {
+							if(onStart != null) callOnStateLuas(onStart, [originalTag, vars]);
+						},
+						onComplete: function(twn:FlxTween) {
+							if(twn.type == FlxTweenType.ONESHOT || twn.type == FlxTweenType.BACKWARD)
+							{
+								if(stateVars != null) stateVars.remove(tag);
+							}
+							if(onComplete != null) callOnStateLuas(onComplete, [originalTag, vars]);
+						}
+					});
+					if(stateVars != null) stateVars.set(tag, myTween);
+					return tag;
+				}
+				else luaTrace('startTween: No values on 2nd argument!', false, false, FlxColor.RED);
+			}
+			else luaTrace('startTween: Couldnt find object: ' + vars, false, false, FlxColor.RED);
+			return null;
 		});
 
 		//Tween shit, but for strums
@@ -1699,14 +2137,24 @@ class FunkinLua {
 
 		Lua_helper.add_callback(lua, "keyboardJustPressed", function(name:String)
 		{
+			// 回放时: 录制中出现过的键以模拟状态为准 (还原 mod 自定义机制键)
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustPressed(name);
 			return Reflect.getProperty(FlxG.keys.justPressed, name);
 		});
 		Lua_helper.add_callback(lua, "keyboardPressed", function(name:String)
 		{
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyPressed(name);
 			return Reflect.getProperty(FlxG.keys.pressed, name);
 		});
 		Lua_helper.add_callback(lua, "keyboardReleased", function(name:String)
 		{
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustReleased(name);
 			return Reflect.getProperty(FlxG.keys.justReleased, name);
 		});
 
@@ -1771,6 +2219,9 @@ class FunkinLua {
 
 		Lua_helper.add_callback(lua, "keyJustPressed", function(name:String) {
 			if (PlayState.instance == null) return false;
+			// 回放时: 录制中出现过的键以模拟状态为准 (还原 mod 自定义机制键, 如空格闪避)
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustPressed(name);
 			var key:Bool = false;
 			switch(name) {
 				case 'left': key = PlayState.instance.getControl('NOTE_LEFT_P');
@@ -1787,6 +2238,8 @@ class FunkinLua {
 		});
 		Lua_helper.add_callback(lua, "keyPressed", function(name:String) {
 			if (PlayState.instance == null) return false;
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyPressed(name);
 			var key:Bool = false;
 			switch(name) {
 				case 'left': key = PlayState.instance.getControl('NOTE_LEFT');
@@ -1799,6 +2252,8 @@ class FunkinLua {
 		});
 		Lua_helper.add_callback(lua, "keyReleased", function(name:String) {
 			if (PlayState.instance == null) return false;
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustReleased(name);
 			var key:Bool = false;
 			switch(name) {
 				case 'left': key = PlayState.instance.getControl('NOTE_LEFT_R');
@@ -1876,6 +2331,26 @@ class FunkinLua {
 			else if (Std.isOfType(state, MusicBeatState)) cast(state, MusicBeatState).callOnHscript(funcName, args, ignoreStops, excludeScripts);
 			else if (Std.isOfType(state, MusicBeatSubstate)) cast(state, MusicBeatSubstate).callOnHscript(funcName, args, ignoreStops, excludeScripts);
 			return true;
+		});
+
+		// 0.7.3+/1.0.4: setVar / getVar / removeVar（操作 MusicBeatState.variables）
+		// setVar/getVar/removeVar (0.7.3+) — operate on MusicBeatState.variables
+		Lua_helper.add_callback(lua, "setVar", function(varName:String, value:Dynamic) {
+			var vars = getStateVars();
+			if (vars != null) vars.set(varName, value);
+			return value;
+		});
+		Lua_helper.add_callback(lua, "getVar", function(varName:String) {
+			var vars = getStateVars();
+			return (vars != null) ? vars.get(varName) : null;
+		});
+		Lua_helper.add_callback(lua, "removeVar", function(varName:String) {
+			var vars = getStateVars();
+			if (vars != null && vars.exists(varName)) {
+				vars.remove(varName);
+				return true;
+			}
+			return false;
 		});
 
 
@@ -1994,6 +2469,31 @@ class FunkinLua {
 			PlayState.instance.moveCamera(isDad);
 			return isDad;
 		});
+
+		// 1.0.4 相机滚动/跟随点函数（0.6.3/0.7.3 没有，属于 1.0.4 新增）
+		// 1.0.4-only camera scroll/follow-point functions
+		Lua_helper.add_callback(lua, "setCameraScroll", function(x:Float, y:Float) FlxG.camera.scroll.set(x - FlxG.width / 2, y - FlxG.height / 2));
+		Lua_helper.add_callback(lua, "setCameraFollowPoint", function(x:Float, y:Float) {
+			if (PlayState.instance != null && PlayState.instance.camFollow != null)
+				PlayState.instance.camFollow.set(x, y);
+		});
+		Lua_helper.add_callback(lua, "addCameraScroll", function(?x:Float = 0, ?y:Float = 0) FlxG.camera.scroll.add(x, y));
+		Lua_helper.add_callback(lua, "addCameraFollowPoint", function(?x:Float = 0, ?y:Float = 0) {
+			if (PlayState.instance != null && PlayState.instance.camFollow != null)
+			{
+				PlayState.instance.camFollow.x += x;
+				PlayState.instance.camFollow.y += y;
+			}
+		});
+		Lua_helper.add_callback(lua, "getCameraScrollX", function() return FlxG.camera.scroll.x + FlxG.width / 2);
+		Lua_helper.add_callback(lua, "getCameraScrollY", function() return FlxG.camera.scroll.y + FlxG.height / 2);
+		Lua_helper.add_callback(lua, "getCameraFollowX", function() {
+			return (PlayState.instance != null && PlayState.instance.camFollow != null) ? PlayState.instance.camFollow.x : 0;
+		});
+		Lua_helper.add_callback(lua, "getCameraFollowY", function() {
+			return (PlayState.instance != null && PlayState.instance.camFollow != null) ? PlayState.instance.camFollow.y : 0;
+		});
+
 		Lua_helper.add_callback(lua, "cameraShake", function(camera:String, intensity:Float, duration:Float) {
 			cameraFromString(camera).shake(intensity, duration);
 		});
@@ -2016,6 +2516,10 @@ class FunkinLua {
 		});
 		Lua_helper.add_callback(lua, "setRatingFC", function(value:String) {
 			PlayState.instance.ratingFC = value;
+		});
+		Lua_helper.add_callback(lua, "updateScoreText", function() {
+			if (PlayState.instance != null)
+				PlayState.instance.updateScore();
 		});
 		Lua_helper.add_callback(lua, "getMouseX", function(camera:String) {
 			var cam:FlxCamera = cameraFromString(camera);
@@ -2378,7 +2882,7 @@ class FunkinLua {
 			var right:FlxColor = Std.parseInt(rightHex);
 			if(!rightHex.startsWith('0x')) right = Std.parseInt('0xff' + rightHex);
 
-			if (ClientPrefs.data.compatibility_mode) {
+			if (CompatEngine.compatMode()) {
 				PlayState.instance.healthBar.setColors(left, right);
 			} else {
 				PlayState.instance.healthBar.createFilledBar(left, right);
@@ -2392,7 +2896,7 @@ class FunkinLua {
 			var right:FlxColor = Std.parseInt(rightHex);
 			if(!rightHex.startsWith('0x')) right = Std.parseInt('0xff' + rightHex);
 
-			if (ClientPrefs.data.compatibility_mode) {
+			if (CompatEngine.compatMode()) {
 				PlayState.instance.timeBar.setColors(left, right);
 			} else {
 				PlayState.instance.timeBar.createFilledBar(right, left);
@@ -2514,7 +3018,7 @@ class FunkinLua {
 			var toExclude:Array<Int> = [];
 			for (i in 0...excludeArray.length)
 			{
-				if (exclude == '' && ClientPrefs.data.compatibility_mode) break;
+				if (exclude == '' && CompatEngine.compatMode()) break;
 				toExclude.push(Std.parseInt(excludeArray[i].trim()));
 			}
 			return FlxG.random.int(min, max, toExclude);
@@ -2524,7 +3028,7 @@ class FunkinLua {
 			var toExclude:Array<Float> = [];
 			for (i in 0...excludeArray.length)
 			{
-				if (exclude == '' && ClientPrefs.data.compatibility_mode) break;
+				if (exclude == '' && CompatEngine.compatMode()) break;
 				toExclude.push(Std.parseFloat(excludeArray[i].trim()));
 			}
 			return FlxG.random.float(min, max, toExclude);
@@ -2760,6 +3264,23 @@ class FunkinLua {
 			luaTrace("setTextWidth: Object " + tag + " doesn't exist!", false, false, FlxColor.RED);
 			return false;
 		});
+		// 0.7.3+/1.0.4: setTextHeight
+		Lua_helper.add_callback(lua, "setTextHeight", function(tag:String, height:Float) {
+			var obj:FlxText = getTextObject(tag);
+			if(obj != null)
+			{
+				// 此 flixel 分支没有 fieldHeight；尽量设置底层 TextField 高度。
+				// English: this flixel fork has no fieldHeight — best-effort on the TextField height.
+				if (obj.textField != null)
+				{
+					obj.textField.autoSize = openfl.text.TextFieldAutoSize.NONE;
+					obj.textField.height = height;
+				}
+				return true;
+			}
+			luaTrace("setTextHeight: Object " + tag + " doesn't exist!", false, false, FlxColor.RED);
+			return false;
+		});
 		Lua_helper.add_callback(lua, "setTextBorder", function(tag:String, size:Float, color:String, ?style:String = 'outline') {
 			var obj:FlxText = getTextObject(tag);
 			if(obj != null)
@@ -2951,6 +3472,18 @@ class FunkinLua {
 				return;
 			}
 			luaTrace('setDataFromSave: Save file not initialized: ' + name, false, false, FlxColor.RED);
+		});
+
+		// 0.7.3+/1.0.4: eraseSaveData
+		Lua_helper.add_callback(lua, "eraseSaveData", function(name:String) {
+			var saves = getStateModchartSaves();
+			if(saves != null && saves.exists(name))
+			{
+				var save:FlxSave = saves.get(name);
+				if (save != null) save.erase();
+				return;
+			}
+			luaTrace('eraseSaveData: Save file not initialized: ' + name, false, false, FlxColor.RED);
 		});
 
 		Lua_helper.add_callback(lua, "checkFileExists", function(filename:String, ?absolute:Bool = false) {
@@ -3211,6 +3744,323 @@ class FunkinLua {
 		#end
 	}
 
+	#if LUA_ALLOWED
+	/**
+	 * 初始化 Lua require() 支持。
+	 * English: Initialize Lua require() support.
+	 *
+	 * 原理：在 package.loaders / package.searchers 最前面插入一个自定义 searcher。
+	 * How it works: installs a custom searcher at the front of
+	 * package.loaders / package.searchers.
+	 * 搜索根目录按优先级为：当前脚本所在目录 → 当前模组的 lua/ 与 scripts/ →
+	 * 全局模组的 lua/ 与 scripts/ → mods/lua/ 与 mods/scripts/ → assets 内置 lua/ 与 scripts/。
+	 * Search roots, in priority order: the requiring script's folder → the active
+	 * mod's lua/ & scripts/ → global mods' lua/ & scripts/ → mods/lua/ & mods/scripts/
+	 * → built-in assets lua/ & scripts/.
+	 * 模块名按 Lua 惯例把 "." 转成 "/" 再查找 `?.lua` 与 `?/init.lua`。
+	 * Module names follow Lua conventions: "." becomes "/", then `?.lua` and
+	 * `?/init.lua` are tried.
+	 * 模块 chunk 由 Haxe 侧用 FileSystem 读取并 loadbuffer 编译，缓存由标准
+	 * package.loaded 负责（require 同一个模块只执行一次）。
+	 * Chunks are read via FileSystem and compiled with loadbuffer on the Haxe side;
+	 * standard package.loaded caching means a module executes only once.
+	 */
+	function setupRequireSupport():Void {
+		if (lua == null) return;
+		try {
+			__requireUid++;
+			var uid:Int = __requireUid;
+			var resolveName:String = '__psychLuaRequireResolve_' + uid;
+			var chunksName:String = '__psychLuaRequireChunks_' + uid;
+			__requireResolveName = resolveName;
+			__requireChunksName = chunksName;
+
+			// 1) 收集模块搜索根目录（require 与 import 共用，只保留存在的目录）
+			//    English: collect module search roots (shared by require & import; keep existing dirs only)
+			var existing:Array<String> = collectLuaSearchRoots();
+			if (existing.length == 0) return;
+
+			// 2) 创建存放编译后模块 chunk 的 Lua 表
+			//    English: create the Lua table that stores compiled module chunks
+			Lua.createtable(lua, 0, 0);
+			Lua.setglobal(lua, chunksName);
+
+			// 3) 注册解析回调。名字按实例唯一，避免 Lua_helper 全局静态 map 串台。
+			//    English: register the resolver callback with a unique per-instance
+			//    name so instances never collide in Lua_helper's global static map.
+			Lua_helper.add_callback(lua, resolveName, function(modName:String):Dynamic
+			{
+				return resolveRequireModule(modName, existing, chunksName);
+			});
+
+			// 4) 安装 searcher：Lua 侧包装调用 Haxe 解析回调，再取出 chunk 返回给 require。
+			//    兼容 LuaJIT 5.1（package.loaders）与 Lua 5.2+（package.searchers）。
+			//    English: install the searcher — a Lua wrapper calls the Haxe resolver
+			//    and hands the chunk back to require. Supports LuaJIT 5.1
+			//    (package.loaders) and Lua 5.2+ (package.searchers).
+			var searcherCode:String =
+				'if package == nil then package = {} end;' +
+				'package.searchers = package.searchers or package.loaders;' +
+				'package.loaders = package.loaders or package.searchers;' +
+				'local l = package.loaders;' +
+				'if l ~= nil then ' +
+					'__psychLuaRequire' + uid + ' = function(modname) ' +
+						'local ref = ' + resolveName + '(modname); ' +
+						'if ref == nil then return nil end; ' +
+						'local loader = ' + chunksName + '[ref]; ' +
+						'if loader == nil then return nil end; ' +
+						'return loader; ' +
+					'end; ' +
+					'table.insert(l, 1, __psychLuaRequire' + uid + '); ' +
+				'end;';
+			var status:Int = LuaL.dostring(lua, searcherCode);
+			if (status != 0)
+			{
+				var err:String = Lua.tostring(lua, -1);
+				Lua.pop(lua, 1);
+				TraceManager.warn('trace.lua.requireSetupFailed', 'Failed to install require searcher: {}', [err]);
+				return;
+			}
+
+			// 5) 把搜索根追加进 package.path，作为标准 loader / loadfile 的兜底
+			//    English: append search roots to package.path as a fallback for
+			//    the standard loaders / loadfile.
+			var pathParts:Array<String> = [];
+			for (r in existing)
+			{
+				var norm:String = StringTools.replace(r, '\\', '/');
+				pathParts.push(norm + '/?.lua');
+				pathParts.push(norm + '/?/init.lua');
+			}
+			Lua.getglobal(lua, 'package');
+			if (Lua.type(lua, -1) == Lua.LUA_TTABLE)
+			{
+				Lua.getfield(lua, -1, 'path');
+				var oldPath:String = (Lua.type(lua, -1) == Lua.LUA_TSTRING) ? Lua.tostring(lua, -1) : '';
+				Lua.pop(lua, 1);
+				var newPath:String = pathParts.join(';');
+				if (oldPath != null && oldPath.length > 0) newPath += ';' + oldPath;
+				Lua.pushstring(lua, newPath);
+				Lua.setfield(lua, -2, 'path');
+			}
+			Lua.pop(lua, 1);
+
+			TraceManager.info('trace.lua.requireReady', 'require support ready for {} ({} roots)', [scriptName, existing.length]);
+		}
+		catch (e:Dynamic)
+		{
+			TraceManager.error('trace.lua.requireSetupError', 'Failed to setup require: {}', [e]);
+		}
+	}
+
+	/**
+	 * 解析 require 的模块名：在搜索根里找 `?.lua` / `?/init.lua`，
+	 * 找到后编译成 Lua chunk 存入 chunks 表，返回该 chunk 在表中的引用 key。
+	 * 找不到返回 null（require 会继续尝试后面的 searcher）。
+	 * English: Resolve a require module name — look for `?.lua` / `?/init.lua`
+	 * under the search roots, compile it into a Lua chunk stored in the chunks
+	 * table, and return the chunk's key. Returns null when not found (require
+	 * then falls through to the next searcher).
+	 */
+	function resolveRequireModule(modName:String, roots:Array<String>, chunksName:String):Dynamic {
+		if (modName == null || modName.length == 0) return null;
+		// 路径穿越保护：Lua 标准 require 也不允许 ".."，这里直接拦截
+		// English: path-traversal guard — standard require also rejects ".."
+		if (modName.indexOf('..') != -1)
+		{
+			luaTrace("require: module name '" + modName + "' contains '..' and was blocked", false, false, FlxColor.RED);
+			return null;
+		}
+		var relPath:String = StringTools.replace(modName, '.', '/');
+		for (root in roots)
+		{
+			for (candidate in [root + '/' + relPath + '.lua', root + '/' + relPath + '/init.lua'])
+			{
+				#if sys
+				if (!FileSystem.exists(candidate)) continue;
+				var content:String = File.getContent(candidate);
+				#else
+				if (!Assets.exists(candidate)) continue;
+				var content:String = Assets.getText(candidate);
+				#end
+				var status:Int = LuaL.loadbuffer(lua, content, haxe.io.Bytes.ofString(content).length, candidate);
+				if (status != 0)
+				{
+					var err:String = Lua.tostring(lua, -1);
+					Lua.pop(lua, 1);
+					luaTrace("require: failed to compile '" + modName + "': " + err, false, false, FlxColor.RED);
+					return null;
+				}
+				__requireChunkRef++;
+				var ref:Int = __requireChunkRef;
+				// [chunk] → [chunk, table, key, chunkcopy] → settable → [chunk, table] → pop → []
+				// English: stack flow — getglobal pushes the table, then key + chunk copy,
+				// settable stores it, then we pop the table & chunk back off.
+				Lua.getglobal(lua, chunksName);
+				Lua.pushnumber(lua, ref);
+				Lua.pushvalue(lua, -3);
+				Lua.settable(lua, -3);
+				Lua.pop(lua, 2);
+				return ref;
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * 收集 Lua 文件搜索根目录（require 与 import 共用）。
+	 * 按优先级：当前脚本所在目录 → 当前模组的 lua/ 与 scripts/ →
+	 * 全局模组的 lua/ 与 scripts/ → mods/lua/ 与 mods/scripts/ →
+	 * assets 内置 lua/ 与 scripts/。只保留真实存在的目录。
+	 * English: Collect Lua file search roots (shared by require & import).
+	 * Priority: requiring script's folder → active mod's lua/ & scripts/ →
+	 * global mods' lua/ & scripts/ → mods/lua/ & mods/scripts/ →
+	 * built-in assets lua/ & scripts/. Only existing directories are kept.
+	 */
+	function collectLuaSearchRoots():Array<String> {
+		var roots:Array<String> = [];
+		var scriptFolder:String = Path.directory(scriptName);
+		if (scriptFolder != null && scriptFolder.length > 0)
+			roots.push(scriptFolder);
+
+		#if MODS_ALLOWED
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+		{
+			roots.push(Paths.mods(Paths.currentModDirectory + '/lua/'));
+			roots.push(Paths.mods(Paths.currentModDirectory + '/scripts/'));
+		}
+		for (mod in Paths.getGlobalMods())
+		{
+			roots.push(Paths.mods(mod + '/lua/'));
+			roots.push(Paths.mods(mod + '/scripts/'));
+		}
+		roots.push(Paths.mods('lua/'));
+		roots.push(Paths.mods('scripts/'));
+		#end
+		roots.push(Paths.getPreloadPath('lua/'));
+		roots.push(Paths.getPreloadPath('scripts/'));
+
+		var existing:Array<String> = [];
+		for (r in roots)
+		{
+			if (r != null && r.length > 0 && !existing.contains(r) && FileSystem.exists(r))
+				existing.push(r);
+		}
+		return existing;
+	}
+
+	/**
+	 * 初始化 Lua import() 支持。
+	 * English: Initialize Lua import() support.
+	 *
+	 * import 语义 = include：加载目标文件并立即执行（每次调用都会重新执行，
+	 * 不会像 require 那样走 package.loaded 缓存），并返回文件的返回值
+	 * （Lua 多返回值也会原样保留）。路径解析规则：
+	 * - 绝对路径或带分隔符的路径（"lib/utils.lua"、"../shared/util.lua"）
+	 *   按文件路径解析，允许相对脚本目录的 "../"；
+	 * - 纯模块名（"lib.utils"）按 require 的规则补 ".lua" / "/init.lua"。
+	 * 搜索根与 require 相同（脚本目录 → 模组 lua/scripts → assets）。
+	 * English: import semantics = include — load the target file and run it
+	 * immediately (re-executed on every call, no package.loaded caching),
+	 * returning the file's return values (multiple returns are preserved).
+	 * Path rules:
+	 * - Absolute paths or paths with separators ("lib/utils.lua",
+	 *   "../shared/util.lua") are resolved as file paths; "../" relative to the
+	 *   script folder is allowed;
+	 * - Bare module names ("lib.utils") resolve like require, trying
+	 *   ".lua" then "/init.lua".
+	 * Search roots match require (script folder → mod lua/scripts → assets).
+	 */
+	function setupImportSupport():Void {
+		if (lua == null) return;
+		try {
+			__importUid++;
+			var uid:Int = __importUid;
+			var resolveName:String = '__psychLuaImportResolve_' + uid;
+			__importResolveName = resolveName;
+			var roots:Array<String> = collectLuaSearchRoots();
+			if (roots.length == 0) return;
+
+			// 解析回调按实例唯一命名，避免 Lua_helper 全局静态 map 串台
+			// English: unique per-instance resolver name avoids Lua_helper map collisions
+			Lua_helper.add_callback(lua, resolveName, function(path:String):Dynamic
+			{
+				return resolveImportFile(path, roots);
+			});
+
+			// import 是纯 Lua 包装：解析出完整路径后交给标准 dofile 加载执行。
+			// dofile 会返回 chunk 的全部返回值，错误也会正常向上抛出。
+			// English: import is a pure-Lua wrapper — resolve the full path, then
+			// let standard dofile load & run it. dofile returns all chunk return
+			// values and propagates errors normally.
+			var importCode:String =
+				'import = function(path) ' +
+					'local full = ' + resolveName + '(path); ' +
+					'if full == nil then ' +
+						"error('import: file not found: ' .. tostring(path)); " +
+					'end; ' +
+					'return dofile(full); ' +
+				'end;';
+			var status:Int = LuaL.dostring(lua, importCode);
+			if (status != 0)
+			{
+				var err:String = Lua.tostring(lua, -1);
+				Lua.pop(lua, 1);
+				TraceManager.warn('trace.lua.importSetupFailed', 'Failed to install import: {}', [err]);
+				return;
+			}
+			TraceManager.info('trace.lua.importReady', 'import support ready for {}', [scriptName]);
+		}
+		catch (e:Dynamic)
+		{
+			TraceManager.error('trace.lua.importSetupError', 'Failed to setup import: {}', [e]);
+		}
+	}
+
+	/**
+	 * 解析 import 的目标文件，返回完整路径；找不到返回 null。
+	 * English: Resolve an import target file to its full path; null when not found.
+	 */
+	function resolveImportFile(path:String, roots:Array<String>):String {
+		if (path == null || path.length == 0) return null;
+		#if sys
+		// 以 .lua 结尾 / 绝对路径 / 带分隔符的路径 → 按文件路径解析；
+		// 否则（如 "lib.utils"）按模块名补 ".lua" 与 "/init.lua"。
+		// English: paths ending in .lua, absolute paths, or paths with separators
+		// are resolved as files; otherwise ("lib.utils") treat as a module name
+		// and try ".lua" / "/init.lua".
+		var isPath:Bool = path.endsWith('.lua') || Path.isAbsolute(path) || path.indexOf('/') != -1 || path.indexOf('\\') != -1;
+		if (isPath)
+		{
+			var candidates:Array<String> = [path];
+			if (!path.endsWith('.lua'))
+				candidates.push(path + '.lua');
+			for (c in candidates)
+			{
+				if (FileSystem.exists(c)) return c;
+				for (root in roots)
+				{
+					var full:String = root + '/' + c;
+					if (FileSystem.exists(full)) return full;
+				}
+			}
+		}
+		else
+		{
+			var relPath:String = StringTools.replace(path, '.', '/');
+			for (root in roots)
+			{
+				for (candidate in [root + '/' + relPath + '.lua', root + '/' + relPath + '/init.lua'])
+				{
+					if (FileSystem.exists(candidate)) return candidate;
+				}
+			}
+		}
+		#end
+		return null;
+	}
+	#end
+
 	public static function isOfTypes(value:Any, types:Array<Dynamic>)
 	{
 		for (type in types)
@@ -3227,6 +4077,7 @@ class FunkinLua {
 		{
 			TraceManager.info('trace.lua.haxeInterpInit', 'initializing haxe interp for: {}', [scriptName]);
 			hscript = new HScript(); //TO DO: Fix issue with 2 scripts not being able to use the same variable names
+			hscript.parentLua = this; // 0.7.3+/1.0.4: parentLua 全局
 		}
 	}
 	#end
@@ -3855,6 +4706,25 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 		return FlxEase.linear;
 	}
 
+	// 0.7.3+/1.0.4 startTween 用：把 options.type 字符串转成 FlxTweenType
+	// Used by startTween (0.7.3+): converts the options.type string to FlxTweenType
+	function getTweenTypeByString(?type:String = ''):FlxTweenType {
+		switch(type.toLowerCase().trim())
+		{
+			case 'backward': return FlxTweenType.BACKWARD;
+			case 'looping' | 'loop': return FlxTweenType.LOOPING;
+			case 'persist': return FlxTweenType.PERSIST;
+			case 'pingpong': return FlxTweenType.PINGPONG;
+		}
+		return FlxTweenType.ONESHOT;
+	}
+
+	// startTween 的 tween_ 标签规范化（与 0.7.3/1.0.4 一致）
+	// startTween tag normalisation (matches 0.7.3/1.0.4)
+	function formatVariable(tag:String):String {
+		return tag.trim().replace(' ', '_').replace('.', '');
+	}
+
 	function blendModeFromString(blend:String):BlendMode {
 		switch(blend.toLowerCase().trim()) {
 			case 'add': return ADD;
@@ -3974,7 +4844,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 
 			if (type != Lua.LUA_TFUNCTION) {
 				if (type > Lua.LUA_TNIL) {
-					if (ClientPrefs.data.compatibility_mode) {
+					if (CompatEngine.compatMode()) {
 						// Old-style error message (PsychEngine 0.6.3 format)
 						luaTrace("ERROR (" + func + "): attempt to call a " + typeToString(type) + " value", false, false, FlxColor.RED);
 					} else {
@@ -3997,7 +4867,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			// Checks if it's not successful, then show a error.
 			if (status != Lua.LUA_OK) {
 				var error:String = getErrorMessage(status);
-				if (!ClientPrefs.data.compatibility_mode) {
+				if (!CompatEngine.compatMode()) {
 					// Old-style error message (PsychEngine 0.6.3 format)
 					luaTrace("ERROR (" + func + "): " + error, false, false, FlxColor.RED);
 				} else {
@@ -4019,7 +4889,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			return result;
 		}
 		catch (e:Dynamic) {
-			if (!ClientPrefs.data.compatibility_mode) {
+			if (!CompatEngine.compatMode()) {
 				trace(e);
 			} else {
 				TraceManager.error('trace.lua.callError', '{}', [e]);
@@ -4126,6 +4996,24 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			return;
 		}
 
+		// 清理 require 专用回调，避免 Lua_helper 全局静态 map 越积越多
+		// English: clean up the require-only callback so the global static map doesn't grow
+		if (__requireResolveName != null)
+		{
+			try { Lua_helper.remove_callback(lua, __requireResolveName); }
+			catch (e:Dynamic) {}
+			__requireResolveName = null;
+			__requireChunksName = null;
+		}
+
+		// 清理 import 专用回调（同上）。English: clean up the import-only callback (same reason).
+		if (__importResolveName != null)
+		{
+			try { Lua_helper.remove_callback(lua, __importResolveName); }
+			catch (e:Dynamic) {}
+			__importResolveName = null;
+		}
+
 		Lua.close(lua);
 		lua = null;
 		#end
@@ -4139,6 +5027,11 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 	}
 }
 
+/**
+ * 自定义子状态：内容由脚本的 onCustomSubstate* 事件驱动。
+ * English: Custom substate — its content is driven by the onCustomSubstate*
+ * script events (open via openCustomSubstate, close via closeCustomSubstate).
+ */
 class CustomSubstate extends MusicBeatSubstate
 {
 	public static var name:String = 'unnamed';
@@ -4147,6 +5040,10 @@ class CustomSubstate extends MusicBeatSubstate
 	override function create()
 	{
 		instance = this;
+		if (PlayState.instance != null) {
+			PlayState.instance.setOnLuas('customSubstate', this);
+			PlayState.instance.setOnHscript('customSubstate', this);
+		}
 
 		PlayState.instance.callOnScripts('onCustomSubstateCreate', [name]);
 		super.create();
@@ -4156,6 +5053,10 @@ class CustomSubstate extends MusicBeatSubstate
 	public function new(name:String)
 	{
 		CustomSubstate.name = name;
+		if (PlayState.instance != null) {
+			PlayState.instance.setOnLuas('customSubstateName', name);
+			PlayState.instance.setOnHscript('customSubstateName', name);
+		}
 		super();
 		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
 	}
@@ -4169,7 +5070,15 @@ class CustomSubstate extends MusicBeatSubstate
 
 	override function destroy()
 	{
-		PlayState.instance.callOnScripts('onCustomSubstateDestroy', [name]);
+		if (PlayState.instance != null) {
+			PlayState.instance.callOnScripts('onCustomSubstateDestroy', [name]);
+			PlayState.instance.setOnLuas('customSubstate', null);
+			PlayState.instance.setOnLuas('customSubstateName', 'unnamed');
+			PlayState.instance.setOnHscript('customSubstate', null);
+			PlayState.instance.setOnHscript('customSubstateName', 'unnamed');
+		}
+		instance = null;
+		name = 'unnamed';
 		super.destroy();
 	}
 }

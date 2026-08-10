@@ -225,7 +225,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		instructions.alpha = 0;
 		add(instructions);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_RIGHT, A_B);
 		addPadCamera();
 		#end

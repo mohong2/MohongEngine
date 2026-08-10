@@ -49,17 +49,28 @@ class FlxVideo extends FlxInternalVideo
 		{
 			var aspectRatio:Float = FlxG.width / FlxG.height;
 
+			var newWidth:Float;
+			var newHeight:Float;
+
 			if (FlxG.stage.stageWidth / FlxG.stage.stageHeight > aspectRatio)
 			{
 				// stage is wider than the video
-				width = FlxG.stage.stageHeight * aspectRatio;
-				height = FlxG.stage.stageHeight;
+				newWidth = FlxG.stage.stageHeight * aspectRatio;
+				newHeight = FlxG.stage.stageHeight;
 			}
 			else
 			{
 				// stage is taller than the video
-				width = FlxG.stage.stageWidth;
-				height = FlxG.stage.stageWidth * (1 / aspectRatio);
+				newWidth = FlxG.stage.stageWidth;
+				newHeight = FlxG.stage.stageWidth * (1 / aspectRatio);
+			}
+
+			// Perf: only assign when the size actually changed (assigning
+			// walks the display bounds in OpenFL).
+			if (newWidth != width || newHeight != height)
+			{
+				width = newWidth;
+				height = newHeight;
 			}
 		}
 	}

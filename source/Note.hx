@@ -2,6 +2,9 @@ package;
 
 import flixel.math.FlxRect;
 import editors.ChartingState;
+import openfl.utils.AssetType;
+import shaders.RGBPalette;
+import shaders.RGBPalette.RGBShaderReference;
 
 using StringTools;
 
@@ -129,6 +132,16 @@ class Note extends FlxSprite {
 
     /** 多k: 使用原版 ColorSwap (类型化才能触发 setter 写入 shader); Hurt/自定义纹理 Note 为 null。 */
     public var colorSwap:ColorSwap;
+
+    /** 0.7.3/1.0.4 兼容: 三色 Note 着色器引用 (懒挂载, 脚本修改才接管)。 */
+    public var rgbShader:RGBShaderReference = null;
+
+    /**
+     * 0.7.3/1.0.4 兼容: 每条轨道共享的全局色板。
+     * 键 = |noteData| + mania*64, 兼顾多k 与 SPACE→UP 基底映射。
+     */
+    public static var globalRgbShaders:Array<RGBPalette> = [];
+
     /** 多k: 是否应用轨道色着色器 (默认 true; Hurt Note / 脚本 setNoteTexture 自定义纹理时 false)。 */
     public var applyLaneColorShader:Bool = true;
     public var inEditor:Bool = false;
@@ -142,6 +155,28 @@ class Note extends FlxSprite {
     public var noteDensity:Float = 1;
     public static var swagWidth:Float = 160 * 0.7;
 
+    /**
+     * 默认 Note 皮肤路径, 由"旧版/新版 Note"设置决定 (独立于兼容模式):
+     * Old = 0.6.3 flat NOTE_assets (带 frameX/frameY, 定位代码按它校准);
+     * New = 0.7.3 noteSkins/NOTE_assets。
+     */
+    public static var defaultNoteSkin(get, never):String;
+    static function get_defaultNoteSkin():String
+    {
+        return (ClientPrefs.data.noteStyle == 'New') ? 'noteSkins/NOTE_assets' : 'NOTE_assets';
+    }
+
+    /** 0.7.3/1.0.4 兼容: 用户切换 Note 皮肤时追加的后缀 (Default 为空)。 */
+    public static function getNoteSkinPostfix():String
+    {
+        var skin:String = '';
+        if (ClientPrefs.data.noteSkin != ClientPrefs.defaultData.noteSkin)
+            skin = '-' + ClientPrefs.data.noteSkin.trim().toLowerCase().replace(' ', '_');
+        return skin;
+    }
+
+    // 0.6.3 兼容: colArray 必须是实例字段, 部分模组会通过 Lua getProperty/setProperty
+    // 直接读写 note.colArray, 改成 static 会让实例反射取到 null 导致模组崩溃。
     private var colArray:Array<String> = ['purple', 'blue', 'green', 'red'];
     private var pixelInt:Array<Int> = [0, 1, 2, 3];
 
@@ -335,6 +370,8 @@ class Note extends FlxSprite {
         var stepCrochet:Float = (genStepCrochet > 0) ? genStepCrochet : Conductor.stepCrochet;
         // Scale sustain height by mania (4K = 1.0, unchanged; high-K stays proportional to arrows).
         scale.y = (stepCrochet / 100) * 1.05 * newSongSpeed * multSpeed * Note.getManiaScale(mania);
+        // 皮肤自适应: 非默认帧高时按 (44/frameHeight) 归一化 (默认皮肤行为不变)
+        if(!PlayState.isPixelStage) scale.y *= (44.0 / frameHeight);
         if(PlayState.isPixelStage) {
             scale.y *= 1.19;
             scale.y *= (6 / frameHeight);
@@ -394,6 +431,40 @@ class Note extends FlxSprite {
         return new ColorSwap();
     }
 
+    /**
+     * 0.7.3/1.0.4 兼容: 获取某条轨道的共享 RGB 色板 (按 noteData+mania 缓存)。
+     * 多k: 轨道颜色用基底纹理色 (SPACE 轨道映射为 UP, 保证只用原版资源)。
+     */
+    public static function initializeGlobalRGBShader(noteData:Int, ?mania:Int):RGBPalette
+    {
+        var m:Int = EKData.clampMania(mania != null ? mania : PlayState.mania);
+        var lane:Int = Std.int(Math.abs(noteData));
+        var key:Int = lane + m * 64;
+        if (globalRgbShaders[key] == null)
+        {
+            var newRGB:RGBPalette = new RGBPalette();
+            globalRgbShaders[key] = newRGB;
+            // 0.7.3 多k 着色: 颜色槽按轨道字母映射 (A~I → 0~8, J~R 循环回 A~I),
+            // 与 EKData.getLaneColorSwap 的 flat 路径 (letterColorIndex) 完全一致。
+            // 不能用 noteData 线性取模: 5K/6K/7K/8K 等非 9 键布局里 E/F/G/H/I
+            // 的排位不同 (如 8K 第 5 轨是 F/left1, 取模会落到 SPACE 槽), 会错色。
+            var arrLen:Int = (ClientPrefs.data.arrowRGB != null) ? ClientPrefs.data.arrowRGB.length : 4;
+            if (arrLen < 1) arrLen = 4;
+            var colorIdx:Int = lane % arrLen;
+            var mapped:Null<Int> = EKData.letterColorIndex.get(EKData.getLetter(m, lane));
+            if (mapped != null && mapped >= 0 && mapped < arrLen)
+                colorIdx = mapped;
+            var arr:Array<FlxColor> = (!PlayState.isPixelStage) ? ClientPrefs.data.arrowRGB[colorIdx] : ClientPrefs.data.arrowRGBPixel[colorIdx];
+            if (arr != null && arr.length >= 3)
+            {
+                newRGB.r = arr[0];
+                newRGB.g = arr[1];
+                newRGB.b = arr[2];
+            }
+        }
+        return globalRgbShaders[key];
+    }
+
     public function new(?strumTime:Float = 0, ?noteData:Int = 0, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?skipTexture:Bool = false) {
         super();
         mania = PlayState.mania;
@@ -415,6 +486,12 @@ class Note extends FlxSprite {
             // 避免 reloadNote 创建的着色器被构造函数再次创建的新着色器覆盖而丢失颜色
             colorSwap = makeColorSwap();
             shader = colorSwap.shader;
+            // 0.7.3/1.0.4 兼容: 懒挂载的 RGB 引用, 默认回退到 colorSwap;
+            // 脚本修改 rgbShader.r/g/b/mult 时才克隆并接管精灵着色器。
+            rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(noteData));
+            rgbShader.fallbackShader = colorSwap.shader;
+            if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
+                rgbShader.forceDisabled = true;
             if(!skipTexture) texture = '';
             x += swagWidth * noteData;
             if(!skipTexture && !isSustainNote && noteData > -1) {
@@ -442,6 +519,9 @@ class Note extends FlxSprite {
                 isSustainEnd = false;
                 prevNote.animation.play(colArray[prevNote.baseTex()] + 'hold');
                 prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
+                // 皮肤自适应: 非默认帧高 (默认 hold piece 44px, 如 chip 114x77) 时
+                // 按 (44/frameHeight) 归一化, 让每段高度与 step 间距的衔接比例不变
+                if(!PlayState.isPixelStage) prevNote.scale.y *= (44.0 / prevNote.frameHeight);
                 if(PlayState.instance != null) prevNote.scale.y *= PlayState.instance.songSpeed;
                 if(PlayState.isPixelStage) {
                     prevNote.scale.y *= 1.19;
@@ -499,26 +579,54 @@ class Note extends FlxSprite {
         if(texture == null) texture = '';
         if(suffix == null) suffix = '';
 
-        var skin:String = texture;
-        if(texture.length < 1) {
-            skin = PlayState.SONG.arrowSkin;
-            if(skin == null || skin.length < 1) skin = 'NOTE_assets';
-        }
+          var skin:String = texture;
+          if(texture.length < 1) {
+              // 空安全: 选项菜单/编辑器里 PlayState.SONG 可能为 null
+              skin = (PlayState.SONG != null) ? PlayState.SONG.arrowSkin : null;
+              if(skin == null || skin.length < 1) skin = defaultNoteSkin;
+          }
 
         var animName:String = (animation.curAnim != null) ? animation.curAnim.name : null;
         var arraySkin:Array<String> = skin.split('/');
         arraySkin[arraySkin.length-1] = prefix + arraySkin[arraySkin.length-1] + suffix;
         var lastScaleY:Float = scale.y;
         var blahblah:String = arraySkin.join('/');
+
+        // 0.7.3+ 自由换皮肤: 用户选择的 noteSkin 追加到材质名末尾 (仅当文件存在时)。
+        // 优先直接匹配, 再尝试 noteSkins/ 目录, 保证只用原版资源也能切换。
+        var skinPostfix:String = Note.getNoteSkinPostfix();
+        if (skinPostfix.length > 0)
+        {
+            var direct:String = blahblah + skinPostfix;
+            if (Paths.fileExists('images/' + direct + '.png', IMAGE))
+                blahblah = direct;
+            else if (!blahblah.startsWith('noteSkins/'))
+            {
+                var prefixed:String = 'noteSkins/' + blahblah + skinPostfix;
+                if (Paths.fileExists('images/' + prefixed + '.png', IMAGE))
+                    blahblah = prefixed;
+            }
+        }
+        // 像素长条的材质名约定是 "基底+ENDS+皮肤后缀" (pixelUI/noteSkins/NOTE_assetsENDS-chip),
+        // 而不是 "基底+皮肤后缀+ENDS" (NOTE_assets-chipENDS)。引擎自带资源与导出包都按前者命名,
+        // 这里按正确顺序构造; 找不到时回退原拼接, 兼容旧资源/模组沿用后者命名的文件。
+        var pixelEndsSkin:String = blahblah + 'ENDS';
+        if (skinPostfix.length > 0 && blahblah.endsWith(skinPostfix))
+        {
+            var baseWithoutPostfix:String = blahblah.substr(0, blahblah.length - skinPostfix.length);
+            var corrected:String = baseWithoutPostfix + 'ENDS' + skinPostfix;
+            if (corrected != pixelEndsSkin && Paths.fileExists('images/pixelUI/' + corrected + '.png', IMAGE))
+                pixelEndsSkin = corrected;
+        }
         setAnimCacheKey(blahblah);
 
         if(PlayState.isPixelStage) {
             if(isSustainNote) {
-                loadGraphic(Paths.image('pixelUI/' + blahblah + 'ENDS'));
+                loadGraphic(Paths.image('pixelUI/' + pixelEndsSkin));
                 width = width / 4;
                 height = height / 2;
                 originalHeightForCalcs = height;
-                loadGraphic(Paths.image('pixelUI/' + blahblah + 'ENDS'), true, Math.floor(width), Math.floor(height));
+                loadGraphic(Paths.image('pixelUI/' + pixelEndsSkin), true, Math.floor(width), Math.floor(height));
             } else {
                 loadGraphic(Paths.image('pixelUI/' + blahblah));
                 width = width / 4;
@@ -552,8 +660,21 @@ class Note extends FlxSprite {
         if (texture.length > 0 && texture != 'NOTE_assets')
             applyLaneColorShader = false;
 
-        if (applyLaneColorShader)
+        // 0.7.3 材质兼容: noteSkins/* 是白底图集, 必须用 RGB 着色器 (rgbShader) 染色;
+        // 0.6.3 flat 图集自带箭头颜色, 继续用 ColorSwap (arrowHSV)。
+        var usesPsych073Skin:Bool = (blahblah != null && blahblah.startsWith('noteSkins/'));
+        if (usesPsych073Skin)
         {
+            // 保留 colorSwap 对象作为 rgbShader 的回退, 默认染色交给 RGB 色板 (arrowRGB)
+            if (rgbShader != null)
+            {
+                rgbShader.fallbackShader = (colorSwap != null) ? colorSwap.shader : null;
+                rgbShader.enabled = true;
+            }
+        }
+        else if (applyLaneColorShader)
+        {
+            if (rgbShader != null) rgbShader.enabled = false;
             // 需要染色时确保着色器存在 (含从 Hurt/自定义纹理恢复的情况)
             if (colorSwap == null && noteData > -1 && noteType != 'Hurt Note')
             {
@@ -563,11 +684,18 @@ class Note extends FlxSprite {
             if (colorSwap != null && noteData > -1)
                 applyLaneColor();
         }
-        else if (colorSwap != null)
+        else
         {
-            colorSwap = null;
-            shader = null;
+            if (rgbShader != null) rgbShader.enabled = false;
+            if (colorSwap != null)
+            {
+                colorSwap = null;
+                shader = null;
+            }
         }
+        // 非 0.7.3 材质时, rgbShader 的回退指向 colorSwap / 原始材质 (无着色器)
+        if (rgbShader != null && !usesPsych073Skin)
+            rgbShader.fallbackShader = (colorSwap != null) ? colorSwap.shader : null;
     }
 
     function loadNoteAnims() {
@@ -656,6 +784,16 @@ class Note extends FlxSprite {
             colorSwap = makeColorSwap();
             shader = colorSwap.shader;
         }
+        // 0.7.3/1.0.4 兼容: 重新绑定轨道色板 (池化复用/换 k 值后轨道色可能变化)。
+        // 先设 fallback 再 rebind, 保证 rebind 把 owner.shader 还原到 colorSwap。
+        rgbShader.fallbackShader = colorSwap != null ? colorSwap.shader : null;
+        rgbShader.forceDisabled = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+        // 多k: 用该 Note 自身的 mania 快照找色板 (谱面中途 Change Mania 时,
+        // PlayState.mania 是播放头当前 k, 可能与这条 Note 所属段的 k 不同)。
+        if (rgbShader == null)
+            rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(chartNoteData.noteData, mania));
+        else
+            rgbShader.rebind(initializeGlobalRGBShader(chartNoteData.noteData, mania));
         noteColorOverride = null;
         customCharAnim = null;
 
@@ -712,6 +850,8 @@ class Note extends FlxSprite {
                     var stepCrochet:Float = (genStepCrochet > 0) ? genStepCrochet : Conductor.stepCrochet;
                     var songSpeedVal:Float = PlayState.instance.songSpeed;
                     scale.y = (stepCrochet / 100) * 1.05 * songSpeedVal * multSpeed * Note.getManiaScale(mania);
+                    // 皮肤自适应: 非默认帧高时按 (44/frameHeight) 归一化 (默认皮肤行为不变)
+                    if(!PlayState.isPixelStage) scale.y *= (44.0 / frameHeight);
                     if(PlayState.isPixelStage) {
                         scale.y *= 1.19;
                         scale.y *= (6 / frameHeight);

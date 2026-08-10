@@ -219,7 +219,7 @@ class StoryMenuState extends SeiunMenuState
 			FlxTween.tween(char, {alpha: 1}, 0.35, {ease: FlxEase.sineOut});
 			FlxTween.tween(char.scale, {x: bx, y: by}, 0.5, {ease: FlxEase.backOut});
 		}
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
 		super.create();
@@ -265,7 +265,7 @@ class StoryMenuState extends SeiunMenuState
 	{
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 30, 0,
-			#if TOUCH_CONTROLS
+			#if (TOUCH_CONTROLS || desktop)
 			Language.get('Mod.hint.android', '[G] Switch Mod'),
 			#else
 			Language.get('Mod.hint', '[TAB] Switch Mod'),
@@ -412,7 +412,7 @@ class StoryMenuState extends SeiunMenuState
 		changeWeek();
 		changeDifficulty();
 		refreshModFilterUI();
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C_V_X_Y);
 		#end
@@ -441,7 +441,7 @@ class StoryMenuState extends SeiunMenuState
 		{
 			// === Mod folder switching: TAB (PC) / G button (Android) to open selection overlay ===
 			if (FlxG.keys.justPressed.TAB
-				#if TOUCH_CONTROLS || virtualPad.buttonEx.justPressed #end)
+				#if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonEx.justPressed) #end)
 			{
 				openModSelect();
 			}
@@ -491,12 +491,12 @@ class StoryMenuState extends SeiunMenuState
 			else if (upP || downP)
 				changeDifficulty();
 
-			if(#if TOUCH_CONTROLS virtualPad.buttonX.justPressed || #end FlxG.keys.justPressed.CONTROL)
+			if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonX.justPressed) || #end FlxG.keys.justPressed.CONTROL)
 			{
 				persistentUpdate = false;
 				openSubState(new GameplayChangersSubstate());
 			}
-			else if(#if TOUCH_CONTROLS virtualPad.buttonY.justPressed || #end controls.RESET)
+			else if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonY.justPressed) || #end controls.RESET)
 			{
 				persistentUpdate = false;
 				openSubState(new ResetScoreSubState('', curDifficulty, '', curWeek));

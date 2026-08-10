@@ -1,13 +1,14 @@
-package script.hscript;
+﻿package script.hscript;
 
 import backend.MusicBeatState;
 import backend.ModConfig;
+import backend.CompatEngine;
 import haxe.io.Path;
 import flixel.addons.display.FlxRuntimeShader;
-import crowplexus.hscript.*;
-import crowplexus.hscript.Expr.Error;
-import crowplexus.hscript.Parser;
-import crowplexus.iris.Iris;
+import hscript.*;
+import hscript.Expr.Error;
+import hscript.Parser;
+import hscript.iris.Iris;
 import flixel.FlxG;
 import flixel.util.FlxColor;
 import Paths;
@@ -15,6 +16,9 @@ import Conductor;
 import ClientPrefs;
 import Character;
 import Alphabet;
+import Note;
+import Achievements;
+import Controls;
 import states.*;
 import substates.*;
 import flixel.FlxSprite;
@@ -67,9 +71,18 @@ class HScript
 	public var scriptName:String = '';
 	public var scriptDir:String = '';
 	public var closed:Bool = false;
+	#if LUA_ALLOWED
+	/** 所属的 Lua 脚本实例（0.7.3+/1.0.4 HScript 的 parentLua 全局）。 */
+	/** English: owning Lua script instance (the parentLua global of 0.7.3+/1.0.4 HScript). */
+	public var parentLua:script.lua.FunkinLua = null;
+	#end
 
 	/** 连续报错计数：脚本在 update 循环里连续报错达到上限时会被静默忽略。 */
 	public var errorLoopCount:Int = 0;
+
+	/** 函数覆盖备份表：原名 → 原函数，供 restoreFunction() 恢复。
+	 * English: Function-override backups: name → original function, used by restoreFunction(). */
+	var functionBackups:Map<String, Dynamic> = new Map<String, Dynamic>();
 
 	public var variables(get, never):Map<String, Dynamic>;
 	public var __importedPaths:Array<String> = [];
@@ -80,7 +93,9 @@ class HScript
 	// ==================== Static Methods ====================
 
 	public static function initialize():Void {
-		Config.applyBlocklist();
+		// NOTE: fully qualified — the `hscript.*` wildcard import
+		// would otherwise shadow our own script.hscript.Config
+		script.hscript.Config.applyBlocklist();
 		loadGlobalScripts();
 		TraceManager.info('trace.hscript.initialized', 'HScript initialized with {} global scripts', [globalScripts.length]);
 
@@ -275,10 +290,16 @@ class HScript
 
 	public function new(?scriptPath:String = null) {
 		interp = new PlayStateInterp();
+		// ── 静态/公开变量 + 错误与导入回调 (hscript-seiun) ──
+		interp.allowStaticVariables = true;
+		interp.allowPublicVariables = true;
+		interp.errorHandler = function(e) TraceManager.error('trace.hscript.interpError', 'HScript error in ${scriptName}: $e');
+		interp.importFailedCallback = importFailedCallback;
 		parser = new Parser();
 		parser.allowTypes = true;
 		parser.allowJSON = true;
 		parser.allowMetadata = true;
+		applyDefaultPreprocessors(parser);
 
 		if (scriptPath != null) {
 			scriptDir = Path.directory(scriptPath);
@@ -326,6 +347,7 @@ class HScript
 			"Sys" => Sys, "Type" => Type, "Reflect" => Reflect,
 			"Date" => Date, "DateTools" => DateTools, "Lambda" => Lambda,
 			"EReg" => EReg, "Xml" => Xml, "Json" => haxe.Json,
+			"String" => String, "Array" => Array,
 
 			// Flixel
 			"FlxG" => flixel.FlxG, "FlxMath" => flixel.math.FlxMath,
@@ -342,6 +364,14 @@ class HScript
 			"Dialog" => backend.Dialog,
 			"SeiunOverlay" => backend.SeiunOverlay,
 			"Character" => Character, "Alphabet" => Alphabet,
+			"Note" => Note,
+			"Achievements" => Achievements,
+			"PsychCamera" => backend.PsychCamera,
+			"Countdown" => backend.Countdown,
+			"CustomSubstate" => script.lua.CustomSubstate,
+			#if flxanimate
+			"FlxAnimate" => flxanimate.FlxAnimate,
+			#end
 			"FunkinText" => FunkinText,
 			"FunkinSprite" => FunkinSprite,
 			"FunkinButton" => FunkinButton,
@@ -397,7 +427,7 @@ class HScript
 		vars.set("buildTarget", "unknown");
 		#end
 
-		// Additional commonly‑needed types (from Codename reference)
+		// Additional commonly‑needed engine-compat type bindings
 		vars.set("FlxObject", flixel.FlxObject);
 		vars.set("FlxBasic", flixel.FlxBasic);
 		vars.set("FlxAxes", flixel.util.FlxAxes);
@@ -631,6 +661,61 @@ class HScript
 		return vars;
 	}
 
+	/**
+	 * Default preprocessor values available inside scripts.
+	 * Presence in the map means "defined" (matching Haxe `#if` semantics),
+	 * so `#if android`, `#if !ios`, `#if desktop && !web` etc. all work.
+	 * Platform keys follow Haxe/OpenFL target names; engine keys are provided
+	 * for mods that want to branch on the engine itself.
+	 */
+	public static function getDefaultPreprocessors():Map<String, Dynamic> {
+		var defs:Map<String, Dynamic> = [
+			"engine" => "SeiunEngine",
+			"engineName" => "Seiun Engine",
+			"hscript" => hscriptVersion,
+		];
+
+		#if android
+		defs.set("android", true);
+		#elseif ios
+		defs.set("ios", true);
+		#elseif mac
+		defs.set("mac", true);
+		#elseif linux
+		defs.set("linux", true);
+		#elseif windows
+		defs.set("windows", true);
+		#end
+
+		#if web
+		defs.set("web", true);
+		defs.set("html5", true);
+		#end
+
+		#if desktop
+		defs.set("desktop", true);
+		#end
+
+		#if mobile
+		defs.set("mobile", true);
+		#end
+
+		#if switch
+		defs.set("switch", true);
+		#end
+
+		#if sys
+		defs.set("sys", true);
+		#end
+
+		return defs;
+	}
+
+	static function applyDefaultPreprocessors(parser:Parser):Void {
+		for (k => v in getDefaultPreprocessors())
+			parser.preprocessorValues.set(k, v);
+	}
+
 	function setupVariables():Void {
 		// ── Default bindings ──
 		try {
@@ -644,6 +729,50 @@ class HScript
 
 		// Self reference
 		set('this', this);
+
+		// 0.7.3+/1.0.4 兼容全局（HScript 侧）
+		// English: 0.7.3+/1.0.4-compatible globals (HScript side)
+		#if LUA_ALLOWED
+		set('parentLua', parentLua);
+		#else
+		set('parentLua', null);
+		#end
+		set('controls', Controls.instance);
+
+		set('setVar', function(name:String, value:Dynamic) {
+			if (PlayState.instance != null) PlayState.instance.variables.set(name, value);
+			return value;
+		});
+		set('getVar', function(name:String) {
+			if (PlayState.instance != null && PlayState.instance.variables.exists(name))
+				return PlayState.instance.variables.get(name);
+			return null;
+		});
+		set('removeVar', function(name:String) {
+			if (PlayState.instance != null && PlayState.instance.variables.exists(name))
+			{
+				PlayState.instance.variables.remove(name);
+				return true;
+			}
+			return false;
+		});
+
+		// 自定义回调注册（0.7.3+/1.0.4 的 createCallback / createGlobalCallback）
+		// English: custom callback registration (0.7.3+/1.0.4 createCallback / createGlobalCallback)
+		#if LUA_ALLOWED
+		set('createGlobalCallback', function(name:String, func:Dynamic) {
+			if (PlayState.instance != null)
+			{
+				for (script in PlayState.instance.luaArray)
+					if (script != null && script.lua != null && !script.closed)
+						Lua_helper.add_callback(script.lua, name, func);
+			}
+		});
+		set('createCallback', function(name:String, func:Dynamic, ?funk:script.lua.FunkinLua = null) {
+			if (funk == null) funk = parentLua;
+			if (funk != null) funk.addLocalCallback(name, func);
+		});
+		#end
 
 		// Pre-register the hxCodec-compatible video classes so LUA addHaxeLibrary/runHaxeCode works.
 		// Use direct compiled references (not Type.resolveClass) to guarantee the class is available.
@@ -725,9 +854,52 @@ class HScript
 		} catch (e:Dynamic) { handleError('setupVariables → Lua: $e'); return; }
 		#end
 
+		// ── 函数管理：覆盖 / 重命名 / 恢复已设定函数（引擎预设回调也适用）
+		// ── Function management: override / rename / restore already-set functions
+		//    (engine-preset callbacks included)
+		set('overrideFunction', function(name:String, fn:Dynamic, ?syncToLua:Bool = false):Bool
+			return overrideFunction(name, fn, syncToLua));
+		set('renameFunction', function(name:String, newName:String, ?removeOld:Bool = false):Bool
+			return renameFunction(name, newName, removeOld));
+		set('restoreFunction', function(name:String):Bool
+			return restoreFunction(name));
+		set('getFunction', function(name:String):Dynamic
+			return get(name));
+		set('functionNames', function():Array<String> {
+			var result:Array<String> = [];
+			if (interp != null && interp.variables != null)
+				for (k in interp.variables.keys()) result.push(k);
+			return result;
+		});
+
+		#if LUA_ALLOWED
+		// ── Lua 桥接（hscript → lua）── Lua bridge (hscript → lua)
+		set('callLuaFunction', function(name:String, ?args:Array<Dynamic> = null):Dynamic
+			return LuaApi.callLuaFunction(name, args));
+		set('setLuaVariable', function(name:String, value:Dynamic):Bool
+			return LuaApi.setLuaVariable(name, value));
+		set('getLuaVariable', function(name:String):Dynamic
+			return LuaApi.getLuaVariable(name));
+		set('renameLuaFunction', function(oldName:String, newName:String, ?removeOld:Bool = false):Bool
+			return LuaApi.renameLuaFunction(oldName, newName, removeOld));
+		set('addLuaFunction', function(name:String, fn:Dynamic, ?overrideExisting:Bool = false):Bool
+			return LuaApi.addLuaFunction(name, fn, overrideExisting));
+		set('overrideLuaFunction', function(name:String, wrapper:Dynamic):Bool
+			return LuaApi.overrideLuaFunction(name, wrapper));
+		set('restoreLuaFunction', function(name:String):Bool
+			return LuaApi.restoreLuaFunction(name));
+		set('removeLuaFunction', function(name:String):Bool
+			return LuaApi.removeLuaFunction(name));
+		set('luaFunctionExists', function(name:String):Bool
+			return LuaApi.luaFunctionExists(name));
+		#end
+
 		// Input
 		set('keyJustPressed', function(name:String) {
 			if (PlayState.instance == null) return false;
+			// 回放时: 录制中出现过的键以模拟状态为准 (还原 mod 自定义机制键, 如空格闪避)
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustPressed(name);
 			return switch(name) {
 				case 'left': PlayState.instance.getControl('NOTE_LEFT_P');
 				case 'down': PlayState.instance.getControl('NOTE_DOWN_P');
@@ -743,6 +915,8 @@ class HScript
 		});
 		set('keyPressed', function(name:String) {
 			if (PlayState.instance == null) return false;
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyPressed(name);
 			return switch(name) {
 				case 'left': PlayState.instance.getControl('NOTE_LEFT');
 				case 'down': PlayState.instance.getControl('NOTE_DOWN');
@@ -754,6 +928,8 @@ class HScript
 		});
 		set('keyReleased', function(name:String) {
 			if (PlayState.instance == null) return false;
+			if (PlayState.replayMode && PlayState.instance.replayExam != null && PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustReleased(name);
 			return switch(name) {
 				case 'left': PlayState.instance.getControl('NOTE_LEFT_R');
 				case 'down': PlayState.instance.getControl('NOTE_DOWN_R');
@@ -764,9 +940,24 @@ class HScript
 			}
 		});
 
-		set('keyboardJustPressed', function(name:String) return Reflect.getProperty(FlxG.keys.justPressed, name));
-		set('keyboardPressed', function(name:String) return Reflect.getProperty(FlxG.keys.pressed, name));
-		set('keyboardReleased', function(name:String) return Reflect.getProperty(FlxG.keys.justReleased, name));
+		set('keyboardJustPressed', function(name:String) {
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustPressed(name);
+			return Reflect.getProperty(FlxG.keys.justPressed, name);
+		});
+		set('keyboardPressed', function(name:String) {
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyPressed(name);
+			return Reflect.getProperty(FlxG.keys.pressed, name);
+		});
+		set('keyboardReleased', function(name:String) {
+			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
+				&& PlayState.instance.replayExam.keyExists(name))
+				return PlayState.instance.replayExam.keyJustReleased(name);
+			return Reflect.getProperty(FlxG.keys.justReleased, name);
+		});
 		set('anyGamepadJustPressed', function(name:String) return FlxG.gamepads.anyJustPressed(name));
 		set('anyGamepadPressed', function(name:String) return FlxG.gamepads.anyPressed(name));
 		set('anyGamepadReleased', function(name:String) return FlxG.gamepads.anyJustReleased(name));
@@ -826,7 +1017,8 @@ class HScript
 		set('songPath', Paths.formatToSongPath(PlayState.SONG.song));
 		set('startedCountdown', false);
 		set('curStage', PlayState.SONG.stage);
-		set('compatibility_mode', ClientPrefs.data.compatibility_mode);
+		set('compatibility_mode', CompatEngine.compatMode());
+		set('compatEngine', CompatEngine.current());
 		set('isStoryMode', PlayState.isStoryMode);
 		set('difficulty', PlayState.storyDifficulty);
 
@@ -888,13 +1080,11 @@ class HScript
 	public function call(func:String, args:Array<Dynamic>):Dynamic {
 		if (closed) return FunkinLua.Function_StopHScript;
 		try {
-			if (interp.variables.exists(func)) {
-				var f = interp.variables.get(func);
-				if (Reflect.isFunction(f)) {
-					// Successful call resets the consecutive-error counter.
-					errorLoopCount = 0;
-					return Reflect.callMethod(null, f, args);
-				}
+			var f:Dynamic = interpGet(func);
+			if (f != null && Reflect.isFunction(f)) {
+				// Successful call resets the consecutive-error counter.
+				errorLoopCount = 0;
+				return Reflect.callMethod(null, f, args);
 			}
 			return FunkinLua.Function_Continue;
 		} catch (e:Dynamic) {
@@ -911,19 +1101,155 @@ class HScript
 
 	public function get(variable:String):Dynamic {
 		if (closed) return null;
-		try { return interp.variables.get(variable); }
+		try { return interpGet(variable); }
 		catch (e:Dynamic) { handleError('Failed to get "$variable": $e'); return null; }
 	}
 
 	public function exists(variable:String):Bool {
 		if (closed) return false;
-		try { return interp.variables.exists(variable); }
+		try { return interpGet(variable) != null; }
 		catch (e:Dynamic) { return false; }
 	}
 
 	/**
+	 * Look a variable up across all three variable tables
+	 * (variables / publicVariables / staticVariables), hscript-seiun style.
+	 */
+	function interpGet(variable:String):Dynamic {
+		if (interp == null) return null;
+		if (interp.variables.exists(variable)) return interp.variables.get(variable);
+		if (interp.publicVariables != null && interp.publicVariables.exists(variable)) return interp.publicVariables.get(variable);
+		if (interp.staticVariables != null && interp.staticVariables.exists(variable)) return interp.staticVariables.get(variable);
+		return null;
+	}
+
+	/**
+	 * Script-module import callback: when a script does `import ai.Enemy` and
+	 * the module isn't a compiled Haxe class, try to load it from the
+	 * hscripts folder (ai/Enemy.hx / .hscript / .hsc / .hxs).
+	 */
+	function importFailedCallback(cl:Array<String>):Bool {
+		var relative = cl.join("/");
+		var candidates:Array<String> = [];
+		#if MODS_ALLOWED
+		candidates.push(Paths.mods('hscripts/$relative'));
+		if (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			candidates.push(Paths.mods(Paths.currentModDirectory + '/hscripts/$relative'));
+		for (mod in Paths.getGlobalMods())
+			candidates.push(Paths.mods(mod + '/hscripts/$relative'));
+		#end
+		candidates.push(Paths.getPreloadPath('hscripts/$relative'));
+
+		for (base in candidates) {
+			for (hxExt in ["hx", "hscript", "hsc", "hxs"]) {
+				var p = '$base.$hxExt';
+				if (__importedPaths.contains(p)) return true;
+				if (FileSystem.exists(p)) {
+					var code = File.getContent(p);
+					var expr = null;
+					try {
+						if (code != null && code.trim() != "") {
+							@:privateAccess parser.line = 1;
+							expr = parser.parseString(code, cl.join(".") + "." + hxExt);
+						}
+					} catch (e:Dynamic) {
+						handleError('Failed to import $p: $e');
+					}
+					if (expr != null) {
+						interp.exprReturn(expr);
+						__importedPaths.push(p);
+					}
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	// ==================== Function Management ====================
+
+	/**
+	 * 覆盖一个已设定函数（引擎预设回调如 keyJustPressed / getProperty 也适用）。
+	 * 原函数会被备份，之后可用 restoreFunction() 恢复。
+	 * English: Override an already-set function (engine-preset callbacks such as
+	 * keyJustPressed / getProperty included). The original is backed up and can
+	 * be restored later with restoreFunction().
+	 *
+	 * @param name 函数名（变量名）
+	 * @param fn 新函数
+	 * @param syncToLua true 时同时覆盖到所有活跃 Lua 实例（需要 LUA_ALLOWED）
+	 * @return Bool 是否成功
+	 */
+	public function overrideFunction(name:String, fn:Dynamic, ?syncToLua:Bool = false):Bool {
+		if (closed || name == null || name.length == 0) return false;
+		if (fn == null || !Reflect.isFunction(fn)) return false;
+		try {
+			if (!functionBackups.exists(name)) {
+				var old:Dynamic = interp.variables.get(name);
+				if (old != null) functionBackups.set(name, old);
+			}
+			interp.variables.set(name, fn);
+			#if LUA_ALLOWED
+			if (syncToLua && LuaApi.addLuaFunction(name, fn, true)) {
+				TraceManager.info('trace.hscript.overrideSynced', 'HScript: "{}" override synced to Lua', [name]);
+			}
+			#end
+			return true;
+		} catch (e:Dynamic) {
+			handleError('overrideFunction("$name"): $e');
+			return false;
+		}
+	}
+
+	/**
+	 * 重命名一个已设定函数：把 name 指向的函数绑定到新名字上。
+	 * English: Rename an already-set function — bind the function pointed to by
+	 * `name` to a new name.
+	 *
+	 * @param name 原函数名
+	 * @param newName 新函数名
+	 * @param removeOld true 时移除旧名字（旧名字指向同一函数的别名会丢失）
+	 * @return Bool 是否成功
+	 */
+	public function renameFunction(name:String, newName:String, ?removeOld:Bool = false):Bool {
+		if (closed || name == null || newName == null || name.length == 0 || newName.length == 0) return false;
+		if (name == newName) return true;
+		try {
+			if (!interp.variables.exists(name)) return false;
+			if (!functionBackups.exists(name))
+				functionBackups.set(name, interp.variables.get(name));
+			interp.variables.set(newName, interp.variables.get(name));
+			if (removeOld) interp.variables.remove(name);
+			return true;
+		} catch (e:Dynamic) {
+			handleError('renameFunction("$name" → "$newName"): $e');
+			return false;
+		}
+	}
+
+	/**
+	 * 恢复被 overrideFunction / renameFunction 覆盖的函数。
+	 * English: Restore a function that was overridden via
+	 * overrideFunction / renameFunction.
+	 *
+	 * @param name 函数名
+	 * @return Bool 是否有备份并恢复成功
+	 */
+	public function restoreFunction(name:String):Bool {
+		if (closed || !functionBackups.exists(name)) return false;
+		try {
+			interp.variables.set(name, functionBackups.get(name));
+			functionBackups.remove(name);
+			return true;
+		} catch (e:Dynamic) {
+			handleError('restoreFunction("$name"): $e');
+			return false;
+		}
+	}
+
+	/**
 	 * Reload the script from disk, preserving non‑function variables.
-	 * (Codename Engine style – useful during development.)
+	 * (keeps non-function variables – useful during development.)
 	 */
 	public function reload():Void {
 		if (closed || scriptName == '<inline>') return;
@@ -1030,7 +1356,7 @@ class CustomFlxColor {
  * 尝试从 PlayState.instance 动态解析。解决了 HScript 加载时
  * boyfriend/dad/gf 等尚未创建导致绑定为 null 的问题。
  */
-class PlayStateInterp extends crowplexus.hscript.Interp
+class PlayStateInterp extends hscript.Interp
 {
 	private var _instanceFields:Array<String> = [];
 
@@ -1071,6 +1397,11 @@ class PlayStateInterp extends crowplexus.hscript.Interp
 			var v = imports.get(id);
 			return v;
 		}
+
+		// 3.5) 脚本类 / 静态 / 公开变量 (hscript-seiun)
+		if (customClasses.exists(id)) return customClasses.get(id);
+		if (staticVariables.exists(id)) return staticVariables.get(id);
+		if (publicVariables.exists(id)) return publicVariables.get(id);
 
 		// 4) 动态从 PlayState.instance 解析
 		if (PlayState.instance != null && _instanceFields.contains(id))

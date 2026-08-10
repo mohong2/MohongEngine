@@ -32,6 +32,8 @@ import ClientPrefs;
 import Character;
 import CheckboxThingie;
 import Main;
+import Note;
+import StrumNote;
 import StageData;
 import states.PlayState;
 import states.LoadingState;
@@ -90,7 +92,7 @@ class OptionsState extends MusicBeatState
 	var visibleBottom:Float = 720;
 	var catSelectorLeft:FlxText;
 	var catSelectorRight:FlxText;
-	#if TOUCH_CONTROLS
+	#if (TOUCH_CONTROLS || desktop)
 	var catTipText:FlxText;
 	#end
 	var setGrpOptions:FlxTypedGroup<FlxTextMenuItem>;
@@ -103,6 +105,13 @@ class OptionsState extends MusicBeatState
 	var setDescBox:FlxSprite;
 	var setDescText:FlxText;
 	var setTitleText:FlxTextMenuItem;
+
+	/** 0.7.3+ Note 皮肤预览 (设置页顶部的四个 StrumNote)。 */
+	var settingsNotes:FlxTypedGroup<StrumNote> = null;
+	/** 预览滑入/滑出动画 (0.7.3 同款)。 */
+	var settingsNotesTween:Array<FlxTween> = [];
+	/** noteSkin 选项在设置列表里的行号 (-1 = 本页没有)。 */
+	var settingsNoteSkinID:Int = -1;
 
 	var currentMode:Int = MODE_CATEGORY;
 	var currentSettingsPage:String = '';
@@ -142,7 +151,7 @@ class OptionsState extends MusicBeatState
 
 		ClientPrefs.saveSettings();
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 
@@ -232,7 +241,7 @@ class OptionsState extends MusicBeatState
 		add(catSelectorRight);
 		categorySprites.push(catSelectorRight);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		catTipText = new FlxText(10, FlxG.height - 24, 0,
 			Language.get("option.tipText", "Press C to customize your mobile controls"), 16);
 		catTipText.setFormat(Paths.optionsfont(), 16, FlxColor.WHITE, LEFT,
@@ -337,14 +346,14 @@ class OptionsState extends MusicBeatState
 						catSelectorRight.x = item.x + item.width + 15;
 						catSelectorRight.y = item.y;
 					}
-					if (FlxG.mouse.justPressed)
+					if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 						openSelectedCategory(optionIds[curSelected]);
 					break;
 				}
 			}
 		}
 		#else
-		if (FlxG.mouse.justPressed || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].justReleased))
+		if ((FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton())) || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].justReleased))
 		{
 			for (i in 0...catGrpOptions.length)
 			{
@@ -395,8 +404,8 @@ class OptionsState extends MusicBeatState
 			});
 		}
 
-		#if TOUCH_CONTROLS
-		if (virtualPad.buttonC.justPressed)
+		#if (TOUCH_CONTROLS || desktop)
+		if (virtualPad != null && virtualPad.buttonC.justPressed)
 		{
 			persistentUpdate = false;
 			openSubState(new android.AndroidControlsSubState());
@@ -417,7 +426,7 @@ class OptionsState extends MusicBeatState
 
 	function openSelectedCategory(id:String)
 	{
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		#end
 
@@ -447,6 +456,16 @@ class OptionsState extends MusicBeatState
 				if (foundCat.substateClass == null)
 				{
 					fallbackOpenCategory(id);
+					return;
+				}
+
+				// 触屏控制: 桌面端也直接打开安卓控件子状态 (同时强制编译该类)
+				if (foundCat.id == 'touch_controls')
+				{
+					transitioning = true;
+					playExitAnimation(function() {
+						openSubState(new android.AndroidControlsSubState());
+					});
 					return;
 				}
 
@@ -536,6 +555,7 @@ class OptionsState extends MusicBeatState
 			switch (id)
 			{
 				case 'notecolor': openSubState(new options.NotesSubState());
+				case 'notecolor_rgb': openSubState(new options.NotesSubStateNew());
 				case 'controls':  openSubState(new options.ControlsSubState());
 				case 'backup':    openSubState(new options.BackupSettingsSubState());
 			}
@@ -638,8 +658,9 @@ class OptionsState extends MusicBeatState
 
 		changeSettingsSelection(0);
 		settingsReloadCheckboxes();
+		settingsSetupNotePreview(optionsArray);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C);
 		addPadCamera();
 		#end
@@ -662,6 +683,76 @@ class OptionsState extends MusicBeatState
 		if (setGrpTexts != null) { remove(setGrpTexts); setGrpTexts.destroy(); setGrpTexts = null; }
 		if (setCheckboxGroup != null) { remove(setCheckboxGroup); setCheckboxGroup.destroy(); setCheckboxGroup = null; }
 		if (setBoyfriend != null) { remove(setBoyfriend); setBoyfriend.destroy(); setBoyfriend = null; }
+		if (settingsNotes != null) { remove(settingsNotes); settingsNotes.destroy(); settingsNotes = null; }
+		for (t in settingsNotesTween) if (t != null) t.cancel();
+		settingsNotesTween = [];
+		settingsNoteSkinID = -1;
+	}
+
+	/**
+	 * 0.7.3+ Note 皮肤预览: 设置页存在 noteSkin 选项时, 顶部显示四个 StrumNote,
+	 * 切换皮肤时实时刷新 (与 0.6.3/0.7.3 VisualsUI 的行为一致)。
+	 */
+	function settingsSetupNotePreview(optionsArray:Array<Option>)
+	{
+		if (settingsNotes != null) { remove(settingsNotes); settingsNotes.destroy(); settingsNotes = null; }
+		settingsNoteSkinID = -1;
+		for (t in settingsNotesTween) if (t != null) t.cancel();
+		settingsNotesTween = [];
+
+		var hasNoteSkin:Bool = false;
+		for (i in 0...optionsArray.length)
+		{
+			var opt:Option = optionsArray[i];
+			// 预览跟随 Note 皮肤 + Note 风格 (Old=flat / New=0.7.3 材质) 两个选项
+			if (opt.variable == 'noteSkin' || opt.variable == 'noteStyle')
+			{
+				hasNoteSkin = true;
+				// 预览滑入行: 优先 noteSkin, 只有 noteStyle 时用它
+				if (opt.variable == 'noteSkin' || settingsNoteSkinID < 0)
+					settingsNoteSkinID = i;
+				var prevOnChange:Void->Void = opt.onChange;
+				opt.onChange = function() {
+					if (prevOnChange != null) prevOnChange();
+					settingsReloadNoteSkin();
+				};
+			}
+		}
+		if (!hasNoteSkin) return;
+
+		settingsNotes = new FlxTypedGroup<StrumNote>();
+		add(settingsNotes);
+		settingsNotesTween = [];
+		for (i in 0...4)
+		{
+			var note:StrumNote = new StrumNote(370 + (560 / 4) * i, -200, i, 0);
+			// 预览材质跟随 noteStyle (Old=flat NOTE_assets, New=noteSkins/NOTE_assets)
+			note.texture = Note.defaultNoteSkin;
+			note.reloadNote();
+			note.centerOffsets();
+			note.centerOrigin();
+			note.playAnim('static');
+			settingsNotes.add(note);
+		}
+		settingsNotes.visible = true;
+		settingsReloadNoteSkin();
+	}
+
+	/** 按当前 noteSkin 刷新预览 (StrumNote.reloadNote 已内置皮肤后缀解析)。 */
+	function settingsReloadNoteSkin()
+	{
+		if (settingsNotes == null) return;
+		for (note in settingsNotes)
+		{
+			// noteStyle 变化时基底材质也要跟着换, 不能只靠 reloadNote 拼皮肤后缀
+			note.texture = Note.defaultNoteSkin;
+			// 不能靠 texture setter: texture 一直是基底名 (NOTE_assets), 改皮肤时值不变,
+			// setter 会短路。reloadNote 内部会按 getNoteSkinPostfix 重新解析材质。
+			note.reloadNote();
+			note.centerOffsets();
+			note.centerOrigin();
+			note.playAnim('static');
+		}
 	}
 
 	function updateSettingsView(elapsed:Float)
@@ -672,7 +763,8 @@ class OptionsState extends MusicBeatState
 			FlxG.sound.play(Paths.sound('scrollMenu'));
 		}
 
-		if (FlxG.mouse.justPressed)
+		// 虚拟按键上点击不穿透到选项行, 避免同时触发按键动作和行点击造成双重判定
+		if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 		{
 			for (checkbox in setCheckboxGroup)
 			{
@@ -839,7 +931,7 @@ class OptionsState extends MusicBeatState
 				}
 			}
 
-			if (#if TOUCH_CONTROLS virtualPad.buttonC.justPressed || #end controls.RESET)
+			if (#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.justPressed) || #end controls.RESET)
 			{
 				for (i in 0...setOptionsArray.length)
 				{
@@ -916,6 +1008,20 @@ class OptionsState extends MusicBeatState
 
 		if (setBoyfriend != null)
 			setBoyfriend.visible = setOptionsArray[setCurSelected].showBoyfriend;
+		// 0.7.3+ Note 皮肤预览: 只有选中 noteSkin 那一行才显示
+		if (settingsNotes != null && settingsNoteSkinID >= 0)
+		{
+			// 0.7.3 同款: 选中 Note 皮肤行时滑入预览, 离开滑出
+			var targetY:Float = (setCurSelected == settingsNoteSkinID) ? 120 : -200;
+			for (i in 0...settingsNotes.members.length)
+			{
+				var note:StrumNote = settingsNotes.members[i];
+				if (note == null) continue;
+				if (settingsNotesTween[i] != null) settingsNotesTween[i].cancel();
+				settingsNotesTween[i] = FlxTween.tween(note, {y: targetY},
+					Math.abs(note.y - targetY) / 600, {ease: FlxEase.quadInOut});
+			}
+		}
 
 		setCurOption = setOptionsArray[setCurSelected];
 		FlxG.sound.play(Paths.sound('scrollMenu'));
@@ -1050,7 +1156,7 @@ class OptionsState extends MusicBeatState
 			transitioning = false;
 		}, 0.1);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		addVirtualPad(LEFT_FULL, A_B_C);
 		#end
@@ -1090,7 +1196,7 @@ class OptionsState extends MusicBeatState
 			currentMode = MODE_CATEGORY;
 		}, 0.1);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
@@ -1386,7 +1492,7 @@ class OptionsState extends MusicBeatState
 
 	function onChangeLanguage()
 	{
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		removeVirtualPad();
 		#end
 		Language.load();
@@ -1495,7 +1601,7 @@ class OptionsState extends MusicBeatState
 		}
 		changeCategorySelection(0, false);
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A_B_C);
 		#end
 	}

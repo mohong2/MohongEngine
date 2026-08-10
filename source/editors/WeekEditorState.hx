@@ -112,7 +112,7 @@ class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.Psyc
 		reloadAllShit();
 
 		FlxG.mouse.visible = true;
-		#if android
+		#if (android || desktop)
 		addVirtualPad(UP_DOWN, B);
 		#end
 		super.create();
@@ -451,7 +451,7 @@ class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.Psyc
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end FlxG.keys.justPressed.ESCAPE) {
 				confirmExit();
 			}
 		}
@@ -606,7 +606,7 @@ class WeekEditorFreeplayState extends MusicBeatState implements PsychUIEventHand
 
 		addEditorBox();
 		changeSelection();
-		#if android
+		#if (android || desktop)
 		addVirtualPad(UP_DOWN, B);
 		#end
 		super.create();
@@ -789,7 +789,7 @@ class WeekEditorFreeplayState extends MusicBeatState implements PsychUIEventHand
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(#if android virtualPad.buttonB.justPressed ||#end FlxG.keys.justPressed.ESCAPE) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) ||#end FlxG.keys.justPressed.ESCAPE) {
 				confirmExitFreeplay();
 			}
 

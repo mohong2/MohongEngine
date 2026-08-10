@@ -210,7 +210,7 @@ class NoteOffsetState extends MusicBeatState
 
 		Conductor.changeBPM(128.0);
 		FlxG.sound.playMusic(Paths.music('offsetSong'), 1, true);
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(LEFT_FULL, A_B_C);
 		addPadCamera();
 		#end
@@ -288,7 +288,7 @@ class NoteOffsetState extends MusicBeatState
 				repositionCombo();
 			}
 
-			if (FlxG.mouse.justPressed)
+			if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 			{
 				holdingObjectType = null;
 				FlxG.mouse.getScreenPosition(camHUD, startMousePos);
@@ -355,7 +355,7 @@ class NoteOffsetState extends MusicBeatState
 				}
 			}
 
-			if(controls.RESET #if TOUCH_CONTROLS || virtualPad.buttonC.justPressed #end)
+			if(controls.RESET #if (TOUCH_CONTROLS || desktop) || (virtualPad != null && virtualPad.buttonC.justPressed) #end)
 			{
 				for (i in 0...ClientPrefs.data.comboOffset.length)
 				{

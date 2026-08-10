@@ -5,6 +5,7 @@ import substates.OldPauseSubState;
 import substates.GameOverSubstate;
 import substates.PlayStateResultsSubstate;
 import script.hscript.HScript;
+import backend.CompatEngine;
 import haxe.display.Display.GotoDefinitionResult;
 import flixel.graphics.FlxGraphic;
 #if cpp
@@ -59,6 +60,7 @@ import Achievements;
 import Replay;
 import StageData;
 import script.lua.FunkinLua;
+import psychlua.LuaUtils;
 import script.lua.DebugLuaText;
 import DialogueBoxPsych;
 import Conductor.Rating;
@@ -506,6 +508,8 @@ class PlayState extends MusicBeatState
 		EKData.loadConfig();
 		mania = (SONG.mania == null) ? Note.defaultMania : EKData.clampMania(SONG.mania);
 		SONG.mania = mania; // 写回钳制结果, 避免谱面/编辑器与游戏不一致
+		// 0.7.3/1.0.4 兼容: 每条新谱面重置全局 RGB 色板, 避免跨谱面/跨 mod 串色
+		Note.globalRgbShaders = [];
 		var allKeybinds:Array<Array<Dynamic>> = Keybinds.fill();
 		keysArray = (mania >= 0 && mania < allKeybinds.length) ? allKeybinds[mania] : allKeybinds[3];
 		setOnScripts('mania', mania);
@@ -545,7 +549,9 @@ class PlayState extends MusicBeatState
                 replayExam = new Replay();
                 add(replayExam);
                 if (replayMode) {
+                        Replay.dbgLog('[DEBUG-rpl] PlayState.create replayMode, preparedPath=' + Replay.preparedPath);
                         replayExam.loadFromFile(Replay.preparedPath);
+                        Replay.dbgLog('[DEBUG-rpl] PlayState.create frames=' + replayExam.getFrameData().length);
 			// 回放恢复了录制时的判定手感, 重建评级数据使其立即生效
 			buildRatingsData();
 			// 回放模式下强制关闭 botplay/practice 防止冲突
@@ -919,7 +925,7 @@ class PlayState extends MusicBeatState
 		doof.finishThing = startCountdown;
 		doof.nextDialogueThing = startNextDialogue;
 		doof.skipDialogueThing = skipDialogue;
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			comboGroup = new FlxSpriteGroup();
 			add(comboGroup);
 			noteGroup = new FlxTypedGroup<FlxBasic>();
@@ -954,7 +960,7 @@ class PlayState extends MusicBeatState
 		}
 		updateTime = showTime;
 
-		timeBarBG = new AttachedSprite('timeBar');
+		timeBarBG = new AttachedSprite('timeBar', null, null, false, false);
 		timeBarBG.x = timeTxt.x;
 		timeBarBG.y = timeTxt.y + (timeTxt.height / 4);
 		timeBarBG.scrollFactor.set();
@@ -963,13 +969,13 @@ class PlayState extends MusicBeatState
 		timeBarBG.color = FlxColor.BLACK;
 		timeBarBG.xAdd = -4;
 		timeBarBG.yAdd = -4;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(timeBarBG);
 		else
 			add(timeBarBG);
 
 		// 兼容模式使用 0.7.3 Bar 类，非兼容模式使用原始 FlxBar
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			var compatTimeBar:objects.Bar = new objects.Bar(0, timeTxt.y + (timeTxt.height / 4), 'timeBar', function() return songPercent, 0, 1);
 			compatTimeBar.scrollFactor.set();
 			compatTimeBar.screenCenter(X);
@@ -993,7 +999,7 @@ class PlayState extends MusicBeatState
 		}
 
 		strumLineNotes = new FlxTypedGroup<StrumNote>();
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			noteGroup.add(strumLineNotes);
 		} else {
 			add(strumLineNotes);
@@ -1008,7 +1014,10 @@ class PlayState extends MusicBeatState
 
 		var splash:NoteSplash = new NoteSplash(100, 100, 0);
 		grpNoteSplashes.add(splash);
-		splash.alpha = 0.0;
+		// 1.0.4 加载顺序: alpha 不能为 0 (否则 Flixel 会跳过渲染, 图集/配置不会真正预加载),
+		// 用 0.000001 让这个 splash 在 create 阶段就把溅射图集 + txt/json 配置读进缓存,
+		// 避免第一次击键时才加载导致卡顿。
+		splash.alpha = 0.000001;
 
 		opponentStrums = new FlxTypedGroup<StrumNote>();
 		playerStrums = new FlxTypedGroup<StrumNote>();
@@ -1019,7 +1028,7 @@ class PlayState extends MusicBeatState
 		ratingPopup.antialiasing = isPixelStage ? false : ClientPrefs.data.globalAntialiasing;
 		ratingPopup.isPixel = isPixelStage;
 		ratingPopup.daPixelZoom = daPixelZoom;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 		{
 			// 兼容模式: container 指向 comboGroup
 			// 用 Std.int() + 类型检查避免 cast 返回 null
@@ -1035,13 +1044,10 @@ class PlayState extends MusicBeatState
 			insert(members.indexOf(strumLineNotes), ratingPopup.container);
 		}
 
-		// startCountdown();
-		#if TOUCH_CONTROLS
 		addAndroidControls();
-		#end
 		generateSong(SONG.song);
 
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			noteGroup.add(grpNoteSplashes);
 		}
 
@@ -1078,7 +1084,7 @@ class PlayState extends MusicBeatState
 		moveCameraSection();
 
 		// 兼容模式使用 0.7.3 Bar 类，非兼容模式使用原始 FlxBar
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			var barY:Float = FlxG.height * (!ClientPrefs.data.downScroll ? 0.89 : 0.11);
 			var compatBar:objects.Bar = new objects.Bar(0, barY, 'healthBar', function() return displayHealth, 0, 2);
 			compatBar.scrollFactor.set();
@@ -1089,7 +1095,7 @@ class PlayState extends MusicBeatState
 			healthBar = compatBar;
 			healthBarBG = null;
 		} else {
-			healthBarBG = new AttachedSprite('healthBar');
+			healthBarBG = new AttachedSprite('healthBar', null, null, false, false);
 			healthBarBG.y = FlxG.height * 0.89;
 			healthBarBG.screenCenter(X);
 			healthBarBG.scrollFactor.set();
@@ -1109,7 +1115,7 @@ class PlayState extends MusicBeatState
 			healthBarBG.sprTracker = healthBar;
 		}
 
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(healthBar);
 
 		iconP1 = new HealthIcon(boyfriend.healthIcon, false);
@@ -1118,7 +1124,7 @@ class PlayState extends MusicBeatState
 		iconP1.x = healthBar.x + healthBar.width + 12;
 		iconP1.visible = !ClientPrefs.data.hideHud;
 		iconP1.alpha = ClientPrefs.data.healthBarAlpha;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(iconP1);
 		else
 			add(iconP1);
@@ -1128,7 +1134,7 @@ class PlayState extends MusicBeatState
 		iconP2.x = healthBar.x - 150;
 		iconP2.visible = !ClientPrefs.data.hideHud;
 		iconP2.alpha = ClientPrefs.data.healthBarAlpha;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(iconP2);
 		else
 			add(iconP2);
@@ -1140,7 +1146,7 @@ class PlayState extends MusicBeatState
 		scoreTxt.scrollFactor.set();
 		scoreTxt.borderSize = 2;
 		scoreTxt.visible = !ClientPrefs.data.hideHud;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(scoreTxt);
 		else
 			add(scoreTxt);
@@ -1154,7 +1160,7 @@ class PlayState extends MusicBeatState
 			botplayTxt.text = 'Practice Mode';
 			botplayTxt.visible = !ClientPrefs.data.hideHud;
 		}
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(botplayTxt);
 		else
 			add(botplayTxt);
@@ -1167,7 +1173,7 @@ class PlayState extends MusicBeatState
 		replayTxt.scrollFactor.set();
 		replayTxt.borderSize = 2;
 		replayTxt.visible = replayMode;
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			uiGroup.add(replayTxt);
 		else
 			add(replayTxt);
@@ -1186,7 +1192,7 @@ class PlayState extends MusicBeatState
 			judgeRestoreTxt.text = Language.get("replayJudgeRestored", "Replay Judgement:") + " " + replayExam.judgementRestoreInfo;
 		add(judgeRestoreTxt);
 
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			comboGroup.cameras = [camHUD];
 			noteGroup.cameras = [camHUD];
 			uiGroup.cameras = [camHUD];
@@ -1599,7 +1605,7 @@ class PlayState extends MusicBeatState
 		trackBackground.scrollFactor.set();
 		trackBackground.visible = (trackAlpha > 0);
 		super.create();
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			insert(members.indexOf(noteGroup), trackBackground);
 		else
 			insert(members.indexOf(strumLineNotes), trackBackground);
@@ -1699,7 +1705,7 @@ class PlayState extends MusicBeatState
 	}
 
 	public function reloadHealthBarColors() {
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			// Bar.setColors
 			healthBar.setColors(
 				FlxColor.fromRGB(dad.healthColorArray[0], dad.healthColorArray[1], dad.healthColorArray[2]),
@@ -2293,7 +2299,7 @@ class PlayState extends MusicBeatState
 		var ret:Dynamic = callOnScripts('onStartCountdown', [], false);
 		if(ret != FunkinLua.Function_Stop) {
 			if (skipCountdown || startOnTime > 0) skipArrowStartTween = true;
-			#if TOUCH_CONTROLS androidControls.visible = true; #end
+			if (androidControls != null) androidControls.visible = true;
 			generateStaticArrows(0);
 			generateStaticArrows(1);
 			                        // If the player is controlling the opponent side, swap the static arrow
@@ -2417,7 +2423,7 @@ class PlayState extends MusicBeatState
 
 						countdownReady.screenCenter();
 						countdownReady.antialiasing = antialias;
-						insert(ClientPrefs.data.compatibility_mode ? members.indexOf(noteGroup) : members.indexOf(notes), countdownReady);
+						insert(CompatEngine.isModern() ? members.indexOf(noteGroup) : members.indexOf(notes), countdownReady);
 						FlxTween.tween(countdownReady, {/*y: countdownReady.y + 100,*/ alpha: 0}, Conductor.crochet / 1000, {
 							ease: FlxEase.cubeInOut,
 							onComplete: function(twn:FlxTween)
@@ -2437,7 +2443,7 @@ class PlayState extends MusicBeatState
 
 						countdownSet.screenCenter();
 						countdownSet.antialiasing = antialias;
-						insert(ClientPrefs.data.compatibility_mode ? members.indexOf(noteGroup) : members.indexOf(notes), countdownSet);
+						insert(CompatEngine.isModern() ? members.indexOf(noteGroup) : members.indexOf(notes), countdownSet);
 						FlxTween.tween(countdownSet, {/*y: countdownSet.y + 100,*/ alpha: 0}, Conductor.crochet / 1000, {
 							ease: FlxEase.cubeInOut,
 							onComplete: function(twn:FlxTween)
@@ -2459,7 +2465,7 @@ class PlayState extends MusicBeatState
 
 						countdownGo.screenCenter();
 						countdownGo.antialiasing = antialias;
-						insert(ClientPrefs.data.compatibility_mode ? members.indexOf(noteGroup) : members.indexOf(notes), countdownGo);
+						insert(CompatEngine.isModern() ? members.indexOf(noteGroup) : members.indexOf(notes), countdownGo);
 						FlxTween.tween(countdownGo, {/*y: countdownGo.y + 100,*/ alpha: 0}, Conductor.crochet / 1000, {
 							ease: FlxEase.cubeInOut,
 							onComplete: function(twn:FlxTween)
@@ -2533,6 +2539,12 @@ class PlayState extends MusicBeatState
 	//var lerpSongScore:Float = 0;
 	public function updateScore(miss:Bool = false)
 	{
+		// 0.7.3+/1.0.4: preUpdateScore（返回 Function_Stop 可跳过分数刷新）
+		// 0.7.3+/1.0.4: preUpdateScore (return Function_Stop to skip the refresh)
+		var preResult:Dynamic = callOnScripts('preUpdateScore', [miss], true);
+		if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
+			return;
+
 		/*
 		scoreTxt.text = Language.get("scorelangtxt", "Score") + ': ${Math.floor(lerpSongScore)}'
 		+ " | " + Language.get("combobtxt", "Combo Breaks") + ': $songMisses'
@@ -2835,7 +2847,7 @@ class PlayState extends MusicBeatState
 
 		notes = new FlxTypedGroup<Note>();
 		sustainNotes = new FlxTypedGroup<Note>(); // Empty group for Lua compatibility
-		if (ClientPrefs.data.compatibility_mode)
+		if (CompatEngine.isModern())
 			noteGroup.add(notes);
 		else
 			add(notes);
@@ -2872,6 +2884,9 @@ class PlayState extends MusicBeatState
 						subEvent.strumTime -= eventNoteEarlyTrigger(subEvent);
 						eventNotes.push(subEvent);
 						eventPushed(subEvent);
+						// 0.7.3+/1.0.4: onEventPushed（事件入列时触发）
+						// 0.7.3+/1.0.4: onEventPushed (fires when an event is queued)
+						callOnScripts('onEventPushed', [subEvent.event, subEvent.value1 != null ? subEvent.value1 : '', subEvent.value2 != null ? subEvent.value2 : '', subEvent.strumTime]);
 					}
 				}
 			}
@@ -3019,6 +3034,9 @@ class PlayState extends MusicBeatState
 					subEvent.strumTime -= eventNoteEarlyTrigger(subEvent);
 					eventNotes.push(subEvent);
 					eventPushed(subEvent);
+					// 0.7.3+/1.0.4: onEventPushed（事件入列时触发）
+					// 0.7.3+/1.0.4: onEventPushed (fires when an event is queued)
+					callOnScripts('onEventPushed', [subEvent.event, subEvent.value1 != null ? subEvent.value1 : '', subEvent.value2 != null ? subEvent.value2 : '', subEvent.strumTime]);
 				}
 			}
 		}
@@ -3650,7 +3668,7 @@ class PlayState extends MusicBeatState
 			// Ensure track bg is behind notes
 			if (strumLineNotes != null) {
 				var bgIdx:Int = members.indexOf(trackBackground);
-				var notesIdx:Int = ClientPrefs.data.compatibility_mode
+				var notesIdx:Int = CompatEngine.isModern()
 					? members.indexOf(noteGroup)
 					: members.indexOf(strumLineNotes);
 				if (bgIdx > notesIdx) {
@@ -3839,7 +3857,7 @@ class PlayState extends MusicBeatState
 
 				targetNote.spawned = true;
 				notes.add(targetNote);
-				if (ClientPrefs.data.compatibility_mode) {
+				if (CompatEngine.isModern()) {
 					callOnScripts('onSpawnNote', [
 						notes.members.indexOf(targetNote),
 						targetNote.noteData,
@@ -3900,7 +3918,11 @@ class PlayState extends MusicBeatState
 					if (!daNote.exists) return;
 
 					var strumGroup:FlxTypedGroup<StrumNote> = daNote.mustPress ? playerStrums : opponentStrums;
-					var strumIdx:Int = daNote.laneData();
+					// 0.6.3 原版: 直接用 noteData 索引 strum 组 (strumGroup.members[daNote.noteData])。
+					// 多k 谱面的 noteData 生成时已按 ammo 取模, 直接索引与原 laneData() 等价;
+					// 但 lua 模组 (如 Holofunk 第5键) 会把 noteData 改成 4, 此时必须命中
+					// playerStrums.members[4] (模组 add 的中间 strum), 不能再 % ammo 折叠回 0。
+					var strumIdx:Int = Std.int(Math.abs(daNote.noteData));
 					if (strumIdx >= strumGroup.members.length) strumIdx %= strumGroup.members.length;
 					var strum:StrumNote = strumGroup.members[strumIdx];
 					if (strum == null) return;
@@ -4542,7 +4564,7 @@ class PlayState extends MusicBeatState
 				FlxG.sound.play(Paths.sound(value1), val2);
 
 		}
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			callOnScripts('onEvent', [eventName, value1, value2, strumTime]);
 		} else {
 			callOnScripts('onEvent', [eventName, value1, value2]);
@@ -4686,9 +4708,7 @@ class PlayState extends MusicBeatState
 			}
 		}
 		keyboardDisplay.save();
-		#if TOUCH_CONTROLS
-		androidControls.visible = true;
-		#end
+		if (androidControls != null) androidControls.visible = true;
 		timeBarBG.visible = false;
 		timeBar.visible = false;
 		timeTxt.visible = false;
@@ -4969,6 +4989,12 @@ class PlayState extends MusicBeatState
 			if (!generatedMusic || endingSong || boyfriend.stunned)
 				return;
 
+			// 0.7.3+/1.0.4: onKeyPressPre（返回 Function_Stop 可拦截本次按键）
+			// 0.7.3+/1.0.4: onKeyPressPre (return Function_Stop to block the press)
+			var preResult:Dynamic = callOnScripts('onKeyPressPre', [key]);
+			if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
+				return;
+
 			// Notes at the beginning of a song can be inside the judgement window
 			// while the countdown is still running. Do not start the audio from an
 			// input event; use the countdown clock and let update() start the song.
@@ -5079,10 +5105,16 @@ class PlayState extends MusicBeatState
 		 * 多k: 多键同时按下时批量判定 (只遍历一次 Note 表, 避免每个键全表扫描导致掉帧)。
 		 * 逻辑与 keyPressed 一致: 按轨道分组处理 jack、幽灵键、strum 动画, 并逐键触发脚本回调。
 		 */
-		public function keyPressBatch(keys:Array<Int>, time:Float):Void
+		public function keyPressBatch(keys:Array<Int>, time:Float, ?suppressAllButLast:Int = -1):Void
 		{
 			if (cpuControlled || paused || keys == null || keys.length < 2) return;
 			if (!generatedMusic || endingSong || boyfriend.stunned) return;
+
+			// 预先构建轨道按下位图, 避免每个存活 Note 都做 keys.indexOf (O(N*K) -> O(N))
+			var laneDown:Array<Bool> = [for (i in 0...Note.ammo[mania]) false];
+			for (k in keys)
+				if (k >= 0 && k < laneDown.length)
+					laneDown[k] = true;
 
 			var canMiss:Bool = !ClientPrefs.data.ghostTapping;
 			var pressNotes:Array<Note> = [];
@@ -5091,7 +5123,7 @@ class PlayState extends MusicBeatState
 				if (strumsBlocked[daNote.noteData] != true && daNote.canBeHit && daNote.mustPress
 					&& !daNote.tooLate && !daNote.wasGoodHit && !daNote.isSustainNote && !daNote.blockHit)
 				{
-					if (keys.indexOf(daNote.noteData) >= 0)
+					if (daNote.noteData >= 0 && daNote.noteData < laneDown.length && laneDown[daNote.noteData])
 						pressNotes.push(daNote);
 					canMiss = true;
 				}
@@ -5130,6 +5162,7 @@ class PlayState extends MusicBeatState
 				list.sort(sortHitNotes);
 				var localPress:Array<Note> = [];
 				var notesStopped:Bool = false;
+				var suppress:Bool = (suppressAllButLast >= 0 && key != suppressAllButLast);
 				for (epicNote in list)
 				{
 					for (doubleNote in localPress)
@@ -5145,7 +5178,9 @@ class PlayState extends MusicBeatState
 					}
 					if (!notesStopped)
 					{
+						_suppressNoteAnim = suppress;
 						goodNoteHit(epicNote);
+						_suppressNoteAnim = false;
 						localPress.push(epicNote);
 					}
 				}
@@ -5197,6 +5232,12 @@ class PlayState extends MusicBeatState
 			if (cpuControlled || !startedCountdown || paused)
 				return;
 			keyboardDisplay.released(key);
+
+			// 0.7.3+/1.0.4: onKeyReleasePre（返回 Function_Stop 可拦截本次松键）
+			// 0.7.3+/1.0.4: onKeyReleasePre (return Function_Stop to block the release)
+			var preResult:Dynamic = callOnScripts('onKeyReleasePre', [key]);
+			if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
+				return;
 
 			var spr:StrumNote = playerStrums.members[key];
 			if (spr != null)
@@ -5357,20 +5398,16 @@ class PlayState extends MusicBeatState
 			{
 				if (ClientPrefs.data.lastNoteAnimation)
 				{
-					var lastPressedKey:Int = -1;
+					// 多键时同样走批量扫描, 只保留原版"最后一键播动画"的语义
+					var pressedLanes:Array<Int> = [];
 					for (i in 0...laneCount)
 						if (pressArray[i] && strumsBlocked[i] != true)
-							lastPressedKey = i;
+							pressedLanes.push(i);
 
-					for (i in 0...laneCount)
-					{
-						if (pressArray[i] && strumsBlocked[i] != true)
-						{
-							_suppressNoteAnim = (i != lastPressedKey);
-							keyPressed(i, time);
-							_suppressNoteAnim = false;
-						}
-					}
+					if (pressedLanes.length == 1)
+						keyPressed(pressedLanes[0], time);
+					else if (pressedLanes.length > 1)
+						keyPressBatch(pressedLanes, time, pressedLanes[pressedLanes.length - 1]);
 				}
 				else
 				{
@@ -5387,12 +5424,16 @@ class PlayState extends MusicBeatState
 						keyPressBatch(pressedLanes, time);
 				}
 
-				notes.forEachAlive(function(daNote:Note)
+				// 没有任何轨道按住时, 长条不可能被命中, 跳过整次全表扫描
+				if (holdArray.contains(true))
 				{
-					if (strumsBlocked[daNote.noteData] != true && daNote.isSustainNote && holdArray[daNote.noteData] && daNote.canBeHit
-						&& daNote.mustPress && !daNote.tooLate && !daNote.wasGoodHit && !daNote.blockHit)
-						goodNoteHit(daNote, time);
-				});
+					notes.forEachAlive(function(daNote:Note)
+					{
+						if (strumsBlocked[daNote.noteData] != true && daNote.isSustainNote && holdArray[daNote.noteData] && daNote.canBeHit
+							&& daNote.mustPress && !daNote.tooLate && !daNote.wasGoodHit && !daNote.blockHit)
+							goodNoteHit(daNote, time);
+					});
+				}
 			}
 
 			if (!holdArray.contains(true) && !endingSong && generatedMusic)
@@ -5644,9 +5685,19 @@ class PlayState extends MusicBeatState
 		StrumPlayAnim(true, Std.int(Math.abs(note.noteData)), time);
 		note.hitByOpponent = true;
 
+		if (CompatEngine.isModern()) {
+			// 0.7.3+/1.0.4: opponentNoteHitPre / goodNoteHitPre 回调
+			var preName:String = reverseNoteHit ? 'goodNoteHitPre' : 'opponentNoteHitPre';
+			var preResult:Dynamic = callOnLuas(preName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+			if(preResult != FunkinLua.Function_Stop && preResult != FunkinLua.Function_StopHScript && preResult != FunkinLua.Function_StopAll)
+				callOnHScript(preName, [note]);
+			if (CompatEngine.stopOnPreHitStop() && preResult == FunkinLua.Function_Stop)
+				return;
+		}
+
 		var scriptName:String = reverseNoteHit ? 'goodNoteHit' : 'opponentNoteHit';
 		var result:Dynamic;
-		if (ClientPrefs.data.compatibility_mode) {
+		if (CompatEngine.isModern()) {
 			// 0.7.3 格式: 与 opponentNoteHit 一致使用 Math.abs
 			result = callOnLuas(scriptName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
 		} else if (reverseNoteHit) {
@@ -5802,11 +5853,24 @@ if (!cpuControlled) {
 
 		if (!note.wasGoodHit)
 		{
+			// 0.7.3+/1.0.4: goodNoteHitPre / opponentNoteHitPre 回调
+			if (CompatEngine.isModern()) {
+				var preName:String = reverseNoteHit ? 'opponentNoteHitPre' : 'goodNoteHitPre';
+				var preIsSus:Bool = note.isSustainNote;
+				var preLeData:Int = Math.round(Math.abs(note.noteData));
+				var preLeType:String = note.noteType;
+				var preResult:Dynamic = callOnLuas(preName, [notes.members.indexOf(note), preLeData, preLeType, preIsSus]);
+				if(preResult != FunkinLua.Function_Stop && preResult != FunkinLua.Function_StopHScript && preResult != FunkinLua.Function_StopAll)
+					callOnHScript(preName, [note]);
+				if (CompatEngine.stopOnPreHitStop() && preResult == FunkinLua.Function_Stop)
+					return;
+			}
+
 			// Fire scripts for ignore/hurt notes in botplay instead of skipping them.
 			if(cpuControlled && (note.ignoreNote || note.hitCausesMiss)) {
 				var botScriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
 				var botResult:Dynamic = FunkinLua.Function_Continue;
-				if (ClientPrefs.data.compatibility_mode)
+				if (CompatEngine.isModern())
 					botResult = callOnLuas(botScriptName, [notes.members.indexOf(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
 				else
 					botResult = callOnLuas(botScriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
@@ -5935,7 +5999,7 @@ if (!cpuControlled) {
 			var scriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
 			var result:Dynamic = FunkinLua.Function_Continue;
 			if (!cpuControlled) {
-				if (ClientPrefs.data.compatibility_mode) {
+				if (CompatEngine.isModern()) {
 					// 0.7.3 格式: 传递 Math.round(Math.abs(noteData))
 					var isSus:Bool = note.isSustainNote;
 					var leData:Int = Math.round(Math.abs(note.noteData));
@@ -5949,7 +6013,7 @@ if (!cpuControlled) {
 			// Botplay still represents a real hit. Do not skip custom note/event
 			// scripts just because keyboard judgement was bypassed.
 			if (cpuControlled) {
-				if (ClientPrefs.data.compatibility_mode)
+				if (CompatEngine.isModern())
 					result = callOnLuas(scriptName, [notes.members.indexOf(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
 				else
 					result = callOnLuas(scriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
@@ -5971,18 +6035,30 @@ if (!cpuControlled) {
 
 	public function spawnNoteSplashOnNote(note:Note) {
 		if(ClientPrefs.data.noteSplashes && note != null && !cpuControlled) {
-			var lane:Int = note.laneData();
-			if (lane >= playerStrums.members.length) lane %= playerStrums.members.length;
-			var strum:StrumNote = playerStrums.members[lane];
+			// 0.6.3 原版: 直接 playerStrums.members[note.noteData]。
+			// laneData() 的 % ammo 会把 lua 模组 (如 Holofunk 第5键) 改出的
+			// noteData=4 折叠回 0, 溅射错误落在第 0 轨; 与 update 里的
+			// strum 索引修复保持同一策略。
+			var strumIdx:Int = Std.int(Math.abs(note.noteData));
+			if (strumIdx >= playerStrums.members.length) strumIdx %= playerStrums.members.length;
+			var strum:StrumNote = playerStrums.members[strumIdx];
 			if(strum != null) {
 				spawnNoteSplash(strum.x, strum.y, note.noteData, note);
 			}
 		}
 	}
 
-	public function spawnNoteSplash(x:Float, y:Float, data:Int, ?note:Note = null) {
+	public function spawnNoteSplash(x:Float, y:Float, data:Int, ?note:Note = null, ?strum:StrumNote = null) {
 		var skin:String = 'noteSplashes';
-		if(PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0) skin = PlayState.SONG.splashSkin;
+		if(PlayState.SONG != null && PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0) skin = PlayState.SONG.splashSkin;
+		else
+		{
+			// 用户自定义溅射皮肤任意模式生效; 默认皮肤跟随兼容模式路径
+			var postfix:String = NoteSplash.getSplashSkinPostfix();
+			if (postfix.length > 0) skin = 'noteSplashes/noteSplashes' + postfix;
+			else if (CompatEngine.isModern()) skin = NoteSplash.defaultNoteSplash;
+			else skin = 'noteSplashes';
+		}
 
 		var hue:Float = 0;
 		var sat:Float = 0;
@@ -6012,10 +6088,9 @@ if (!cpuControlled) {
 		}
 
 		var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);
-		splash.setupNoteSplash(x, y, data, skin, hue, sat, brt);
-		// 多k: setGraphicSize 内部自带 updateHitbox, 无需额外调用, 降低每次击键开销
-		splash.scale.set(1, 1);
-		splash.setGraphicSize(Std.int(splash.width * EKData.splashScales[mania]));
+		// 多k: 缩放与居中补偿已移入 NoteSplash.setupNoteSplash (与 offset 一起处理),
+		// 保证高 k 下溅射仍以 strum 为中心, 并让 0.7.3 白底溅射按 Note 色板染色。
+		splash.setupNoteSplash(x, y, data, skin, hue, sat, brt, note);
 		grpNoteSplashes.add(splash);
 	}
 
@@ -6062,6 +6137,8 @@ if (!cpuControlled) {
 		if (NoteMs != null) NoteMs = [];
 		if (NoteTime != null) NoteTime = [];
 		if (unspawnNotes != null) unspawnNotes = [];
+		// 1.0.4: 清理溅射配置缓存, 防止跨谱面/换模组时串配置
+		NoteSplash.configs.clear();
 		if (eventNotes != null) eventNotes = [];
 
 		// Destroy stage backdrop
@@ -6197,6 +6274,25 @@ if (!cpuControlled) {
 	 */
 	override function initHScripts():Void {
 		super.initHScripts();
+	}
+	#end
+
+	#if HSCRIPT_ALLOWED
+	/**
+	 * 0.7.3+/1.0.4 addHScript 用：按完整路径加载一个 hscript 文件。
+	 * English: used by the 0.7.3+/1.0.4 addHScript Lua function —
+	 * loads an HScript file by full path.
+	 */
+	public function initHScript(scriptPath:String):Void {
+		if (scriptPath == null || scriptPath.length == 0) return;
+		try {
+			if (!FileSystem.exists(scriptPath)) return;
+			var script:HScript = new HScript(scriptPath);
+			if (script != null)
+				hscriptArray.push(script);
+		} catch (e:Dynamic) {
+			TraceManager.error('trace.playState.initHScriptFailed', 'Failed to load hscript {}: {}', [scriptPath, e]);
+		}
 	}
 	#end
 

@@ -128,7 +128,7 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 		daText.scaleY = 0.7;
 		add(daText);
 		changeText();
-		#if android
+		#if (android || desktop)
 		addVirtualPad(LEFT_FULL, A_B_X_Y);
 		#end
 		super.create();
@@ -371,17 +371,17 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(#if android virtualPad.buttonY.justPressed || #end FlxG.keys.justPressed.SPACE) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonY.justPressed) || #end FlxG.keys.justPressed.SPACE) {
 				reloadText(false);
 			}
-			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end FlxG.keys.justPressed.ESCAPE) {
 				confirmExitDialogue();
 				FlxG.sound.playMusic(Paths.music('freakyMenu'), 1);
 				transitioning = true;
 			}
 			var negaMult:Array<Int> = [1, -1];
-			var controlAnim:Array<Bool> = [FlxG.keys.justPressed.W #if android || virtualPad.buttonUp.justPressed #end, FlxG.keys.justPressed.S #if android || virtualPad.buttonDown.justPressed#end ];
-			var controlText:Array<Bool> = [FlxG.keys.justPressed.D	#if android || virtualPad.buttonRight.justPressed #end , FlxG.keys.justPressed.A #if android || virtualPad.buttonLeft.justPressed #end];
+			var controlAnim:Array<Bool> = [FlxG.keys.justPressed.W #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end, FlxG.keys.justPressed.S #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed)#end ];
+			var controlText:Array<Bool> = [FlxG.keys.justPressed.D	#if (android || desktop) || (virtualPad != null && virtualPad.buttonRight.justPressed) #end , FlxG.keys.justPressed.A #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft.justPressed) #end];
 			for (i in 0...controlAnim.length) {
 				if(controlAnim[i] && character.jsonFile.animations.length > 0) {
 					curAnim -= negaMult[i];
@@ -400,7 +400,7 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 				}
 			}
 
-			if(#if android virtualPad.buttonA.justPressed ||#end FlxG.keys.justPressed.O) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) ||#end FlxG.keys.justPressed.O) {
 				dialogueFile.dialogue.remove(dialogueFile.dialogue[curSelected]);
 				if(dialogueFile.dialogue.length < 1)
 				{
@@ -409,7 +409,7 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 					];
 				}
 				changeText();
-			} else if(#if android virtualPad.buttonX.justPressed ||#end FlxG.keys.justPressed.P) {
+			} else if(#if (android || desktop) (virtualPad != null && virtualPad.buttonX.justPressed) ||#end FlxG.keys.justPressed.P) {
 				dialogueFile.dialogue.insert(curSelected + 1, copyDefaultLine());
 				changeText(1);
 			}

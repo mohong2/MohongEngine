@@ -98,7 +98,7 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 		addEditorBox();
 		FlxG.mouse.visible = true;
 		updateCharTypeBox();
-		#if android
+		#if (android || desktop)
 		addVirtualPad(MENU_CHARACTER_EDITOR, MENU_CHARACTER_EDITOR);
 		#end
 
@@ -300,31 +300,31 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
-			if(#if android virtualPad.buttonB.justPressed || #end FlxG.keys.justPressed.ESCAPE) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end FlxG.keys.justPressed.ESCAPE) {
 				confirmExitMenuChar();
 			}
 
 			var shiftMult:Int = 1;
-			if(#if android virtualPad.buttonC.pressed ||#end FlxG.keys.pressed.SHIFT) shiftMult = 10;
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonC.pressed) ||#end FlxG.keys.pressed.SHIFT) shiftMult = 10;
 
-			if(#if android virtualPad.buttonLeft.justPressed ||#end FlxG.keys.justPressed.LEFT) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed) ||#end FlxG.keys.justPressed.LEFT) {
 				characterFile.position[0] += shiftMult;
 				updateOffset();
 			}
-			if(#if android virtualPad.buttonRight.justPressed ||#end FlxG.keys.justPressed.RIGHT) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed) ||#end FlxG.keys.justPressed.RIGHT) {
 				characterFile.position[0] -= shiftMult;
 				updateOffset();
 			}
-			if(#if android virtualPad.buttonUp.justPressed ||#end FlxG.keys.justPressed.UP) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonUp.justPressed) ||#end FlxG.keys.justPressed.UP) {
 				characterFile.position[1] += shiftMult;
 				updateOffset();
 			}
-			if(#if android virtualPad.buttonDown.justPressed ||#end FlxG.keys.justPressed.DOWN) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonDown.justPressed) ||#end FlxG.keys.justPressed.DOWN) {
 				characterFile.position[1] -= shiftMult;
 				updateOffset();
 			}
 
-			if(#if android virtualPad.buttonA.justPressed ||#end FlxG.keys.justPressed.SPACE && curTypeSelected == 1) {
+			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) ||#end FlxG.keys.justPressed.SPACE && curTypeSelected == 1) {
 				grpWeekCharacters.members[curTypeSelected].animation.play('confirm', true);
 			}
 		}

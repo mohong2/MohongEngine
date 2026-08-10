@@ -10,6 +10,7 @@ import haxe.xml.Access;
 import openfl.system.System;
  
 import flixel.graphics.frames.FlxAtlasFrames;
+import flixel.FlxG;
 import openfl.utils.AssetType;
 import openfl.utils.Assets as OpenFlAssets;
 import lime.utils.Assets;
@@ -25,6 +26,7 @@ import haxe.Json;
 import flash.media.Sound;
 
 using StringTools;
+import backend.OptimizedBitmapData;
 import mohong.TraceManager;
 import mohong.MemoryMonitor;
 import mohong.GPUTextureManager;
@@ -51,6 +53,7 @@ class Paths
 		'fonts',
 		'scripts',
 		'hscripts',
+		'lua',
 		'options',
 		'achievements'
 	];
@@ -129,6 +132,13 @@ class Paths
 			obj.destroy();
 	}
 
+	// FlxBar's cached bar graphics keep useCount 0 but are held by live FlxBar via _frontFrame;
+	// the periodic purge would destroy them mid-song and break the bar fill colors.
+	static inline function isFlxBarCacheKey(key:String):Bool
+	{
+		return key.startsWith('empty: ') || key.startsWith('filled: ') || key.startsWith('Gradient:');
+	}
+
 	public static function clearUnusedMemory() {
 		// clear non local assets in the tracked assets list
 		var keysToRemove:Array<String> = [];
@@ -189,7 +199,7 @@ class Paths
 		for (key in cacheKeys)
 		{
 			var obj = FlxG.bitmap._cache.get(key);
-			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key))
+			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key) && !isFlxBarCacheKey(key))
 			{
 				purgeGraphicFromCaches(obj);
 				purged++;
@@ -211,7 +221,7 @@ class Paths
 		for (key in cacheKeys)
 		{
 			var obj = FlxG.bitmap._cache.get(key);
-			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key)) {
+			if (obj != null && obj.useCount <= 0 && !currentTrackedAssets.exists(key) && !isFlxBarCacheKey(key)) {
 				purgeGraphicFromCaches(obj);
 			}
 		}
@@ -710,6 +720,18 @@ class Paths
 			// with the standard OpenFL/Flixel renderer (blank images until the
 			// graphic got re-loaded a few times). We always use the plain
 			// CPU-side FlxGraphic cache now — it is reliable and safe.
+			if (allowGPU && forceGPUUploadOnLoad && ClientPrefs.data.cacheOnGPU
+				&& bitmap.image != null && bitmap.image.buffer != null
+				&& FlxG.stage != null && FlxG.stage.context3D != null)
+			{
+				var opt:OptimizedBitmapData = OptimizedBitmapData.fromBitmapData(bitmap);
+				if (opt != null)
+				{
+					bitmap.dispose();
+					bitmap = opt;
+					OpenFlAssets.cache.setBitmapData(file, opt);
+				}
+			}
 			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file);
 		newGraphic.persist = !allowGraphicAutoFree;
 		newGraphic.destroyOnNoUse = allowGraphicAutoFree;
@@ -910,6 +932,103 @@ class Paths
 		return FlxAtlasFrames.fromSpriteSheetPacker(image(key, library), packerText);
 		#end
 	}
+
+	/**
+	 * 多图集拼接（1.0.4 loadMultipleFrames 用）。
+	 * English: merge multiple sparrow atlases into a single FlxAtlasFrames
+	 * (used by the 1.0.4 loadMultipleFrames Lua function).
+	 */
+	inline static public function getMultiAtlas(keys:Array<String>, ?parentFolder:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
+	{
+		if (keys == null || keys.length == 0) return null;
+		var parentFrames:FlxAtlasFrames = getSparrowAtlas(keys[0].trim(), parentFolder, allowGPU);
+		if (parentFrames == null) return null;
+
+		if (keys.length > 1)
+		{
+			var original:FlxAtlasFrames = parentFrames;
+			parentFrames = new FlxAtlasFrames(parentFrames.parent);
+			for (frame in original.frames)
+				parentFrames.pushFrame(frame);
+			for (i in 1...keys.length)
+			{
+				var extraFrames:FlxAtlasFrames = getSparrowAtlas(keys[i].trim(), parentFolder, allowGPU);
+				if (extraFrames != null)
+					for (frame in extraFrames.frames)
+						parentFrames.pushFrame(frame);
+			}
+		}
+		return parentFrames;
+	}
+
+	/**
+	 * 加载 Adobe Animate 图集（0.7.3+/1.0.4 FlxAnimate 用）。
+	 * English: load an Adobe Animate atlas onto a FlxAnimate sprite
+	 * (used by the 0.7.3+/1.0.4 FlxAnimate Lua functions).
+	 */
+	#if flxanimate
+	public static function loadAnimateAtlas(spr:flxanimate.PsychFlxAnimate, folderOrImg:Dynamic, spriteJson:Dynamic = null, animationJson:Dynamic = null)
+	{
+		var changedAnimJson:Bool = false;
+		var changedAtlasJson:Bool = false;
+		var changedImage:Bool = false;
+
+		if (spriteJson != null)
+		{
+			changedAtlasJson = true;
+			spriteJson = File.getContent(spriteJson);
+		}
+
+		if (animationJson != null)
+		{
+			changedAnimJson = true;
+			animationJson = File.getContent(animationJson);
+		}
+
+		// is folder or image path
+		if (Std.isOfType(folderOrImg, String))
+		{
+			var originalPath:String = folderOrImg;
+			for (i in 0...10)
+			{
+				var st:String = '$i';
+				if (i == 0) st = '';
+
+				if (!changedAtlasJson)
+				{
+					spriteJson = getTextFromFile('images/$originalPath/spritemap$st.json');
+					if (spriteJson != null)
+					{
+						changedImage = true;
+						changedAtlasJson = true;
+						folderOrImg = image('$originalPath/spritemap$st');
+						break;
+					}
+				}
+				else if (fileExists('images/$originalPath/spritemap$st.png', IMAGE))
+				{
+					changedImage = true;
+					folderOrImg = image('$originalPath/spritemap$st');
+					break;
+				}
+			}
+
+			if (!changedImage)
+			{
+				changedImage = true;
+				folderOrImg = image(originalPath);
+			}
+
+			if (!changedAnimJson)
+			{
+				changedAnimJson = true;
+				animationJson = getTextFromFile('images/$originalPath/Animation.json');
+			}
+		}
+
+		spr.loadAtlasEx(folderOrImg, spriteJson, animationJson);
+	}
+	#end
 
 	inline static public function formatToSongPath(path:String) {
 		var invalidChars = ~/[~&\\;:<>#]/;

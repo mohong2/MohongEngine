@@ -37,6 +37,11 @@ class Main {
 						Sys.println('[SEIUN ENGINE SETUP]: Failed to install ${data.name} from ${data.url}');
 						Sys.exit(1);
 					}
+				case "dev": // local development directory (e.g. hscript-seiun before it's published)
+					if (Sys.command('haxelib --quiet dev ${data.name} ${data.url}') != 0) {
+						Sys.println('[SEIUN ENGINE SETUP]: Failed to link ${data.name} to ${data.url}');
+						Sys.exit(1);
+					}
 				default: // and finally, throw an error if the library has no type
 					Sys.println('[SEIUN ENGINE SETUP]: Unable to resolve library of type "${data.type}" for library "${data.name}"');
 			}

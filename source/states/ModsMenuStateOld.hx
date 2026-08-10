@@ -357,7 +357,7 @@ class ModsMenuStateOld extends MusicBeatState
 		updatePosition();
 		FlxG.sound.play(Paths.sound('scrollMenu'));
 
-		#if TOUCH_CONTROLS
+		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, B);
 		#end
 		#if LUA_ALLOWED

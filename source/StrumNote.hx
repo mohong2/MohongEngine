@@ -3,12 +3,21 @@ package;
 import flixel.FlxG;
 import flixel.FlxSprite;
 import flixel.graphics.frames.FlxAtlasFrames;
+import openfl.utils.AssetType;
+import shaders.RGBPalette;
+import shaders.RGBPalette.RGBShaderReference;
 
 using StringTools;
 
 class StrumNote extends FlxSprite
 {
 	private var colorSwap:ColorSwap;
+	/** 0.7.3/1.0.4 兼容: 三色 RGB 引用 (懒挂载, 脚本修改才接管; 回退到 colorSwap)。 */
+	public var rgbShader:RGBShaderReference = null;
+	/** 0.7.3 兼容: useRGBShader 开关 (static 动画不染色)。 */
+	public var useRGBShader:Bool = true;
+	/** 当前材质是否为 0.7.3 白底图集 (noteSkins/*) → 用 RGB 着色器染色。 */
+	public var useRgbColor:Bool = false;
 	public var resetAnim:Float = 0;
 	private var noteData:Int = 0;
 	public var direction:Float = 90;//plan on doing scroll directions soon -bb
@@ -79,12 +88,23 @@ class StrumNote extends FlxSprite
 		animationArray[1] = animationArray[0].toLowerCase();
 		animationArray[2] = animationArray[1];
 
-		var skin:String = 'NOTE_assets';
+		// 跟随"旧版/新版 Note"设置 (Old=flat NOTE_assets, New=noteSkins/NOTE_assets)
+		var skin:String = Note.defaultNoteSkin;
 		if(PlayState.SONG != null && PlayState.SONG.arrowSkin != null && PlayState.SONG.arrowSkin.length > 1)
 			skin = PlayState.SONG.arrowSkin;
 		// 多k: 统一使用原版 ColorSwap (保证着色器生效); 自定义皮肤不自动染色
 		colorSwap = new ColorSwap();
 		shader = colorSwap.shader;
+		// 0.7.3/1.0.4 兼容: 懒挂载 RGB 引用; static 动画保持原始材质,
+		// 只有脚本修改 rgbShader 时才接管 (回退到 colorSwap)。
+		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
+		rgbShader.fallbackShader = colorSwap.shader;
+		rgbShader.enabled = false;
+		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
+		{
+			rgbShader.forceDisabled = true;
+			useRGBShader = false;
+		}
 		texture = skin;
 		scrollFactor.set();
 	}
@@ -94,12 +114,29 @@ class StrumNote extends FlxSprite
 		var lastAnim:String = null;
 		if(animation.curAnim != null) lastAnim = animation.curAnim.name;
 
+		// 0.7.3+ 自由换皮肤: 用户选择的 noteSkin 追加到材质名末尾 (仅当文件存在时)。
+		// 与 Note.reloadNote 一致: 先试直接拼接, 再试 noteSkins/ 目录。
+		var loadSkin:String = (texture != null) ? texture : Note.defaultNoteSkin;
+		var skinPostfix:String = Note.getNoteSkinPostfix();
+		if (skinPostfix.length > 0)
+		{
+			var direct:String = loadSkin + skinPostfix;
+			if (Paths.fileExists('images/' + direct + '.png', IMAGE))
+				loadSkin = direct;
+			else if (!loadSkin.startsWith('noteSkins/'))
+			{
+				var prefixed:String = 'noteSkins/' + loadSkin + skinPostfix;
+				if (Paths.fileExists('images/' + prefixed + '.png', IMAGE))
+					loadSkin = prefixed;
+			}
+		}
+
 		if(PlayState.isPixelStage)
 		{
-			loadGraphic(Paths.image('pixelUI/' + texture));
+			loadGraphic(Paths.image('pixelUI/' + loadSkin));
 			width = width / 4;
 			height = height / 5;
-			loadGraphic(Paths.image('pixelUI/' + texture), true, Math.floor(width), Math.floor(height));
+			loadGraphic(Paths.image('pixelUI/' + loadSkin), true, Math.floor(width), Math.floor(height));
 			antialiasing = false;
 			var b:Int = EKData.getBaseTexture(PlayState.mania, lane);
 			setGraphicSize(Std.int(width * PlayState.daPixelZoom * (EKData.pixelScales[PlayState.mania] / EKData.pixelScales[3])));
@@ -110,7 +147,7 @@ class StrumNote extends FlxSprite
 		}
 		else
 		{
-			frames = Paths.getSparrowAtlas(texture);
+			frames = Paths.getSparrowAtlas(loadSkin);
 			if (frames != null)
 			{
 				animation.addByPrefix('static', 'arrow' + animationArray[0]);
@@ -122,6 +159,14 @@ class StrumNote extends FlxSprite
 			}
 		}
 		updateHitbox();
+
+		// 0.7.3 材质兼容: noteSkins/* 白底图集用 RGB 着色器染色, 否则回退 ColorSwap
+		useRgbColor = (loadSkin != null && loadSkin.startsWith('noteSkins/'));
+		if (rgbShader != null)
+		{
+			rgbShader.fallbackShader = colorSwap != null ? colorSwap.shader : null;
+			rgbShader.enabled = useRgbColor;
+		}
 
 		if(lastAnim != null) playAnim(lastAnim, true);
 	}
@@ -163,7 +208,10 @@ class StrumNote extends FlxSprite
 		animation.play(anim, force);
 		centerOffsets();
 		centerOrigin();
-		if(animation.curAnim == null || animation.curAnim.name == 'static') {
+		if (useRgbColor) {
+			// 0.7.3 材质: static 显示原始白底, press/confirm 用 RGB 色板染色
+			rgbShader.enabled = (animation.curAnim != null && animation.curAnim.name != 'static');
+		} else if(animation.curAnim == null || animation.curAnim.name == 'static') {
 			colorSwap.hue = 0;
 			colorSwap.saturation = 0;
 			colorSwap.brightness = 0;

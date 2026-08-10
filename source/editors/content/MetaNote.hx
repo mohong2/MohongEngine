@@ -99,7 +99,6 @@ class MetaNote extends Note
                 centerOffsets();
                 centerOrigin();
             }
-            // 多k: 自定义皮肤 (非 NOTE_assets) 不应用调色 shader
             if (skin == 'NOTE_assets')
             {
                 if (colorSwap == null && noteData > -1 && noteType != 'Hurt Note')
@@ -108,6 +107,17 @@ class MetaNote extends Note
                     shader = colorSwap.shader;
                 }
                 applyLaneColor();
+            }
+            else if (skin.startsWith('noteSkins/'))
+            {
+                // 0.7.3 白底材质: 用该 Note 自身 k/轨道的 RGB 色板染色
+                // (编辑器里不能像 flat 那样只 applyLaneColor, 否则显示白色原图)
+                if (rgbShader != null)
+                {
+                    rgbShader.fallbackShader = (colorSwap != null) ? colorSwap.shader : null;
+                    rgbShader.rebind(Note.initializeGlobalRGBShader(noteData, mania));
+                    rgbShader.enabled = true;
+                }
             }
             else if (colorSwap != null)
             {
@@ -132,6 +142,13 @@ class MetaNote extends Note
             loadPixelNoteAnims();
 
         animation.play(colArray[baseTex()] + 'Scroll');
+        // 多k: 切 k/轨道后重绑 RGB 色板 (noteSkins 材质用)
+        if (rgbShader != null)
+        {
+            var wasEnabled:Bool = rgbShader.enabled;
+            rgbShader.rebind(Note.initializeGlobalRGBShader(this.noteData, mania));
+            rgbShader.enabled = wasEnabled;
+        }
         applyLaneColor();
         updateHitbox();
         

@@ -74,6 +74,20 @@ typedef StateRecord = {
 
 class Replay extends FlxBasic
 {
+	/** 临时调试日志 (排查回放无法进入/播放问题, 排查后可删除) */
+	public static function dbgLog(msg:String):Void
+	{
+		#if sys
+		try
+		{
+			var path:String = 'replay_debug.log';
+			var old:String = sys.FileSystem.exists(path) ? sys.io.File.getContent(path) : '';
+			sys.io.File.saveContent(path, old + msg + '\n');
+		}
+		catch (e:Dynamic) {}
+		#end
+	}
+
 	/** 帧数据 (录制时写入, 回放时读取) */
 	private var frameData:Array<FrameSave> = [];
 
@@ -89,6 +103,15 @@ class Replay extends FlxBasic
 	/** FlxKey → 轨道索引 映射 */
 	private var keyToLane:Map<FlxKey, Int> = null;
 
+	/** 全部 FlxKey 值列表 (录制时直接遍历, 按下/释放才取键名, 无上限、无字符串分配) */
+	private static var cachedKeyList:Array<FlxKey> = null;
+
+	// ---- 回放时模拟的按键状态 (供脚本 keyJustPressed/keyPressed/keyJustReleased 查询, 还原 mod 自定义机制键) ----
+	private var simPressed:Map<String, Bool> = new Map<String, Bool>();
+	private var simJustPressed:Map<String, Bool> = new Map<String, Bool>();
+	private var simJustReleased:Map<String, Bool> = new Map<String, Bool>();
+	private var simKnownKeys:Map<String, Bool> = new Map<String, Bool>();
+
 	/** 轨道数量 (4K = 4) */
 	private var laneCount:Int = 0;
 
@@ -100,9 +123,6 @@ class Replay extends FlxBasic
 	/** 每帧"补长条/空闲动画"用的空事件数组 (避免每帧 GC) */
 	private var tmpEmptyPress:Array<Int> = [];
 	private var tmpEmptyRelease:Array<Int> = [];
-
-	/** 缓存的按键名称列表 (所有 FlxKey 的字符串名) */
-	private static var cachedKeyNames:Array<String> = null;
 
 	// ---- 高精度判定回放 ----
 	public var hasJudgments(default, null):Bool = false;
@@ -144,6 +164,7 @@ class Replay extends FlxBasic
 		frameData = [];
 		keysHeld = new Map<FlxKey, Bool>();
 		pendingJudgments = [];
+		resetSimState();
 		lastRecordedSongSpeed = PlayState.instance != null ? PlayState.instance.songSpeed : 1;
 		lastRecordedPlaybackRate = PlayState.instance != null ? PlayState.instance.playbackRate : 1;
 		lastFrameCount = 0;
@@ -163,6 +184,7 @@ class Replay extends FlxBasic
 	{
 		isRecording = false;
 		frameData = frames != null ? frames.copy() : [];
+		resetSimState();
 		buildJudgmentMap();
 		if (stateRecord != null) restoreState(stateRecord);
 		ensureLaneMap();
@@ -172,9 +194,12 @@ class Replay extends FlxBasic
 	public function loadFromFile(path:String):Void
 	{
 		#if sys
+		Replay.dbgLog('[DEBUG-rpl] loadFromFile path=$path');
 		isRecording = false;
+		resetSimState();
 		if (path == null || !FileSystem.exists(path))
 		{
+			Replay.dbgLog('[DEBUG-rpl] loadFromFile: file missing');
 			CoolUtil.traceMsg('trace.errReplayLoad', 'Replay file not found: {}', [path]);
 			frameData = [];
 			return;
@@ -184,19 +209,63 @@ class Replay extends FlxBasic
 			var content:String = File.getContent(path);
 			var json:Dynamic = Json.parse(content);
 			frameData = (json.frameRecord != null) ? json.frameRecord : [];
+			Replay.dbgLog('[DEBUG-rpl] loadFromFile parsed, frameData=' + frameData.length);
 			if (json.stateRecord != null) restoreState(json.stateRecord);
 			buildJudgmentMap();
 			ensureLaneMap();
 			lastFrameCount = 0;
 			globalTick = 0;
 			lastReplayTimeForResync = Math.NaN;
+			Replay.dbgLog('[DEBUG-rpl] loadFromFile OK');
 		}
 		catch (e:Dynamic)
 		{
+			Replay.dbgLog('[DEBUG-rpl] loadFromFile EXCEPTION: ' + Std.string(e));
 			CoolUtil.traceMsg('trace.errReplayLoad', 'Failed to load replay: {}', [e]);
 			frameData = [];
 		}
 		#end
+	}
+
+	/** 清空回放模拟按键状态 (加载回放/开始录制时调用) */
+	private function resetSimState():Void
+	{
+		simPressed.clear();
+		simJustPressed.clear();
+		simJustReleased.clear();
+		simKnownKeys.clear();
+	}
+
+	// ======================== 回放模拟按键 (供脚本 API) ========================
+
+	/** 回放中: 该键是否在录制数据中出现过 (决定脚本查询是否以模拟状态为准) */
+	public function keyExists(keyName:String):Bool
+	{
+		return simKnownKeys.exists(normalizeKeyName(keyName));
+	}
+
+	/** 回放中: 该键本帧是否刚按下 (与 keyJustPressed('space') 等脚本 API 对应) */
+	public function keyJustPressed(keyName:String):Bool
+	{
+		return simJustPressed.get(normalizeKeyName(keyName)) == true;
+	}
+
+	/** 回放中: 该键当前是否按住 */
+	public function keyPressed(keyName:String):Bool
+	{
+		return simPressed.get(normalizeKeyName(keyName)) == true;
+	}
+
+	/** 回放中: 该键本帧是否刚释放 */
+	public function keyJustReleased(keyName:String):Bool
+	{
+		return simJustReleased.get(normalizeKeyName(keyName)) == true;
+	}
+
+	static inline function normalizeKeyName(keyName:String):String
+	{
+		if (keyName == null) return '';
+		return keyName.toUpperCase();
 	}
 
 	/** 构建判定映射 (用于精确回放) */
@@ -345,6 +414,15 @@ class Replay extends FlxBasic
 		super.update(elapsed);
 		if (!isRecording || PlayState.instance == null) return;
 
+		// 不保存回放数据时, 录制产物不会被消费 (Allscore 只在 saveReplayData 时取帧),
+		// 直接跳过整个录制管线, 避免狂按时每帧全键盘扫描造成掉帧。
+		if (!ClientPrefs.data.saveReplayData)
+		{
+			_pendingPressKeys.resize(0);
+			_pendingReleaseKeys.resize(0);
+			return;
+		}
+
 		var ps = PlayState.instance;
 		// 只在"按键事件 / 判定 / 变速或倍速变化"时才录帧；
 		// 去掉了原先的强制 60fps 匀速采样，静默停顿帧不再重复写入，
@@ -393,18 +471,18 @@ class Replay extends FlxBasic
 		var pressKey:Array<String> = [];
 		var releaseKey:Array<String> = [];
 
-		if (cachedKeyNames == null)
-			cachedKeyNames = [for (k in FlxKey.toStringMap.keys()) k];
-
-		for (keyName in cachedKeyNames)
+		// 直接遍历全部键 (无上限, 任意 mod 自定义键都会被录制还原):
+		// 只做 checkStatus 查找, 按下/释放时才取键名字符串, 避免旧实现的
+		// 200+ 键 x (toUpperCase + 多次 Map 查找) 字符串分配开销。
+		if (cachedKeyList == null)
+			cachedKeyList = [for (k in FlxKey.toStringMap.keys()) k];
+		for (flxKey in cachedKeyList)
 		{
-			var key:FlxKey = FlxKey.toStringMap.get(keyName);
-			if (key == FlxKey.ANY || key == FlxKey.NONE) continue;
-
-			if (FlxG.keys.checkStatus(key, JUST_PRESSED))
-				pressKey.push(keyName);
-			if (FlxG.keys.checkStatus(key, JUST_RELEASED))
-				releaseKey.push(keyName);
+			if (flxKey == FlxKey.ANY || flxKey == FlxKey.NONE) continue;
+			if (FlxG.keys.checkStatus(flxKey, JUST_PRESSED))
+				pressKey.push(FlxKey.toStringMap.get(flxKey));
+			if (FlxG.keys.checkStatus(flxKey, JUST_RELEASED))
+				releaseKey.push(FlxKey.toStringMap.get(flxKey));
 		}
 
 		// 合并由安卓控件直接通知的按键（不修改 FlxG.keys，避免 Controls 系统二次判定）
@@ -475,11 +553,22 @@ class Replay extends FlxBasic
 	public function replayUpdate(elapsed:Float):Void
 	{
 		if (isRecording || PlayState.instance == null) return;
-		if (frameData.length == 0) return;
+		if (frameData.length == 0)
+		{
+			Replay.dbgLog('[DEBUG-rpl] replayUpdate: frameData empty, cannot play');
+			return;
+		}
 
 		var ps = PlayState.instance;
 		var targetSongPos:Float = Conductor.songPosition;
 		ensureLaneMap();
+
+		if (globalTick == 0)
+			Replay.dbgLog('[DEBUG-rpl] replayUpdate start, frames=' + frameData.length + ' songPos=' + targetSongPos);
+
+		// 每帧开始时清空"刚按下/刚释放"边缘状态 (按住状态保留到释放为止)
+		simJustPressed.clear();
+		simJustReleased.clear();
 
 		while (lastFrameCount < frameData.length && frameData[lastFrameCount].time <= targetSongPos)
 		{
@@ -512,6 +601,11 @@ class Replay extends FlxBasic
 				var lane:Null<Int> = keyToLane.get(flxKey);
 				if (lane != null) tmpPressLanes.push(lane);
 				keysHeld.set(flxKey, true);
+				// 记录模拟按键状态 (供脚本 keyJustPressed/keyPressed 查询)
+				var simName:String = normalizeKeyName(keyName);
+				simPressed.set(simName, true);
+				simJustPressed.set(simName, true);
+				simKnownKeys.set(simName, true);
 			}
 
 			buildHeldLanes();
@@ -522,6 +616,11 @@ class Replay extends FlxBasic
 				var lane:Null<Int> = keyToLane.get(flxKey);
 				if (lane != null) tmpReleaseLanes.push(lane);
 				keysHeld.remove(flxKey);
+				// 记录模拟按键状态 (供脚本 keyJustReleased 查询)
+				var simName:String = normalizeKeyName(keyName);
+				simPressed.remove(simName);
+				simJustReleased.set(simName, true);
+				simKnownKeys.set(simName, true);
 			}
 
 			// 通知 PlayState 处理按键
@@ -529,6 +628,8 @@ class Replay extends FlxBasic
 
 			lastFrameCount++;
 			globalTick++;
+			if (globalTick % 120 == 0)
+				Replay.dbgLog('[DEBUG-rpl] replayUpdate progress lastFrameCount=' + lastFrameCount + '/' + frameData.length + ' songPos=' + targetSongPos);
 		}
 
 		// 关键：每帧都基于当前按键状态补一次"长条命中 / 空闲动画"。
