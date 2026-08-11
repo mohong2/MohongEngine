@@ -26,7 +26,6 @@ import haxe.Json;
 import flash.media.Sound;
 
 using StringTools;
-import backend.OptimizedBitmapData;
 import mohong.TraceManager;
 import mohong.MemoryMonitor;
 import mohong.GPUTextureManager;
@@ -709,7 +708,7 @@ class Paths
 				#end {
 					if (OpenFlAssets.exists(file, IMAGE)) bitmap = OpenFlAssets.getBitmapData(file);
 				}
-				if (bitmap == null) return null;
+			if (bitmap == null) return null;
 			}
 
 			localTrackedAssets.push(file);
@@ -720,18 +719,6 @@ class Paths
 			// with the standard OpenFL/Flixel renderer (blank images until the
 			// graphic got re-loaded a few times). We always use the plain
 			// CPU-side FlxGraphic cache now — it is reliable and safe.
-			if (allowGPU && forceGPUUploadOnLoad && ClientPrefs.data.cacheOnGPU
-				&& bitmap.image != null && bitmap.image.buffer != null
-				&& FlxG.stage != null && FlxG.stage.context3D != null)
-			{
-				var opt:OptimizedBitmapData = OptimizedBitmapData.fromBitmapData(bitmap);
-				if (opt != null)
-				{
-					bitmap.dispose();
-					bitmap = opt;
-					OpenFlAssets.cache.setBitmapData(file, opt);
-				}
-			}
 			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file);
 		newGraphic.persist = !allowGraphicAutoFree;
 		newGraphic.destroyOnNoUse = allowGraphicAutoFree;

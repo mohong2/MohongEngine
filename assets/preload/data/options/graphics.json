@@ -35,7 +35,7 @@
 		"defaultDesc": "If checked, allows the GPU to be used for caching textures, decreasing RAM usage.\nDon't turn this on if you have a shitty Graphics Card.",
 		"variable": "cacheOnGPU",
 		"type": "bool",
-		"defaultValue": true
+		"defaultValue": false
 	},
 	{
 		"nameKey": "option.separateUpdateDraw",

@@ -960,7 +960,7 @@ class PlayState extends MusicBeatState
 		}
 		updateTime = showTime;
 
-		timeBarBG = new AttachedSprite('timeBar', null, null, false, false);
+		timeBarBG = new AttachedSprite('timeBar');
 		timeBarBG.x = timeTxt.x;
 		timeBarBG.y = timeTxt.y + (timeTxt.height / 4);
 		timeBarBG.scrollFactor.set();
@@ -1095,7 +1095,7 @@ class PlayState extends MusicBeatState
 			healthBar = compatBar;
 			healthBarBG = null;
 		} else {
-			healthBarBG = new AttachedSprite('healthBar', null, null, false, false);
+			healthBarBG = new AttachedSprite('healthBar');
 			healthBarBG.y = FlxG.height * 0.89;
 			healthBarBG.screenCenter(X);
 			healthBarBG.scrollFactor.set();

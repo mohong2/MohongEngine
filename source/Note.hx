@@ -593,14 +593,17 @@ class Note extends FlxSprite {
         var blahblah:String = arraySkin.join('/');
 
         // 0.7.3+ 自由换皮肤: 用户选择的 noteSkin 追加到材质名末尾 (仅当文件存在时)。
-        // 优先直接匹配, 再尝试 noteSkins/ 目录, 保证只用原版资源也能切换。
+        // 优先直接匹配: 新版材质是 noteSkins/NOTE_assets-<skin>,
+        // 旧版材质是 NOTE_assets-<skin> (模组可以提供旧版皮肤文件)。
+        // 旧版材质 (noteStyle=Old) 绝不回退到 noteSkins/* —— 那会把旧版强行切回新版材质;
+        // 旧版皮肤文件不存在时保持旧版默认材质。
         var skinPostfix:String = Note.getNoteSkinPostfix();
         if (skinPostfix.length > 0)
         {
             var direct:String = blahblah + skinPostfix;
             if (Paths.fileExists('images/' + direct + '.png', IMAGE))
                 blahblah = direct;
-            else if (!blahblah.startsWith('noteSkins/'))
+            else if (ClientPrefs.data.noteStyle == 'New' && !blahblah.startsWith('noteSkins/'))
             {
                 var prefixed:String = 'noteSkins/' + blahblah + skinPostfix;
                 if (Paths.fileExists('images/' + prefixed + '.png', IMAGE))

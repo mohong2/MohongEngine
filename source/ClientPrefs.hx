@@ -115,7 +115,7 @@ import sys.io.Process;
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	public var cacheOnGPU:Bool = true;
+	public var cacheOnGPU:Bool = false;
 	public var preloadAssets:Bool = false;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;

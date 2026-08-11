@@ -69,6 +69,11 @@ class NoteSplash extends FlxSprite
 	/** 当前图集可用的动画组数 (每组 4 个方向)。 */
 	private var maxAnims:Int = 1;
 
+	/** 多k: 溅射位置缩放 (noteScale, 与 strum/Note 同比例)。 */
+	private var _posScale:Float = 1;
+	/** 多k: 溅射尺寸缩放 (splashScales, 0.6.3 多k 的溅射大小设计)。 */
+	private var _sizeScale:Float = 1;
+
 	// ── 当前图集生效的配置 (来自 txt / json) ──
 	private var _animPrefix:String = 'note splash';
 	private var _minFps:Int = 22;
@@ -218,6 +223,42 @@ class NoteSplash extends FlxSprite
 		{
 			setGraphicSize(Std.int(frameWidth * sizeScale));
 		}
+
+		// 多k: 记录缩放, 逐帧把溅射中心对齐到 strum 中心。位置按 posScale
+		// 缩放、尺寸按 sizeScale 缩放, 而图集帧自带的 frameX/frameY
+		// (新旧材质的 trim 数值不同) 只随尺寸缩放, 两者不一致时溅射会
+		// 整体偏左/偏上, k 越大越明显。
+		_posScale = posScale;
+		_sizeScale = sizeScale;
+		applyManiaOffsetCompensation();
+	}
+
+	/**
+	 * 多k: 补偿当前动画帧的 frameX/frameY 缩放偏差。
+	 * 溅射位置按 posScale 缩放、尺寸按 sizeScale 缩放, 而图集帧自带的
+	 * frameX/frameY (trim) 渲染时跟随尺寸缩放, 且 FlxSprite 在加载图集时
+	 * 会 centerOrigin (origin = 首帧中心)。实际渲染:
+	 * 可见区左上角 = (x - offset) + origin*(1-sizeScale) + frame.offset*sizeScale,
+	 * 其中 origin*(1-sizeScale) 项在缩放 ≠ 1 时会把整张贴图往右下推,
+	 * 这正是之前"越修越偏"的原因。
+	 * 这里按当前帧的可见矩形把溅射中心对齐到 strum 中心
+	 * (strum.x + swagWidth/2*posScale), 与 4K 原版"溅射中心≈strum 中心"
+	 * 的观感一致, 新旧材质通用。
+	 * 4K 下 sizeScale == posScale, 保持原版行为; 每帧 trim/尺寸不同,
+	 * 动画推进后要重新计算。
+	 */
+	function applyManiaOffsetCompensation():Void
+	{
+		if (_sizeScale == _posScale) return;
+		var cur:FlxFrame = frame;
+		if (cur == null) return;
+
+		var fOff = cur.offset;
+		var fRect = cur.frame;
+		offset.x = origin.x * (1 - _sizeScale) + fOff.x * _sizeScale + (fRect.width / 2) * _sizeScale
+			- (Note.swagWidth * 0.95 + Note.swagWidth / 2) * _posScale;
+		offset.y = origin.y * (1 - _sizeScale) + fOff.y * _sizeScale + (fRect.height / 2) * _sizeScale
+			- (Note.swagWidth + Note.swagWidth / 2) * _posScale;
 	}
 
 	/**
@@ -500,6 +541,10 @@ class NoteSplash extends FlxSprite
 			kill();
 
 		super.update(elapsed);
+
+		// 动画推进后当前帧的 frameX/frameY 变了, 重新补偿 trim 缩放偏差
+		if (alive)
+			applyManiaOffsetCompensation();
 	}
 }
 

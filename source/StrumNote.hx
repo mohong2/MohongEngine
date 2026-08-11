@@ -115,7 +115,9 @@ class StrumNote extends FlxSprite
 		if(animation.curAnim != null) lastAnim = animation.curAnim.name;
 
 		// 0.7.3+ 自由换皮肤: 用户选择的 noteSkin 追加到材质名末尾 (仅当文件存在时)。
-		// 与 Note.reloadNote 一致: 先试直接拼接, 再试 noteSkins/ 目录。
+		// 与 Note.reloadNote 一致: 先试直接拼接 (旧版 NOTE_assets-<skin> /
+		// 新版 noteSkins/NOTE_assets-<skin>), 旧版材质绝不回退到 noteSkins/*,
+		// 否则会把旧版 Note 风格强行切回新版材质。
 		var loadSkin:String = (texture != null) ? texture : Note.defaultNoteSkin;
 		var skinPostfix:String = Note.getNoteSkinPostfix();
 		if (skinPostfix.length > 0)
@@ -123,7 +125,7 @@ class StrumNote extends FlxSprite
 			var direct:String = loadSkin + skinPostfix;
 			if (Paths.fileExists('images/' + direct + '.png', IMAGE))
 				loadSkin = direct;
-			else if (!loadSkin.startsWith('noteSkins/'))
+			else if (ClientPrefs.data.noteStyle == 'New' && !loadSkin.startsWith('noteSkins/'))
 			{
 				var prefixed:String = 'noteSkins/' + loadSkin + skinPostfix;
 				if (Paths.fileExists('images/' + prefixed + '.png', IMAGE))
