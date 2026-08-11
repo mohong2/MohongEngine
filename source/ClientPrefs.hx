@@ -62,8 +62,6 @@ import sys.io.Process;
 	public var hitboxBorder:Bool = true;
 	/** 桌面端触屏支持: 开启后把安卓移动端控件(虚拟按键/Hitbox)带到电脑上, 可用鼠标或触屏操作。 */
 	public var touchControls:Bool = false;
-	/** 安卓自适应分辨率: 不锁 1280x720, 启动时按设备最大分辨率扩展世界并填满屏幕 (重启生效)。 */
-	public var adaptiveResolution:Bool = false;
 	public var downScroll:Bool = false;
 	public var middleScroll:Bool = false;
 	public var opponentStrums:Bool = true;

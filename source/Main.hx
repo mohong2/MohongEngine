@@ -6,7 +6,6 @@ import flixel.graphics.FlxGraphic;
 import flixel.FlxGame;
 import flixel.FlxG;
 import flixel.FlxState;
-import flixel.util.FlxSave;
 import openfl.Assets;
 import openfl.Lib;
 import openfl.display.FPS;
@@ -164,40 +163,6 @@ class Main extends Sprite
 	{
 		var stageWidth:Int = Lib.current.stage.stageWidth;
 		var stageHeight:Int = Lib.current.stage.stageHeight;
-
-		#if mobile
-		// 安卓/手机「自适应分辨率」: 不再锁 1280x720, 按设备最大分辨率等比扩展世界并填满整个屏幕。
-		// 注意: Flixel 完全初始化之前绝对不能调用 ClientPrefs.loadPrefs()——
-		// 它内部访问 FlxG.sound / FlxG.stage / FlxG.updateFramerate 等运行时对象,
-		// 在 FlxGame 创建前会空指针闪退。这里只用一个独立的 FlxSave 实例
-		// 读取 adaptiveResolution 单个字段, 失败静默回退默认值 (关闭)。
-		var adaptiveResolutionOn:Bool = false;
-		if (stageWidth > 0 && stageHeight > 0)
-		{
-			try
-			{
-				var earlySave:FlxSave = new FlxSave();
-				if (earlySave.bind('funkin', 'ninjamuffin99'))
-					adaptiveResolutionOn = (Reflect.field(earlySave.data, 'adaptiveResolution') == true);
-			}
-			catch (e:Dynamic)
-			{
-				adaptiveResolutionOn = false;
-			}
-		}
-		if (adaptiveResolutionOn)
-		{
-			var ratioX:Float = stageWidth / gameWidth;
-			var ratioY:Float = stageHeight / gameHeight;
-			var adaptiveZoom:Float = Math.min(ratioX, ratioY);
-			if (adaptiveZoom > 0)
-			{
-				zoom = adaptiveZoom;
-				gameWidth = Math.ceil(stageWidth / adaptiveZoom);
-				gameHeight = Math.ceil(stageHeight / adaptiveZoom);
-			}
-		}
-		#end
 
 		if (zoom == -1)
 		{

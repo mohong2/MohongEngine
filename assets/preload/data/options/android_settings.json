@@ -75,15 +75,5 @@
 		"defaultValue": "EXTERNAL_DATA",
 		"options": ["EXTERNAL_DATA", "EXTERNAL", "EXTERNAL_OBB", "EXTERNAL_MEDIA"],
 		"platform": "mobile"
-	},
-	{
-		"nameKey": "option.adaptiveResolution",
-		"defaultName": "Adaptive Resolution",
-		"descKey": "option.adaptiveResolution.desc",
-		"defaultDesc": "Use the device's full resolution instead of the fixed 1280x720,\nfilling the whole screen with sharper visuals.\nTakes effect after restarting the game.\nMay lower performance on weak devices.",
-		"variable": "adaptiveResolution",
-		"type": "bool",
-		"defaultValue": false,
-		"platform": "mobile"
 	}
 ]
