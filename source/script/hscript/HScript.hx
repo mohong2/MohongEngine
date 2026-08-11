@@ -293,7 +293,9 @@ class HScript
 		// ── 静态/公开变量 + 错误与导入回调 (hscript-seiun) ──
 		interp.allowStaticVariables = true;
 		interp.allowPublicVariables = true;
-		interp.errorHandler = function(e) TraceManager.error('trace.hscript.interpError', 'HScript error in ${scriptName}: $e');
+		interp.errorHandler = function(e) {
+			TraceManager.error('trace.hscript.interpError', 'HScript error in ${scriptName}: $e');
+		};
 		interp.importFailedCallback = importFailedCallback;
 		parser = new Parser();
 		parser.allowTypes = true;
@@ -1074,7 +1076,10 @@ class HScript
 		@:privateAccess parser.line = 1;
 		parser.allowTypes = true;
 		var expr = parser.parseString(codeToRun);
-		return interp.execute(expr);
+		var result:Dynamic = interp.execute(expr);
+		// 执行成功：重置连续错误计数。
+		errorLoopCount = 0;
+		return result;
 	}
 
 	public function call(func:String, args:Array<Dynamic>):Dynamic {

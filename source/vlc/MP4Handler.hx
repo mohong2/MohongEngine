@@ -3,6 +3,7 @@ package vlc;
 #if hxvlc
 import flixel.FlxG;
 import hxvlc.flixel.FlxInternalVideo;
+import openfl.display.BitmapData;
 import openfl.events.Event;
 import sys.FileSystem;
 
@@ -32,6 +33,15 @@ class MP4Handler extends FlxInternalVideo
 	public var repeat(get, set):Int;
 	public var location(get, never):String;
 
+	/**
+	 * hxCodec 2.5.1 兼容：显式公开当前视频帧位图。
+	 * 模组常通过 `loadGraphic(video.bitmapData)` 把视频帧渲染到自己的 sprite 上，
+	 * 这里 override 成公开 getter，保证 hscript/Lua 的 `video.bitmapData` 一定能访问到。
+	 */
+	public override function get_bitmapData():BitmapData {
+		return super.bitmapData;
+	}
+
 	public function new(width:Float = 320, height:Float = 240, autoScale:Bool = true)
 	{
 		super();
@@ -54,10 +64,24 @@ class MP4Handler extends FlxInternalVideo
 		onEndReached.add(onVLCComplete);
 		onEncounteredError.add(onVLCError);
 
-		FlxG.addChildBelowMouse(this);
+		try
+		{
+			FlxG.addChildBelowMouse(this);
+		}
+		catch (e:Dynamic)
+		{
+			trace('MP4Handler: addChildBelowMouse failed: $e');
+		}
 
 		#if FLX_KEYBOARD
-		FlxG.stage.addEventListener(Event.ENTER_FRAME, update);
+		try
+		{
+			FlxG.stage.addEventListener(Event.ENTER_FRAME, update);
+		}
+		catch (e:Dynamic)
+		{
+			trace('MP4Handler: addEventListener failed: $e');
+		}
 		#end
 	}
 
@@ -180,17 +204,24 @@ class MP4Handler extends FlxInternalVideo
 
 		_finishing = true;
 
-		if (pauseMusic && FlxG.sound.music != null)
-			FlxG.sound.music.resume();
+		try
+		{
+			if (pauseMusic && FlxG.sound.music != null)
+				FlxG.sound.music.resume();
 
-		#if FLX_KEYBOARD
-		FlxG.stage.removeEventListener(Event.ENTER_FRAME, update);
-		#end
+			#if FLX_KEYBOARD
+			FlxG.stage.removeEventListener(Event.ENTER_FRAME, update);
+			#end
 
-		dispose();
+			dispose();
 
-		if (FlxG.game.contains(this))
-			FlxG.game.removeChild(this);
+			if (FlxG.game.contains(this))
+				FlxG.game.removeChild(this);
+		}
+		catch (e:Dynamic)
+		{
+			trace('MP4Handler: finishVideo cleanup failed: $e');
+		}
 
 		_finishing = false;
 
@@ -215,10 +246,28 @@ class MP4Handler extends FlxInternalVideo
 		var videoPath = checkFile(path);
 		_location = videoPath;
 
-		if (load(videoPath))
-			play();
-		else
+		try
+		{
+			if (load(videoPath))
+			{
+				try
+				{
+					play();
+				}
+				catch (e:Dynamic)
+				{
+					trace('MP4Handler: play() failed: $e');
+					onVLCError('Unable to play video: $path');
+				}
+			}
+			else
+				onVLCError('Unable to load video: $path');
+		}
+		catch (e:Dynamic)
+		{
+			trace('MP4Handler: load() failed: $e');
 			onVLCError('Unable to load video: $path');
+		}
 	}
 
 	@:noCompletion
