@@ -50,6 +50,12 @@ class PerfTest
 		enabled = true;
 		if (idx + 1 < args.length)
 			mode = args[idx + 1];
+		// 可选：第三个参数指定次数（默认 20）——短验证跑 3 次即可
+		if (idx + 2 < args.length)
+		{
+			var n:Null<Int> = Std.parseInt(args[idx + 2]);
+			if (n != null && n > 0) maxRetries = n;
+		}
 		#else
 		return;
 		#end
@@ -99,14 +105,14 @@ class PerfTest
 
 	/**
 	 * 从已安装 mod 中找第一张谱面并启动。
-	 * （本机 assets/data 为空，可玩谱面全部来自 mods/*/data。）
+	 * （本机 assets/data 为空，可玩谱面全部来自 mods/<mod>/data。）
 	 */
 	static function startSong():Void
 	{
 		var found:FoundChart = findFirstChart();
 		if (found == null)
 		{
-			TraceManager.error('perfTest.noChart', 'No playable chart found under mods/*/data - aborting.');
+			TraceManager.error('perfTest.noChart', 'No playable chart found under mods/<mod>/data - aborting.');
 			finish();
 			return;
 		}
@@ -152,7 +158,7 @@ class PerfTest
 	static function snapshot(label:String):Void
 	{
 		var f:MemoryMonitor.FrameStats = MemoryMonitor.getFrameStats();
-		var r:RenderStats = RenderOptimizer.getStats();
+		var r:RenderOptimizer.RenderStats = RenderOptimizer.getStats();
 		var line:String = '$label | mem=${Std.int(MemoryMonitor.currentMemoryUsage / 1024 / 1024)}MB '
 			+ 'peak=${Std.int(MemoryMonitor.peakMemoryUsage / 1024 / 1024)}MB '
 			+ 'cached=${MemoryMonitor.cachedGraphicCount} living=${MemoryMonitor.livingGraphicCount} '
