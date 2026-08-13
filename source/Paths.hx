@@ -7,7 +7,6 @@ import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
 import openfl.geom.Rectangle;
 import flixel.math.FlxRect;
 import haxe.xml.Access;
-import openfl.system.System;
  
 import flixel.graphics.frames.FlxAtlasFrames;
 import flixel.FlxG;
@@ -161,7 +160,8 @@ class Paths
 			}
 		}
 		// run the garbage collector for good measure lmfao
-		System.gc();
+		// （perf P0-3 已移除：强制 System.gc() 会在切歌时同步全堆标记清扫，
+		//   造成数百 ms 顿挫；回收交给 hxcpp 运行时默认行为。）
 	}
 
 	/**
