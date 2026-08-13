@@ -1,0 +1,15 @@
+{
+	"name": "openfl",
+	"url": "http://www.openfl.org",
+	"license": "MIT",
+	"tags": [],
+	"description": "The \"Open Flash Library\" for fast 2D development",
+	"version": "9.2.1",
+	"releasenote": "Various bug fixes",
+	"contributors": [
+		"singmajesty",
+		"bowlerhat",
+		"Dimensionscape"
+	],
+	"classPath": "src"
+}
