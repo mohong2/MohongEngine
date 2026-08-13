@@ -627,6 +627,12 @@ class Note extends FlxSprite {
      */
     public function releaseToPool():Void
     {
+        // 已被 FlxSprite.destroy() 的实例不可复活（scale/offset/origin 等
+        // 字段已置 null，updateHitbox/loadGraphic 会直接解引用崩溃）——
+        // 歌曲中途被 kill+destroy 的 note 就属于这种情况，直接丢弃交 GC。
+        if (scale == null)
+            return;
+
         // ── Note 层可变状态清零（setupNoteData 会重设大部分，这里兜底清干净） ──
         extraData.clear();
         tail = [];

@@ -6508,18 +6508,11 @@ if (!cpuControlled) {
 		if (NoteMs != null) NoteMs = [];
 		if (NoteTime != null) NoteTime = [];
 
-		// Note 对象池（mohong.ObjectPool）：把还属于本状态的 Note 全部归还池。
-		// 只 remove 不 destroy —— 渲染资源释放由 note.releaseToPool() 内部完成；
-		// 这样下次 generateSong 借出时直接复用实例，避免高密度谱面反复分配数千个 Note。
-		if (notes != null)
-		{
-			for (note in notes.members)
-			{
-				if (note != null)
-					note.releaseToPool();
-			}
-			notes.clear();
-		}
+		// Note 对象池（mohong.ObjectPool）：销毁前把本首歌的 Note 全部归还池。
+		// 注意：unspawnNotes 是游标设计——已生成的 Note 会一直留在数组里
+		// （spawn 只前进 notesAddedCount 游标），所以这里遍历 unspawnNotes
+		// 恰好覆盖本首歌的全部 Note 且每个只归还一次；
+		// notes 组只 clear（解绑分组），对象释放由 releaseToPool 内部完成。
 		if (unspawnNotes != null)
 		{
 			for (note in unspawnNotes)
@@ -6529,6 +6522,8 @@ if (!cpuControlled) {
 			}
 			unspawnNotes = [];
 		}
+		if (notes != null)
+			notes.clear();
 		// 1.0.4: 清理溅射配置缓存, 防止跨谱面/换模组时串配置
 		NoteSplash.configs.clear();
 		if (eventNotes != null) eventNotes = [];
