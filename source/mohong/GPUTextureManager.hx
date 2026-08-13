@@ -4,82 +4,74 @@ import flixel.graphics.FlxGraphic;
 import openfl.display.BitmapData;
 
 /**
- * Texture / bitmap memory manager (rewritten).
+ * 贴图内存记账器（mohong 重写版）。
  *
- * The previous version uploaded every bitmap to a Stage3D RectangleTexture and
- * wrapped it back with BitmapData.fromTexture(), which broke image rendering
- * with the standard OpenFL/Flixel renderer (blank images until the asset was
- * loaded a few times). This engine does not use Stage3D rendering, so that
- * path was both useless and harmful.
+ * 解决什么问题：
+ *   旧实现保留了一堆 Stage3D 时代的"兼容别名"（trackTextureAllocation 等），
+ *   全部零调用；真正的 trackGraphic 也从没被任何加载路径调用，
+ *   estimatedVRAMUsage 恒为 0——又是一个假接口。重写为纯记账：
+ *   按 FlxGraphic 位图尺寸估算显存占用，与 Paths 的加载/销毁生命周期真实联动。
  *
- * This rewrite is a lightweight, safe bookkeeper: it estimates the memory used
- * by FlxGraphic bitmaps and exposes diagnostics. It never disposes textures on
- * its own — all disposal is left to Flixel's own refcounted FlxGraphic cache,
- * which only frees bitmaps that no sprite references anymore.
+ * 挂在哪个真实调用点：
+ *   - Paths.cacheBitmap：新 FlxGraphic 入缓存时调用 trackGraphic（真实加载点）；
+ *   - Paths.purgeGraphicFromCaches：贴图被清理/销毁前调用 untrackGraphic
+ *     （真实销毁点，与 FlxG.bitmap 的 useCount/zombie 守卫走同一条路径）。
+ *
+ * 怎么验证它真的在工作：
+ *   - 加载一张大图后 estimatedVRAMUsage 增加对应字节数；
+ *   - 切歌/清缓存后回落，且峰值峰值 peakVRAMUsage 保留；
+ *   - getDiagnostics() 的计数与 MemoryMonitor.cachedGraphicCount 趋势一致。
+ *
+ * 明确不做：不 dispose 任何贴图（销毁全部交给 Flixel 引用计数与 Paths 的
+ * zombie 守卫），不做 Stage3D 纹理上传（引擎不用 Stage3D）。
  */
 class GPUTextureManager
 {
-	// ═══════════════════════════════════════
-	//  Configurable settings (soft-coded)
-	// ═══════════════════════════════════════
-
-	/** Whether texture memory management is enabled. */
+	/** 是否启用记账（ClientPrefs.texturePooling 接线）。 */
 	public static var managementEnabled:Bool = true;
 
-	/** Maximum number of pooled textures per size category (kept for compat). */
-	public static var maxPooledTexturesPerSize:Int = 8;
-
-	/** Whether to log texture allocation/deallocation events. */
+	/** 是否输出纹理跟踪日志（诊断用）。 */
 	public static var logTextureEvents:Bool = false;
 
-	/** Estimated memory usage in bytes (tracked). */
+	/** 当前估算的贴图内存占用（字节）。 */
 	public static var estimatedVRAMUsage(get, never):Float;
 
-	/** Peak memory usage observed. */
+	/** 观测到的估算峰值（字节）。 */
 	public static var peakVRAMUsage:Float = 0;
 
-	// ═══════════════════════════════════════
-	//  Internal state
-	// ═══════════════════════════════════════
-
-	/** Tracked bitmap memory per asset key. */
-	static var _trackedMemory:Map<String, Float> = new Map<String, Float>();
-
-	/** Count of tracked allocations. */
-	static var _texturesCreated:Int = 0;
-
-	/** Count of tracked disposals. */
-	static var _texturesDisposed:Int = 0;
-
-	/** Cached estimate of bytes per pixel (RGBA = 4 bytes). */
+	/** 每像素字节数（RGBA 位图）。 */
 	static final BYTES_PER_PIXEL:Float = 4.0;
 
-	/** Current VRAM/bitmap estimate. */
-	static var _vramEstimate:Float = 0;
+	/** key → 估算字节数。 */
+	static var _trackedMemory:Map<String, Float> = new Map<String, Float>();
 
-	// ═══════════════════════════════════════
-	//  Property accessors
-	// ═══════════════════════════════════════
+	static var _vramEstimate:Float = 0;
+	static var _texturesCreated:Int = 0;
+	static var _texturesDisposed:Int = 0;
 
 	static function get_estimatedVRAMUsage():Float
 	{
 		return _vramEstimate;
 	}
 
-	// ═══════════════════════════════════════
-	//  Public API
-	// ═══════════════════════════════════════
-
-	/** Register a FlxGraphic's bitmap memory for tracking. */
+	/**
+	 * 登记一张贴图的内存估算（加载时由 Paths.cacheBitmap 调用）。
+	 * 同 key 重复登记会先冲销旧值。
+	 */
 	public static function trackGraphic(key:String, graphic:FlxGraphic):Void
 	{
 		if (!managementEnabled || key == null || graphic == null)
 			return;
-		if (_trackedMemory.exists(key))
-			untrackGraphic(key);
 
 		var bitmap:BitmapData = graphic.bitmap;
 		var memory:Float = (bitmap != null) ? bitmap.width * bitmap.height * BYTES_PER_PIXEL : 0;
+
+		if (_trackedMemory.exists(key))
+		{
+			_vramEstimate -= _trackedMemory.get(key);
+			_trackedMemory.remove(key);
+		}
+
 		_trackedMemory.set(key, memory);
 		_vramEstimate += memory;
 		_texturesCreated++;
@@ -95,72 +87,22 @@ class GPUTextureManager
 		}
 	}
 
-	/** Unregister an asset key. */
+	/**
+	 * 冲销一张贴图的内存估算（销毁时由 Paths.purgeGraphicFromCaches 调用）。
+	 */
 	public static function untrackGraphic(key:String):Void
 	{
-		if (!_trackedMemory.exists(key))
+		if (key == null || !_trackedMemory.exists(key))
 			return;
-		var memory:Float = _trackedMemory.get(key);
+
+		_vramEstimate -= _trackedMemory.get(key);
 		_trackedMemory.remove(key);
-		_vramEstimate -= memory;
 		if (_vramEstimate < 0)
 			_vramEstimate = 0;
 		_texturesDisposed++;
 	}
 
-	// ── Backwards-compatible aliases (old Stage3D API) ──
-
-	/** Compat alias: register allocation. Kept for old callers. */
-	public static function trackTextureAllocation(texture:Dynamic, width:Int, height:Int):Void
-	{
-		if (!managementEnabled || texture == null) return;
-		var memory:Float = width * height * BYTES_PER_PIXEL;
-		_vramEstimate += memory;
-		_texturesCreated++;
-		if (_vramEstimate > peakVRAMUsage)
-			peakVRAMUsage = _vramEstimate;
-	}
-
-	/** Compat alias: register disposal. Kept for old callers. */
-	public static function trackTextureDisposal(texture:Dynamic, width:Int = 0, height:Int = 0):Void
-	{
-		if (texture == null) return;
-		_vramEstimate -= width * height * BYTES_PER_PIXEL;
-		if (_vramEstimate < 0)
-			_vramEstimate = 0;
-		_texturesDisposed++;
-	}
-
-	/** Safe no-op: disposal is handled by Flixel's refcounted graphic cache. */
-	public static function safeDisposeTexture(texture:Dynamic, width:Int = 0, height:Int = 0):Void
-	{
-		// Intentionally a no-op — see class docs.
-	}
-
-	/** Safe no-op: never force-dispose tracked resources. */
-	public static function disposeAllTrackedTextures():Void
-	{
-		// Intentionally a no-op — see class docs.
-	}
-
-	/** Check for stale tracking entries (null/key mismatches). */
-	public static function detectOrphanedTextures():Int
-	{
-		var orphanCount:Int = 0;
-		for (key in _trackedMemory.keys())
-		{
-			if (key == null)
-				orphanCount++;
-		}
-		for (key in _trackedMemory.keys())
-		{
-			if (key == null)
-				_trackedMemory.remove(key);
-		}
-		return orphanCount;
-	}
-
-	/** Get a diagnostic summary of texture memory state. */
+	/** 诊断摘要（一行文本）。 */
 	public static function getDiagnostics():String
 	{
 		return 'GPU Textures: ${_trackedMemory.keys().hasNext() ? "tracked" : "none"} | '
@@ -168,7 +110,7 @@ class GPUTextureManager
 			+ 'VRAM: ~${Std.int(_vramEstimate / 1024 / 1024)}MB / ${Std.int(peakVRAMUsage / 1024 / 1024)}MB peak';
 	}
 
-	/** Reset all tracking counters. Does not dispose any resources. */
+	/** 重置全部记账（不销毁任何资源）。 */
 	public static function resetTracking():Void
 	{
 		_trackedMemory = new Map<String, Float>();

@@ -1,6 +1,5 @@
 package;
 
-import openfl.display3D.textures.RectangleTexture;
 import animateatlas.AtlasFrameMaker;
  
 import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
@@ -71,9 +70,6 @@ class Paths
 	/** Whether to track graphic loads via MemoryMonitor for leak detection. */
 	public static var enableMemoryTracking:Bool = true;
 
-	/** Whether to force GPU texture upload on image load (improves runtime perf, costs load time). */
-	public static var forceGPUUploadOnLoad:Bool = true;
-
 	/** Maximum number of cached assets before triggering cleanup. 0 = unlimited. */
 	public static var maxCachedAssets:Int = #if mobile 200 #else 300 #end;
 
@@ -113,6 +109,7 @@ class Paths
 		{
 			currentTrackedAssets.remove(fileKey);
 			MemoryMonitor.untrackGraphic(fileKey);
+			GPUTextureManager.untrackGraphic(fileKey);
 		}
 		else
 		{
@@ -123,6 +120,7 @@ class Paths
 			{
 				currentTrackedAssets.remove(ck);
 				MemoryMonitor.untrackGraphic(ck);
+				GPUTextureManager.untrackGraphic(ck);
 			}
 		}
 		// Safety net: never destroy a graphic a live sprite still references.
@@ -727,6 +725,8 @@ class Paths
 			if (enableMemoryTracking) {
 				MemoryMonitor.trackGraphic(file, newGraphic);
 			}
+			// 贴图内存记账（GPUTextureManager 重写版接线点，与 useCount 生命周期同路径）
+			GPUTextureManager.trackGraphic(file, newGraphic);
 			return newGraphic;
 		}
 	static public function getTextFromFile(key:String, ?ignoreMods:Bool = false):String
