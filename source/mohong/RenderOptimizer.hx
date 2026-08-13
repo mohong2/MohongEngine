@@ -16,7 +16,7 @@ import flixel.FlxState;
  *   - Main.setupGame 用 FlxG.signals.preDraw/postDraw 接入 Flixel 渲染循环
  *     （FlxGame.draw 在渲染前后派发这两个信号，flixel 公共 API，不改任何库文件）；
  *   - ClientPrefs.loadDefaultKeys 继续接线 optimizationEnabled / renderQualityLevel，
- *     且 renderQualityLevel 现在有真实效果：采样频率、预算阈值、精灵默认 AA。
+ *     且 renderQualityLevel 现在有真实效果：采样频率与帧预算阈值。
  *
  * 怎么验证它真的在工作：
  *   - perf 模式 CSV 里可见精灵数随场景变化（标题画面 vs 打歌中）；
@@ -32,8 +32,8 @@ class RenderOptimizer
 
 	/**
 	 * 渲染质量 0=low 1=medium 2=high（ClientPrefs.renderQualityLevel 接线）。
-	 * 真实效果：可见精灵采样频率、帧预算告警阈值、FlxSprite.defaultAntialiasing
-	 * （见 ClientPrefs.loadDefaultKeys）。
+	 * 真实效果：可见精灵采样频率与帧预算告警阈值（观测强度）。
+	 * 视觉质量由引擎既有的 lowQuality/globalAntialiasing 设置负责，本类不碰。
 	 */
 	public static var renderQualityLevel:Int = 2;
 

@@ -4,7 +4,6 @@ package;
 import flixel.util.FlxSave;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
-import flixel.FlxSprite;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
 import mohong.MemoryMonitor;
@@ -791,10 +790,10 @@ class ClientPrefs {
 			default:       2;
 		};
 
-		// renderQualityLevel 的真实渲染效果：低质量关闭精灵默认抗锯齿
-		// （省 GPU 填充率，视觉上像素化）。显式设置 antialiasing 的精灵不受影响。
-		// 默认 High → defaultAntialiasing=true，与引擎原行为一致。
-		FlxSprite.defaultAntialiasing = (RenderOptimizer.renderQualityLevel >= 1);
+		// 说明：此 fork 的 FlxSprite 没有 defaultAntialiasing（实例级 AA 由
+		// lowQuality/globalAntialiasing 控制），所以 renderQualityLevel 的
+		// 真实效果限定为渲染观测强度（采样频率、帧预算告警阈值），
+		// 视觉质量仍由 lowQuality 设置负责。
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;
