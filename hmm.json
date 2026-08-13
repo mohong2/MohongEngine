@@ -7,13 +7,14 @@
     },
     {
       "name": "openfl",
-      "type": "dev",
-      "url": "./openfl-local"
+      "type": "haxelib",
+      "version": "9.2.1"
     },
     {
       "name": "flixel",
-      "type": "dev",
-      "url": "./flixel-local"
+      "type": "git",
+      "url": "https://github.com/mohong2/flixel.git",
+      "ref": "master"
     },
     {
       "name": "flixel-addons",
@@ -32,8 +33,8 @@
     },
     {
       "name": "flixel-ui",
-      "type": "dev",
-      "url": "./flixel-ui-local"
+      "type": "haxelib",
+      "version": "2.4.0"
     },
     {
       "name": "hxcpp",

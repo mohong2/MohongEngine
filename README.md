@@ -39,40 +39,25 @@ See `hmm.json`. Four of them are forks of mine:
 - extension-androidtools
 - linc_luajit-rewriten
 
-### Vendored libraries (git-tracked, engine patches applied)
+### Classpath overrides (engine patches, tracked in `source/`)
 
-`flixel-local/`, `flixel-ui-local/`, `openfl-local/` are full in-repo copies of the
-libraries the engine patches. `hmm.json` references them with `"type": "dev"`
-(`haxelib dev <name> ./<name>-local`) instead of `"type": "git"` on purpose:
-`haxelib git` shells out to `git clone`, which requires the local directory to be
-a git repository — and a nested `.git` would stop this repository from tracking
-the files. `dev` achieves the same goal (self-contained, git-tracked, recreated by
-`install.bat`) and is supported by `setup/Main.hx`.
+The engine patches a few library classes by overriding them on the `source/`
+classpath. The libraries themselves are **not** vendored into this repo.
 
-| vendored dir | base | engine patches applied |
-|---|---|---|
-| `flixel-local/` | mohong2/flixel @ master (4.11.0) | `flixel/system/FlxSound.hx`, `flixel/animation/FlxAnimationController.hx`, `flixel/system/ui/FlxSoundTray.hx` |
-| `flixel-ui-local/` | flixel-ui 2.4.0 | `flixel/addons/ui/FlxInputText.hx`, `flixel/addons/ui/FlxUIInputText.hx` |
-| `openfl-local/` | openfl 9.2.1 | `openfl/display/FPS.hx`, plus engine-added `openfl/display/OldFPS.hx` |
+| override file | patches |
+|---|---|
+| `source/flixel/system/FlxSound.hx` | flixel (mohong2/flixel) |
+| `source/flixel/animation/FlxAnimationController.hx` | flixel (mohong2/flixel) |
+| `source/flixel/system/ui/FlxSoundTray.hx` | flixel (mohong2/flixel) |
+| `source/flixel/addons/display/FlxRuntimeShader.hx` | engine-added class |
+| `source/flixel/addons/ui/FlxInputText.hx` | flixel-ui |
+| `source/flixel/addons/ui/FlxUIInputText.hx` | flixel-ui |
+| `source/lime/_internal/backend/native/NativeAudioSource.hx` | lime |
+| `source/openfl/display/FPS.hx` | openfl |
+| `source/openfl/display/OldFPS.hx` | engine-added class |
 
-### Classpath overrides that stay in `source/` (no lib change)
-
-- `source/lime/_internal/backend/native/NativeAudioSource.hx` — patches lime 8.0.1's
-  native audio backend. Lime stays a plain haxelib in `hmm.json` because its
-  cross-platform binary set is ~285 MB and vendoring it into git is not viable;
-  the override itself is tracked here in `source/`.
-- `source/flixel/addons/display/FlxRuntimeShader.hx` — engine-added class (not
-  present in flixel 4.11 / flixel-addons 2.11).
-
-`source/` is ahead of every haxelib in classpath order, so these overrides win
-regardless of the linked library version.
-
-### Re-installing after dependency changes
-
-```bat
-install.bat
-:: or manually: haxelib setup .haxelib && haxe -cp ./setup -main Main --interp
-```
+> TODO: push these patches to their upstream repos (mohong2/flixel, etc.) and
+> drop the `source/` overrides once the forks carry them.
 
 ## Mods
 
