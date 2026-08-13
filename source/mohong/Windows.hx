@@ -1,10 +1,36 @@
 package mohong;
 
+/**
+ * 弹窗类型（Windows TaskDialog/MessageBox 使用）。
+ * 注意：backend.Dialog 在非 Windows 平台自己定义了等价的 DialogType。
+ */
 enum abstract DialogType(Int) {
 	var Info = 0;
 	var Warning = 1;
 	var Error = 2;
 }
+
+/**
+ * 原生 Windows 窗口辅助（mohong 重写版）。
+ *
+ * 解决什么问题：
+ *   深色模式、控制台分配/释放/写入、原生对话框这几件"只有 Windows 能做的事"。
+ *   旧实现功能可用但注释与结构散乱；重写保持功能完全等价，只重整隔离结构。
+ *
+ * 挂在哪个真实调用点：
+ *   - Main.hx: enableDarkMode()（desktop 启动时）；
+ *   - TraceManager/TraceConsole: enableAnsiColors()/writeConsole()（日志输出）；
+ *   - OptionsState: hasConsole()/allocConsole()/freeConsole()（Trace Console 开关）；
+ *   - OptionLoader: hasConsole()（选项当前值显示）；
+ *   - backend.Dialog / UnsavedChangesTracker: showDialog()/showYesNoMessageBox()。
+ *
+ * 怎么验证它真的在工作：
+ *   - Windows 实机：深色标题栏、Trace Console 开关、崩溃对话框行为与重写前一致；
+ *   - 非 Windows 平台：全部函数为无害空实现（返回 false），编译通过且不执行任何 Win32 调用。
+ *
+ * 平台纪律：所有 Win32 实现都在 `#if (cpp && windows)` 内；
+ * 类本身在全平台存在，因为 Main.hx 的 `#if desktop` 分支在 mac/linux 也会引用它。
+ */
 
 #if (cpp && windows)
 @:headerCode('
@@ -24,6 +50,10 @@ enum abstract DialogType(Int) {
 #end
 class Windows
 {
+	/**
+	 * 把当前窗口标题栏切换为深色（DWM 属性 19/20）。
+	 * 非 Windows 平台：空实现。
+	 */
 	public static function enableDarkMode():Void
 	{
 		#if (cpp && windows)
@@ -51,6 +81,10 @@ class Windows
 		#end
 	}
 
+	/**
+	 * 为 GUI 进程分配一个控制台窗口。成功返回 true。
+	 * 非 Windows 平台：恒 false。
+	 */
 	public static function allocConsole():Bool
 	{
 		#if (cpp && windows)
@@ -60,7 +94,10 @@ class Windows
 		#end
 	}
 
-	
+	/**
+	 * 释放当前控制台窗口。成功返回 true。
+	 * 非 Windows 平台：恒 false。
+	 */
 	public static function freeConsole():Bool
 	{
 		#if (cpp && windows)
@@ -69,6 +106,11 @@ class Windows
 		return false;
 		#end
 	}
+
+	/**
+	 * 以 UTF-8 文本写入控制台（WriteConsoleW，避免 stdout 重定向死锁）。
+	 * 非 Windows 平台：空实现。
+	 */
 	public static function writeConsole(text:String):Void
 	{
 		#if (cpp && windows)
@@ -91,6 +133,10 @@ class Windows
 		#end
 	}
 
+	/**
+	 * 当前进程是否有控制台窗口。
+	 * 非 Windows 平台：恒 false。
+	 */
 	public static function hasConsole():Bool
 	{
 		#if (cpp && windows)
@@ -100,6 +146,10 @@ class Windows
 		#end
 	}
 
+	/**
+	 * 释放再重新分配控制台。成功返回 true。
+	 * 非 Windows 平台：恒 false。
+	 */
 	public static function reopenConsole():Bool
 	{
 		#if (cpp && windows)
@@ -110,6 +160,10 @@ class Windows
 		#end
 	}
 
+	/**
+	 * 启用控制台 ANSI 转义（ENABLE_VIRTUAL_TERMINAL_PROCESSING）。
+	 * 非 Windows 平台：空实现。
+	 */
 	public static function enableAnsiColors():Void
 	{
 		#if (cpp && windows)
@@ -130,6 +184,10 @@ class Windows
 		#end
 	}
 
+	/**
+	 * 显示原生 OK 对话框（优先 TaskDialog，回退 MessageBoxW）。
+	 * 非 Windows 平台：空实现。
+	 */
 	public static function showDialog(title:String, message:String, type:DialogType):Void
 	{
 		#if (cpp && windows)
@@ -189,11 +247,10 @@ class Windows
 	}
 
 	/**
-	 * Show a Yes/No message box and return true if user clicked Yes.
-	 * 显示是/否消息框，用户点击"是"返回 true。
+	 * 显示原生 Yes/No 对话框，用户点"是"返回 true。
+	 * 非 Windows 平台：恒 true（等同"放行"），调用方负责平台分支。
 	 *
-	 * Note: Uses a temp variable instead of 'return __cpp__(...)' because
-	 * MSVC does not support GCC statement-expressions.
+	 * Note: 用临时变量而不是 `return __cpp__(...)`，因为 MSVC 不支持 GCC 语句表达式。
 	 */
 	public static function showYesNoMessageBox(title:String, message:String):Bool
 	{
