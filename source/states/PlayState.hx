@@ -66,6 +66,7 @@ import DialogueBoxPsych;
 import Conductor.Rating;
 import backend.Ratings;
 import mohong.TraceManager;
+import mohong.PerfTest;
 import popup.RatingPopup;
 #if !flash 
 import flixel.addons.display.FlxRuntimeShader;
@@ -3088,7 +3089,8 @@ class PlayState extends MusicBeatState
 		{
 			// skipTexture=true：构造函数不预加载纹理/动画，统一由 setupNoteData 一次性完成，
 			// 避免几十万 Note 每枚都重复 reloadNote（构造 + setup 两次）带来的额外开销。
-			var newNote:Note = new Note(pNote.strumTime, pNote.noteData, null, pNote.isSustainNote, false, true);
+			// 对象池借出（mohong.ObjectPool）：等价 new Note，但复用上一首歌归还的实例。
+			var newNote:Note = Note.fromPool(pNote.strumTime, pNote.noteData, null, pNote.isSustainNote, false, true);
 			newNote.setupNoteData(pNote);
 			unspawnNotes.push(newNote);
 
@@ -4842,6 +4844,14 @@ class PlayState extends MusicBeatState
 			prevCamFollow = camFollow;
 			prevCamFollowPos = camFollowPos;
 
+			// 性能验收驱动（--perf-test song）：跳过结算子状态，直接进入下一轮
+			if (PerfTest.enabled && PerfTest.mode == 'song')
+			{
+				transitioning = true;
+				PerfTest.onSongComplete();
+				return;
+			}
+
 			openSubState(new PlayStateResultsSubstate());
 			transitioning = true;
 		}
@@ -6497,7 +6507,28 @@ if (!cpuControlled) {
 		// Clear NoteMs/NoteTime arrays to free memory
 		if (NoteMs != null) NoteMs = [];
 		if (NoteTime != null) NoteTime = [];
-		if (unspawnNotes != null) unspawnNotes = [];
+
+		// Note 对象池（mohong.ObjectPool）：把还属于本状态的 Note 全部归还池。
+		// 只 remove 不 destroy —— 渲染资源释放由 note.releaseToPool() 内部完成；
+		// 这样下次 generateSong 借出时直接复用实例，避免高密度谱面反复分配数千个 Note。
+		if (notes != null)
+		{
+			for (note in notes.members)
+			{
+				if (note != null)
+					note.releaseToPool();
+			}
+			notes.clear();
+		}
+		if (unspawnNotes != null)
+		{
+			for (note in unspawnNotes)
+			{
+				if (note != null)
+					note.releaseToPool();
+			}
+			unspawnNotes = [];
+		}
 		// 1.0.4: 清理溅射配置缓存, 防止跨谱面/换模组时串配置
 		NoteSplash.configs.clear();
 		if (eventNotes != null) eventNotes = [];

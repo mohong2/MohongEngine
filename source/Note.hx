@@ -3,8 +3,10 @@ package;
 import flixel.math.FlxRect;
 import editors.ChartingState;
 import openfl.utils.AssetType;
+import openfl.display.BlendMode;
 import shaders.RGBPalette;
 import shaders.RGBPalette.RGBShaderReference;
+import mohong.ObjectPool;
 
 using StringTools;
 
@@ -467,6 +469,14 @@ class Note extends FlxSprite {
 
     public function new(?strumTime:Float = 0, ?noteData:Int = 0, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?skipTexture:Bool = false) {
         super();
+        initNote(strumTime, noteData, prevNote, sustainNote, inEditor, skipTexture);
+    }
+
+    /**
+     * 构造函数主体。new 与对象池复用（fromPool/reinitForPool）共用同一份逻辑，
+     * 避免两条路径漂移。
+     */
+    function initNote(strumTime:Float, noteData:Int, prevNote:Note, sustainNote:Bool, inEditor:Bool, skipTexture:Bool):Void {
         mania = PlayState.mania;
         // 不再让 prevNote 自指成环（prevNote=this）。首段 sustain 的 prevNote 保持 null，
         // 逻辑上与原自引用完全等价（见 EditorPlayState，其 prevNote 判空后结果一致），
@@ -537,6 +547,149 @@ class Note extends FlxSprite {
             earlyHitMult = 1;
         }
         x += offsetX;
+    }
+
+    // ═══════════════════════════════════════════════════════════════
+    //  Note 对象池（mohong.ObjectPool 重写版接线点）
+    //  借出：PlayState.generateSong → Note.fromPool（等价 new Note）
+    //  归还：PlayState.destroy → note.releaseToPool
+    //  复用窗口仅在"歌曲之间"（上一首已销毁、脚本已 stop），
+    //  因此不改变歌曲进行中任何 mod 可见的对象身份语义。
+    // ═══════════════════════════════════════════════════════════════
+
+    /** Note 池单例。容量 16384 覆盖绝大多数谱面规模；溢出实例丢弃交 GC。 */
+    public static var pool:ObjectPool<Note> = null;
+
+    static function ensurePool():ObjectPool<Note>
+    {
+        if (pool == null)
+        {
+            pool = new ObjectPool<Note>(
+                function() return new Note(0, 0, null, false, false, true),
+                null, // 释放侧清理在 releaseToPool 内完成（必须先清 Note 字段再释放渲染资源）
+                null,
+                16384
+            );
+        }
+        return pool;
+    }
+
+    /**
+     * 从对象池借出一个 Note 并完整重建（行为等价于 new Note(...)）。
+     */
+    public static function fromPool(?strumTime:Float = 0, ?noteData:Int = 0, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?skipTexture:Bool = false):Note
+    {
+        var note:Note = ensurePool().borrow();
+        note.reinitForPool(strumTime, noteData, prevNote, sustainNote, inEditor, skipTexture);
+        return note;
+    }
+
+    /**
+     * 池化实例重建：清零 FlxSprite 可变状态 → revive → 重跑构造逻辑。
+     * 借出的实例在 releaseToPool 时已释放渲染资源（graphic/frames 等），
+     * 但保留了 FlxSprite 结构（scale/offset/origin/animation 等字段有效），
+     * initNote 会像构造函数一样重新创建颜色交换与动画。
+     */
+    function reinitForPool(strumTime:Float, noteData:Int, prevNote:Note, sustainNote:Bool, inEditor:Bool, skipTexture:Bool):Void
+    {
+        revive();
+
+        x = 0;
+        y = 0;
+        scale.set(1, 1);
+        offset.set(0, 0);
+        origin.set(0, 0);
+        flipX = false;
+        flipY = false;
+        angle = 0;
+        alpha = 1;
+        visible = true;
+        color = 0xFFFFFFFF;
+        velocity.set(0, 0);
+        acceleration.set(0, 0);
+        drag.set(0, 0);
+        angularVelocity = 0;
+        angularDrag = 0;
+        scrollFactor.set(1, 1);
+        bakedRotationAngle = 0;
+        blend = BlendMode.NORMAL;
+
+        initNote(strumTime, noteData, prevNote, sustainNote, inEditor, skipTexture);
+    }
+
+    /**
+     * 归还对象池。在歌曲销毁路径上调用（脚本已 stop 之后）。
+     *
+     * 注意：不做完整 destroy()——FlxSprite.destroy 会把 scale/offset/origin
+     * 等字段置 null，而 updateHitbox/loadGraphic 直接解引用它们，复活路径
+     * 反而更危险。这里定向释放渲染资源（graphic=null 触发 useCount--，
+     * 与 FlxG.bitmap 的引用计数/僵尸守卫同一条账），保留 FlxSprite 结构。
+     */
+    public function releaseToPool():Void
+    {
+        // ── Note 层可变状态清零（setupNoteData 会重设大部分，这里兜底清干净） ──
+        extraData.clear();
+        tail = [];
+        prevNote = null;
+        nextNote = null;
+        noteColorOverride = null;
+        customCharAnim = null;
+        noteSplashTexture = null;
+        noteSplashDisabled = false;
+        noteSplashHue = 0;
+        noteSplashSat = 0;
+        noteSplashBrt = 0;
+        noteType = null;
+        eventName = '';
+        eventVal1 = '';
+        eventVal2 = '';
+        eventLength = 0;
+        rating = 'unknown';
+        ratingMod = 0;
+        ratingDisabled = false;
+        spawned = false;
+        wasGoodHit = false;
+        hitByOpponent = false;
+        missed = false;
+        noteWasHit = false;
+        wasHit = false;
+        tooLate = false;
+        canBeHit = false;
+        active = false;
+        canHold = false;
+        sustainLength = 0;
+        parentST = 0;
+        parentSL = 0;
+        ignoreNote = false;
+        blockHit = false;
+        lowPriority = false;
+        hitCausesMiss = false;
+        hitsoundDisabled = false;
+        earlyHitMult = 0.5;
+        lateHitMult = 1;
+        distance = 2000;
+        animSuffix = '';
+        noAnimation = false;
+        noMissAnimation = false;
+        gfNote = false;
+        doOppStuff = false;
+        lastNoteOffsetXForPixelAutoAdjusting = 0;
+        _animCacheKey = null;
+
+        // ── 释放渲染资源（保留 FlxSprite 结构） ──
+        if (animation != null)
+            animation.curAnim = null;
+        frames = null;
+        graphic = null;      // set_graphic: oldGraphic.useCount--
+        _frame = null;
+        _frameGraphic = null;
+        clipRect = null;
+        shader = null;
+        // colorTransform/useColorTransform 由 FlxSprite.set_color 内部管理，
+        // 借出时 reinitForPool 的 color 重置会恢复默认状态。
+
+        kill();
+        ensurePool().release(this);
     }
 
     var lastNoteOffsetXForPixelAutoAdjusting:Float = 0;
