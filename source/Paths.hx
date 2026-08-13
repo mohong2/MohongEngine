@@ -74,7 +74,11 @@ class Paths
 	public static var maxCachedAssets:Int = #if mobile 200 #else 300 #end;
 
 	/** Whether loaded FlxGraphic objects auto-free when no sprite references them.
-	 *  false = persist forever (desktop); true = auto-collect when unused (mobile aggressive). */
+	 *  全平台保持 false（有意为之，勿改）：destroyOnNoUse=true 会让"已入缓存但
+	 *  暂时没有精灵引用"的贴图（useCount 0）被立即销毁——整个 currentTrackedAssets
+	 *  缓存形同虚设，note 皮肤/角色贴图反复重载造成更严重的卡顿；还会误杀
+	 *  FlxBar 以 useCount 0 存活的前景贴图（见 isFlxBarCacheKey 的注释）。
+	 *  移动端内存上限改由 maxCachedAssets 的小容量（200）控制。 */
 	public static var allowGraphicAutoFree:Bool = false;
 
 	/// haya I love you for the base cache dump I took to the max

@@ -115,8 +115,9 @@ import sys.io.Process;
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	public var cacheOnGPU:Bool = false;
-	public var preloadAssets:Bool = false;
+	// 注意：cacheOnGPU / preloadAssets 已移除——两处开关全项目零接线
+	// （唯一 UI 在 options/_backup 备份目录；逻辑里 cacheOnGPU 判断被注释）。
+	// 老存档里的同名键仍保留在 save 数据中，mod 的 getPref 读到的旧值不受影响。
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
@@ -261,6 +262,7 @@ class ClientPrefs {
 	public static var guitarHeroSustains(get, never):Bool;
 	public static var smoothhpbar(get, never):Bool;
 	public static var unnotec(get, never):Bool;
+	// 兼容访问器：字段已从数据类移除，但保留静态读取（老存档同名键 / mod 引用）
 	public static var cacheOnGPU(get, never):Bool;
 	public static var preloadAssets(get, never):Bool;
 	public static var splashAlpha(get, never):Float;
@@ -355,8 +357,8 @@ class ClientPrefs {
 	static inline function get_guitarHeroSustains() return data.guitarHeroSustains;
 	static inline function get_smoothhpbar() return data.smoothhpbar;
 	static inline function get_unnotec() return data.unnotec;
-	static inline function get_cacheOnGPU() return data.cacheOnGPU;
-	static inline function get_preloadAssets() return data.preloadAssets;
+	static inline function get_cacheOnGPU() return Reflect.hasField(FlxG.save.data, 'cacheOnGPU') && Reflect.field(FlxG.save.data, 'cacheOnGPU') == true;
+	static inline function get_preloadAssets() return Reflect.hasField(FlxG.save.data, 'preloadAssets') && Reflect.field(FlxG.save.data, 'preloadAssets') == true;
 	static inline function get_splashAlpha() return data.splashAlpha;
 	static inline function get_autoPause() return data.autoPause;
 	static inline function get_runInBackground() return data.runInBackground;
