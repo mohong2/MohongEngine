@@ -29,6 +29,7 @@ import mohong.TraceManager;
 import mohong.TraceConsole;
 import mohong.MemoryMonitor;
 import mohong.RenderOptimizer;
+import mohong.PerfTest;
 import backend.Dialog;
 import states.CrashCatcherState;
 
@@ -210,6 +211,9 @@ class Main extends Sprite
 		// preDraw/postDraw 信号（FlxGame.draw 在真实渲染前后派发），不改库、不改渲染行为。
 		FlxG.signals.preDraw.add(function() RenderOptimizer.onRenderStart());
 		FlxG.signals.postDraw.add(function() RenderOptimizer.onRenderEnd());
+
+		// 性能验收驱动（--perf-test，仅 sys 平台参数生效，无参数零开销）
+		PerfTest.init();
 
 		#if CRASH_HANDLER
 		// Wire the timer crash callback so separate-update-mode errors are
