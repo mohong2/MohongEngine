@@ -40,6 +40,8 @@ class PerfTest
 
 	static var startTime:Float = 0;
 	static var snapshots:Array<String> = [];
+	static var seekDone:Bool = false;
+	static var finishing:Bool = false;
 
 	public static function init():Void
 	{
@@ -65,6 +67,9 @@ class PerfTest
 		RenderOptimizer.optimizationEnabled = true;
 		ClientPrefs.data.gameplaySettings.set('botplay', true);
 		ClientPrefs.data.autoPause = false;
+		// 无人值守运行：关掉 debug 构建的 flixel 调试器 UI，
+		// 防止误点系统按钮触发 Window.setVisible 崩溃。
+		FlxG.debugger.visible = false;
 
 		startTime = haxe.Timer.stamp();
 		FlxG.signals.postStateSwitch.add(onPostStateSwitch);
@@ -130,6 +135,47 @@ class PerfTest
 		PlayState.replayMode = false;
 		TraceManager.info('perfTest.song', 'PerfTest song: {} (mod {}, diffIdx {})', [found.song, found.mod, found.diffIdx]);
 		LoadingState.loadAndSwitchState(new PlayState());
+		seekDone = false;
+		startSeekWatcher();
+	}
+
+	/**
+	 * 快进到歌曲最后 8 秒：每轮重试约 15 秒完成，20 次长测不必等完整歌曲。
+	 * 倒计时结束后执行一次 seek（music/vocals.time + Conductor.songPosition）。
+	 */
+	static function startSeekWatcher():Void
+	{
+		if (!enabled || mode != 'song')
+			return;
+
+		new FlxTimer().start(0.5, function(tmr:FlxTimer)
+		{
+			if (finishing)
+			{
+				tmr.cancel();
+				return;
+			}
+
+			var ps:PlayState = PlayState.instance;
+			var canSeek:Bool = false;
+			@:privateAccess canSeek = (ps != null && ps.startedCountdown && ps.generatedMusic);
+			if (!seekDone && canSeek)
+			{
+				var len:Float = ps.songLength;
+				if (len > 10000)
+				{
+					var to:Float = len - 8000;
+					try {
+						if (FlxG.sound.music != null) FlxG.sound.music.time = to;
+						if (ps.vocals != null) ps.vocals.time = to;
+					} catch (e:Dynamic) {}
+					Conductor.songPosition = to;
+					TraceManager.info('perfTest.seek', 'Seeked to {}ms (songLength {}ms)', [Math.round(to), Math.round(len)]);
+				}
+				seekDone = true;
+				tmr.cancel();
+			}
+		}, 0); // 0 loops = 每 0.5s 重复，直到 cancel
 	}
 
 	/**
@@ -151,7 +197,9 @@ class PerfTest
 
 		new FlxTimer().start(0.5, function(_)
 		{
+			seekDone = false;
 			MusicBeatState.switchState(new PlayState());
+			startSeekWatcher();
 		});
 	}
 
@@ -171,6 +219,7 @@ class PerfTest
 
 	static function finish():Void
 	{
+		finishing = true;
 		var csv:String = MemoryMonitor.exportStats('perf/perftest_' + mode + '.csv');
 		var summary:String = 'elapsed=' + Math.round(haxe.Timer.stamp() - startTime) + 's\n' + snapshots.join('\n');
 		#if sys
