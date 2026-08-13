@@ -192,9 +192,9 @@
 	<!--Make's-the-Game-use-less-ram-->
 	<haxedef name="HXCPP_GC_BIG_BLOCKS" />
 
-	<!--Always-enable-Null-Object-Reference-check-->
-	<haxedef name="HXCPP_CHECK_POINTER" if="release" />
-	<haxedef name="HXCPP_STACK_LINE" if="release" />
+	<!--Debug-only defines were previously forced into release builds here.
+		hxcpp enables pointer checks / stack-line info automatically in debug builds,
+		so release binaries get the clean fast path again.-->
 
 	<haxedef name="loop_unroll_max_cost" value="25"/>
 
