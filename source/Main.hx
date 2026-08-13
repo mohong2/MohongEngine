@@ -53,7 +53,7 @@ class Main extends Sprite
 	#else
 	var zoom:Float = 1;
 	#end
-	var framerate:Int = 60; // How many frames per second the game should run at.
+	var framerate:Int = 60; // Fallback only — real framerates come from ClientPrefs (see setupGame).
 	var skipSplash:Bool = true; // Whether to skip the flixel splash screen that appears in release mode.
 	var startFullscreen:Bool = false; // Whether to start the game in fullscreen on desktop targets
 	public static var fpsVar:FPS;
@@ -174,7 +174,28 @@ class Main extends Sprite
 		}
 		ClientPrefs.loadDefaultKeys();
 
-		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, framerate, framerate, skipSplash, startFullscreen));
+		// 帧率接线（perf P0-1）：FlxGame 构造器会把这两个参数写进
+		// FlxG.updateFramerate/drawFramerate 并设置 stage.frameRate。
+		// 此前这里写死 60/60，ClientPrefs 的 framerate/drawFramerate
+		// （设置里可改，默认取屏幕刷新率）永远不生效，显示被锁 60Hz。
+		var updateFramerate:Int = ClientPrefs.data.framerate;
+		var drawFramerate:Int = ClientPrefs.data.drawFramerate;
+
+		#if (mobile || switch)
+		// 移动端/主机：屏幕刷新率是硬上限，画得比面板快纯属浪费电池/发热；
+		// 逻辑更新率同样封顶，避免 CPU 空转。
+		var refreshRate:Int = 0;
+		try { refreshRate = FlxG.stage.application.window.displayMode.refreshRate; } catch (e:Dynamic) {}
+		if (refreshRate < 60) refreshRate = 60;
+		if (updateFramerate > refreshRate) updateFramerate = refreshRate;
+		if (drawFramerate > refreshRate) drawFramerate = refreshRate;
+		#end
+
+		// 兜底：存档损坏/异常值时不把引擎带进沟里
+		if (updateFramerate < 30) updateFramerate = framerate;
+		if (drawFramerate < 30) drawFramerate = framerate;
+
+		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, updateFramerate, drawFramerate, skipSplash, startFullscreen));
 
 		// Sync separateUpdateDraw (property setter handles timer + FlxG sync)
 		if (FlxG.game != null)
