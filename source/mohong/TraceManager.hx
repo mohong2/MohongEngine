@@ -13,77 +13,60 @@ import mohong.TraceLevel;
 import mohong.TraceEntry;
 
 /**
- * Trace 监听器回调类型。
+ * Trace listener callback.
  */
 typedef TraceListener = TraceEntry -> Void;
 
 /**
- * FNF-SeiunEngine 统一日志中枢（mohong 重写版）。
- *
- * 解决什么问题：
- *   全项目 300+ 处调用点的日志系统。旧实现每条日志（含所有裸 `trace()`）
- *   都无差别做一次 Language 翻译；HTML5 等非 sys 平台完全没有任何输出；
- *   环形缓冲/控制台写的路径也不够省。
- *
- * 挂在哪个真实调用点：
- *   - `init()` 由 Main.new 调用，并拦截 `haxe.Log.trace`（所有裸 trace 汇入）；
- *   - 300+ 处 `TraceManager.info/warn/error/debug` 静态调用；
- *   - `TraceConsole`（监听器）、`OptionsState`（开关/级别）直接依赖本类。
- *
- * 怎么验证它真的在工作：
- *   - Windows 实机：控制台能看到带时间/级别/模块的日志；开关 Trace Console 生效；
- *   - HTML5：编译后浏览器 console 出现引擎日志（js console）；
- *   - 环形缓冲满后内存不再增长（MAX_ENTRIES 上限，切歌 20 次后条目数恒定）。
- *
- * 输出目标按平台分支：
- *   - `#if (cpp && windows)` → WriteConsoleW（Windows.hx）；
- *   - `#elseif sys`        → Sys.println；
- *   - `#elseif js`         → 浏览器 console（html5）。
+ * Central logger for the whole project (~300 call sites).
+ * Hooks haxe.Log.trace; output goes per-platform:
+ *   windows -> WriteConsoleW, sys -> Sys.println, js -> browser console.
+ * Only translates messages that actually look like language keys.
  */
 class TraceManager
 {
-	/** 环形缓冲最大容量；达到上限后覆盖最旧条目，内存占用恒定。 */
+	/** Ring buffer cap; oldest entries get overwritten past this. */
 	public static var MAX_ENTRIES:Int = 5000;
 
-	/** 是否拦截并记录 trace（关闭时裸 trace 直接转发给原始 haxe.Log.trace）。 */
+	/** Intercept + record; off = forward to haxe.Log.trace. */
 	public static var enabled:Bool = true;
 
-	/** 是否同时输出到控制台（按平台走上面的分支）。 */
+	/** Also write to console. */
 	public static var consoleOutput:Bool = true;
 
-	/** 最低输出级别：级别 >= consoleLevel 才写控制台。 */
+	/** Min level printed to console. */
 	public static var consoleLevel:TraceLevel = DEBUG;
 
-	/** 原始 haxe.Log.trace 引用（init 时保存）。 */
+	/** Saved haxe.Log.trace. */
 	private static var originalTrace:Dynamic = null;
 
-	/** 环形缓冲底层数组（容量封顶 MAX_ENTRIES）。 */
+	/** Ring buffer storage. */
 	private static var entries:Array<TraceEntry> = [];
 
-	/** 环形缓冲写入位置（满后从此处覆盖最旧条目）。 */
+	/** Ring write head. */
 	private static var bufferHead:Int = 0;
 
-	/** 当前有效条目数（0..MAX_ENTRIES）。 */
+	/** Live entry count. */
 	private static var bufferCount:Int = 0;
 
-	/** 监听器列表（TraceConsole 等）。 */
+	/** Listeners (TraceConsole etc). */
 	private static var listeners:Array<TraceListener> = [];
 
-	/** 自增条目 ID。 */
+	/** Monotonic entry id. */
 	private static var entryId:Int = 0;
 
-	/** 保护环形缓冲（cpp 多线程目标：HTTP/视频线程也会 trace）。 */
+	/** Guards the ring on cpp (other threads log too). */
 	#if cpp
 	private static var bufferMutex:Mutex = new Mutex();
 	#end
 
-	/** 已初始化标志。 */
+	/** Init flag. */
 	private static var initialized:Bool = false;
 
-	/** 写控制台防重入标志（WriteConsoleW 是同步调用，防止重入导致卡死）。 */
+	/** Re-entrancy guard for the sync console write. */
 	private static var consoleBusy:Bool = false;
 
-	/** 级别 → 名称。 */
+	/** level -> name. */
 	private static var levelNames:Map<TraceLevel, String> = [
 		DEBUG => "DEBUG",
 		INFO  => "INFO",
@@ -91,7 +74,7 @@ class TraceManager
 		ERROR => "ERROR"
 	];
 
-	/** 级别 → ANSI 颜色（原生终端）。 */
+	/** level -> ANSI color. */
 	private static var levelColors:Map<TraceLevel, String> = [
 		DEBUG => "\x1b[90m",
 		INFO  => "\x1b[37m",
@@ -102,8 +85,8 @@ class TraceManager
 	private static var RESET_COLOR:String = "\x1b[0m";
 
 	/**
-	 * 初始化：拦截 haxe.Log.trace；Windows 桌面启用控制台 ANSI 颜色。
-	 * 不主动打开控制台（Options 里的 Trace Console 开关负责）。
+	 * Init: hook haxe.Log.trace, enable ANSI on Windows.
+	 * Does not open a console (OptionsState's job).
 	 */
 	public static function init():Void
 	{
@@ -114,7 +97,7 @@ class TraceManager
 		try {
 			Windows.enableAnsiColors();
 		} catch (e:Dynamic) {
-			// 颜色不是关键功能，忽略
+			// colors are best-effort
 		}
 		#end
 
@@ -123,7 +106,7 @@ class TraceManager
 	}
 
 	/**
-	 * 从 ClientPrefs 同步设置（桌面端：根据存档决定是否输出+启动 TraceConsole）。
+	 * Sync from ClientPrefs (desktop only).
 	 */
 	public static function syncWithPrefs():Void
 	{
@@ -144,7 +127,7 @@ class TraceManager
 	}
 
 	/**
-	 * 启用/禁用控制台输出。
+	 * Toggle console output.
 	 */
 	public static function enableConsoleOutput(on:Bool):Void
 	{
@@ -156,7 +139,7 @@ class TraceManager
 	}
 
 	/**
-	 * 应用控制台过滤级别（按名字，大小写不敏感）。
+	 * Set console level by name (case-insensitive).
 	 */
 	public static function applyConsoleLevel(levelName:String):Void
 	{
@@ -172,9 +155,9 @@ class TraceManager
 	}
 
 	/**
-	 * 拦截裸 trace() 的处理器。
-	 * 只有消息本身像语言键（无空格、含点、Language.has 命中）时才做翻译——
-	 * 自由文本日志（如 'hello world'）不再浪费一次字典查找。
+	 * Handler for raw trace() calls.
+	 * Translate only when the message looks like a lang key.
+	 * Freeform logs skip the lookup.
 	 */
 	private static function captureTrace(v:Dynamic, ?infos:haxe.PosInfos):Void
 	{
@@ -203,7 +186,7 @@ class TraceManager
 		});
 	}
 
-	/** 消息是否"像语言键"：含点、无空白、无异常字符。 */
+	/** Lang-key shaped? dots, no spaces/odd chars. */
 	private static function isLangKeyLike(msg:String):Bool
 	{
 		if (msg == null || msg.length == 0 || msg.indexOf('.') < 0) return false;
@@ -219,7 +202,7 @@ class TraceManager
 		return true;
 	}
 
-	/** 判断是否来自 Language.hx 自身，避免递归翻译。 */
+	/** Skip translation for Language's own traces. */
 	private static function isLanguageSelfTrace(fileName:String):Bool
 	{
 		if (fileName == null) return false;
@@ -228,7 +211,7 @@ class TraceManager
 			&& (lower.endsWith(".hx") || lower.indexOf("language.hx") >= 0);
 	}
 
-	// -------- 四级静态 API（签名与旧版完全兼容） --------
+	// -------- info/warn/error/debug (signatures unchanged) --------
 
 	public static function info(key:String, defaultText:String, ?args:Array<Dynamic>, ?pos:haxe.PosInfos):TraceEntry
 	{
@@ -251,7 +234,7 @@ class TraceManager
 	}
 
 	/**
-	 * 核心日志方法：翻译 → 插值（逐个替换 {}）→ 入环形缓冲 → 控制台 → 监听器。
+	 * Translate -> interpolate {} -> ring -> console -> listeners.
 	 */
 	private static function log(level:TraceLevel, key:String, defaultText:String, ?args:Array<Dynamic>, ?pos:haxe.PosInfos):TraceEntry
 	{
@@ -285,8 +268,8 @@ class TraceManager
 	}
 
 	/**
-	 * 环形缓冲写入（O(1)，临界区只在 cpp 加锁）。
-	 * 控制台输出与监听器通知都在锁外执行。
+	 * O(1) ring write; lock only on cpp.
+	 * Console + listeners run outside the lock.
 	 */
 	private static function addEntry(entry:TraceEntry):Void
 	{
@@ -337,8 +320,8 @@ class TraceManager
 	}
 
 	/**
-	 * 格式化并输出到控制台 —— 按平台分支。
-	 * 格式: [HH:MM:SS.ms][LEVEL] module:line ▸ message
+	 * Format + write, per platform.
+	 * Format: [HH:MM:SS.ms][LEVEL] module:line > message
 	 */
 	private static function writeToConsole(entry:TraceEntry):Void
 	{
@@ -349,7 +332,7 @@ class TraceManager
 			: '';
 
 		#if (cpp && windows && !android)
-		// Windows：WriteConsoleW（UTF-8 安全，避免 stdout 重定向死锁）
+		// windows: WriteConsoleW (UTF-8 safe, no stdout deadlock)
 		var levelColor:String = levelColors[entry.level];
 		var line:String = '\x1b[90m$timeStr$RESET_COLOR $levelColor[$levelStr]$RESET_COLOR '
 			+ (moduleInfo != '' ? '\x1b[36m$moduleInfo$RESET_COLOR ' : '')
@@ -366,7 +349,7 @@ class TraceManager
 			Sys.println(line);
 		} catch (e:Dynamic) {}
 		#elseif js
-		// HTML5：浏览器 console，级别映射到对应方法
+		// html5: browser console, level-mapped
 		var line:String = '$timeStr [$levelStr]'
 			+ (moduleInfo != '' ? ' $moduleInfo' : '')
 			+ ' ${entry.message}';
@@ -407,7 +390,7 @@ class TraceManager
 		return last;
 	}
 
-	// -------- 监听器管理 --------
+	// -------- listeners --------
 
 	public static function addListener(listener:TraceListener):Void
 	{
@@ -427,14 +410,14 @@ class TraceManager
 			try {
 				listener(entry);
 			} catch (e:Dynamic) {
-				// 监听器崩溃不影响日志系统本身
+				// listener crash must not break logging
 			}
 		}
 	}
 
-	// -------- 查询 / 导出 API --------
+	// -------- query / export --------
 
-	/** 获取所有 Trace 条目（按时间顺序，快照拷贝）。 */
+	/** Snapshot of all entries in order. */
 	public static function getAll():Array<TraceEntry>
 	{
 		#if cpp
@@ -454,14 +437,14 @@ class TraceManager
 		return result;
 	}
 
-	/** 当前有效条目数。 */
+	/** Entry count. */
 	public static function getCount():Int
 	{
 		return bufferCount;
 	}
 
 	/**
-	 * 按级别/模块/关键词过滤（null/空 = 不过滤），limit 0 = 全部。
+	 * Filter by level/module/text; limit 0 = all.
 	 */
 	public static function getFiltered(?levels:Array<TraceLevel>, ?moduleName:String, ?search:String, ?limit:Int = 0):Array<TraceEntry>
 	{
@@ -502,7 +485,7 @@ class TraceManager
 		return result;
 	}
 
-	/** 按级别统计条目数。 */
+	/** Per-level counts. */
 	public static function getStats():Map<TraceLevel, Int>
 	{
 		#if cpp
@@ -529,7 +512,7 @@ class TraceManager
 		return stats;
 	}
 
-	/** 清空缓冲。 */
+	/** Clear the buffer. */
 	public static function clear():Void
 	{
 		#if cpp
@@ -546,7 +529,7 @@ class TraceManager
 		#end
 	}
 
-	/** 导出为 JSON 字符串。 */
+	/** Export as JSON. */
 	public static function exportToJson(?levels:Array<TraceLevel>, ?limit:Int = 100):String
 	{
 		var data:Array<Dynamic> = [];
@@ -567,7 +550,7 @@ class TraceManager
 		return haxe.Json.stringify(data, '  ');
 	}
 
-	/** 将 Trace 数据保存到文件（仅 sys 平台）。 */
+	/** Save to file (sys only). */
 	public static function saveToFile(path:String, ?levels:Array<TraceLevel>):Void
 	{
 		#if sys

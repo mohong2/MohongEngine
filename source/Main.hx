@@ -176,16 +176,12 @@ class Main extends Sprite
 		}
 		ClientPrefs.loadDefaultKeys();
 
-		// 帧率接线（perf P0-1）：FlxGame 构造器会把这两个参数写进
-		// FlxG.updateFramerate/drawFramerate 并设置 stage.frameRate。
-		// 此前这里写死 60/60，ClientPrefs 的 framerate/drawFramerate
-		// （设置里可改，默认取屏幕刷新率）永远不生效，显示被锁 60Hz。
+		// Wire ClientPrefs framerate/drawFramerate into FlxGame (was 60/60).
 		var updateFramerate:Int = ClientPrefs.data.framerate;
 		var drawFramerate:Int = ClientPrefs.data.drawFramerate;
 
 		#if (mobile || switch)
-		// 移动端/主机：屏幕刷新率是硬上限，画得比面板快纯属浪费电池/发热；
-		// 逻辑更新率同样封顶，避免 CPU 空转。
+		// Cap at the panel refresh rate; drawing faster just burns battery.
 		var refreshRate:Int = 0;
 		try { refreshRate = FlxG.stage.application.window.displayMode.refreshRate; } catch (e:Dynamic) {}
 		if (refreshRate < 60) refreshRate = 60;
@@ -193,7 +189,7 @@ class Main extends Sprite
 		if (drawFramerate > refreshRate) drawFramerate = refreshRate;
 		#end
 
-		// 兜底：存档损坏/异常值时不把引擎带进沟里
+		// Bad save values shouldn't nuke the engine.
 		if (updateFramerate < 30) updateFramerate = framerate;
 		if (drawFramerate < 30) drawFramerate = framerate;
 
@@ -207,12 +203,11 @@ class Main extends Sprite
 		if (FlxG.game != null)
 			FlxG.game.drawWrapper = null;
 
-		// 渲染观测接线（RenderOptimizer 重写版）：挂 flixel 公开的
-		// preDraw/postDraw 信号（FlxGame.draw 在真实渲染前后派发），不改库、不改渲染行为。
+		// Render observer hooks (flixel's own signals; no lib changes).
 		FlxG.signals.preDraw.add(function() RenderOptimizer.onRenderStart());
 		FlxG.signals.postDraw.add(function() RenderOptimizer.onRenderEnd());
 
-		// 性能验收驱动（--perf-test，仅 sys 平台参数生效，无参数零开销）
+		// Perf runner, sys + --perf-test only.
 		PerfTest.init();
 
 		#if CRASH_HANDLER

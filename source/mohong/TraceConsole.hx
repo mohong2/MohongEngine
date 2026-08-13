@@ -4,27 +4,15 @@ import mohong.TraceLevel;
 import mohong.TraceEntry;
 
 /**
- * Trace 实时监控面板（重写版）。
- *
- * 解决什么问题：
- *   为 TraceManager 提供实时输出通道（监听器）。旧实现的输出路径与
- *   TraceManager 各写一套、非 Windows 平台不完整。
- *
- * 挂在哪个真实调用点：
- *   - Main.new 在桌面端调用 `start()`；
- *   - OptionsState 的 Trace Console 开关调用 `start()/stop()`；
- *   - 监听 TraceManager.addListener 的数据流。
- *
- * 怎么验证它真的在工作：
- *   Windows 实机打开 Trace Console 后，控制台持续刷出带颜色分级的日志；
- *   关闭后日志不再输出（TraceManager 自身仍记录进环形缓冲）。
+ * Live trace output panel. Listens to TraceManager; skips per-line
+ * formatting when there's no console to write to.
  */
 class TraceConsole
 {
 	private static var running:Bool = false;
 	private static var watchMode:Bool = false;
 
-	/** 是否存在真实输出目标：没有控制台时跳过逐条格式化（避免纯浪费）。 */
+	/** Set when a real output target exists. */
 	private static var consoleAvailable:Bool = false;
 
 	private static var RESET:String = "\x1b[0m";
@@ -32,7 +20,7 @@ class TraceConsole
 	private static var BLUE:String = "\x1b[34m";
 
 	/**
-	 * 启动实时监控（幂等）。启动时探测输出目标是否真的存在。
+	 * Start (idempotent); checks a real output target exists.
 	 */
 	public static function start():Void
 	{
@@ -46,7 +34,7 @@ class TraceConsole
 	}
 
 	/**
-	 * 停止监控（幂等）。
+	 * Stop (idempotent).
 	 */
 	public static function stop():Void
 	{
@@ -56,7 +44,7 @@ class TraceConsole
 		TraceManager.removeListener(onTrace);
 	}
 
-	/** 输出目标探测：Windows 看是否有控制台窗口；sys/js 平台恒有 stdout/js console。 */
+	/** Detect output: windows console, else stdout/js console. */
 	private static function detectConsole():Bool
 	{
 		#if (cpp && windows && !android)
@@ -73,7 +61,7 @@ class TraceConsole
 	}
 
 	/**
-	 * Trace 回调 — 带颜色输出一条日志。无输出目标时直接返回（零格式化开销）。
+	 * Listener callback; skips formatting when no target.
 	 */
 	private static function onTrace(entry:TraceEntry):Void
 	{
@@ -97,7 +85,7 @@ class TraceConsole
 	}
 
 	/**
-	 * 打印一行到控制台 —— 平台分支与 TraceManager 一致。
+	 * Print a line, same platform split as TraceManager.
 	 */
 	private static function printLine(text:String):Void
 	{

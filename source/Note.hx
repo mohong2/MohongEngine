@@ -473,8 +473,8 @@ class Note extends FlxSprite {
     }
 
     /**
-     * 构造函数主体。new 与对象池复用（fromPool/reinitForPool）共用同一份逻辑，
-     * 避免两条路径漂移。
+     * Constructor body, shared by new and fromPool so the two paths
+     * can't drift apart.
      */
     function initNote(strumTime:Float, noteData:Int, prevNote:Note, sustainNote:Bool, inEditor:Bool, skipTexture:Bool):Void {
         mania = PlayState.mania;
@@ -549,15 +549,13 @@ class Note extends FlxSprite {
         x += offsetX;
     }
 
-    // ═══════════════════════════════════════════════════════════════
-    //  Note 对象池（mohong.ObjectPool 重写版接线点）
-    //  借出：PlayState.generateSong → Note.fromPool（等价 new Note）
-    //  归还：PlayState.destroy → note.releaseToPool
-    //  复用窗口仅在"歌曲之间"（上一首已销毁、脚本已 stop），
-    //  因此不改变歌曲进行中任何 mod 可见的对象身份语义。
-    // ═══════════════════════════════════════════════════════════════
+    // ── Note pool (mohong.ObjectPool) ──
+    // borrow: PlayState.generateSong -> Note.fromPool (same as new Note)
+    // return: PlayState.destroy -> note.releaseToPool
+    // Reuse only happens between songs (scripts already stopped), so
+    // in-song object identity is unchanged for mods.
 
-    /** Note 池单例。容量 16384 覆盖绝大多数谱面规模；溢出实例丢弃交 GC。 */
+    /** Note pool singleton; 16384 covers basically any chart. */
     public static var pool:ObjectPool<Note> = null;
 
     static function ensurePool():ObjectPool<Note>
@@ -566,7 +564,7 @@ class Note extends FlxSprite {
         {
             pool = new ObjectPool<Note>(
                 function() return new Note(0, 0, null, false, false, true),
-                null, // 释放侧清理在 releaseToPool 内完成（必须先清 Note 字段再释放渲染资源）
+                null, // release-side cleanup lives in releaseToPool
                 null,
                 16384
             );
@@ -574,9 +572,7 @@ class Note extends FlxSprite {
         return pool;
     }
 
-    /**
-     * 从对象池借出一个 Note 并完整重建（行为等价于 new Note(...)）。
-     */
+    /** Borrow + fully rebuild (same as new Note(...)). */
     public static function fromPool(?strumTime:Float = 0, ?noteData:Int = 0, ?prevNote:Note, ?sustainNote:Bool = false, ?inEditor:Bool = false, ?skipTexture:Bool = false):Note
     {
         var note:Note = ensurePool().borrow();
@@ -585,10 +581,9 @@ class Note extends FlxSprite {
     }
 
     /**
-     * 池化实例重建：清零 FlxSprite 可变状态 → revive → 重跑构造逻辑。
-     * 借出的实例在 releaseToPool 时已释放渲染资源（graphic/frames 等），
-     * 但保留了 FlxSprite 结构（scale/offset/origin/animation 等字段有效），
-     * initNote 会像构造函数一样重新创建颜色交换与动画。
+     * Rebuild a pooled instance: reset FlxSprite state -> revive -> run the
+     * constructor body again. render resources were freed on release, but the
+     * FlxSprite structure (scale/offset/origin/animation) is still valid.
      */
     function reinitForPool(strumTime:Float, noteData:Int, prevNote:Note, sustainNote:Bool, inEditor:Bool, skipTexture:Bool):Void
     {
@@ -618,22 +613,22 @@ class Note extends FlxSprite {
     }
 
     /**
-     * 归还对象池。在歌曲销毁路径上调用（脚本已 stop 之后）。
+     * Return to the pool, called from the song teardown (scripts stopped).
      *
-     * 注意：不做完整 destroy()——FlxSprite.destroy 会把 scale/offset/origin
-     * 等字段置 null，而 updateHitbox/loadGraphic 直接解引用它们，复活路径
-     * 反而更危险。这里定向释放渲染资源（graphic=null 触发 useCount--，
-     * 与 FlxG.bitmap 的引用计数/僵尸守卫同一条账），保留 FlxSprite 结构。
+     * Not a full destroy(): that nulls scale/offset/origin and the revive
+     * path derefs them. Instead we release just the render resources
+     * (graphic=null drops useCount, same accounting as the zombie guard)
+     * and keep the FlxSprite structure intact.
      */
     public function releaseToPool():Void
     {
-        // 已被 FlxSprite.destroy() 的实例不可复活（scale/offset/origin 等
-        // 字段已置 null，updateHitbox/loadGraphic 会直接解引用崩溃）——
-        // 歌曲中途被 kill+destroy 的 note 就属于这种情况，直接丢弃交 GC。
+        // A fully-destroyed instance can't revive (scale/offset/origin are
+        // null and updateHitbox/loadGraphic would crash). Notes killed
+        // mid-song fall here; just drop them for GC.
         if (scale == null)
             return;
 
-        // ── Note 层可变状态清零（setupNoteData 会重设大部分，这里兜底清干净） ──
+        // ── clear Note-level state (setupNoteData redoes most of it) ──
         extraData.clear();
         tail = [];
         prevNote = null;
@@ -682,7 +677,7 @@ class Note extends FlxSprite {
         lastNoteOffsetXForPixelAutoAdjusting = 0;
         _animCacheKey = null;
 
-        // ── 释放渲染资源（保留 FlxSprite 结构） ──
+        // ── release render resources (keep the FlxSprite structure) ──
         if (animation != null)
             animation.curAnim = null;
         frames = null;
@@ -691,8 +686,8 @@ class Note extends FlxSprite {
         _frameGraphic = null;
         clipRect = null;
         shader = null;
-        // colorTransform/useColorTransform 由 FlxSprite.set_color 内部管理，
-        // 借出时 reinitForPool 的 color 重置会恢复默认状态。
+        // colorTransform/useColorTransform are managed by FlxSprite.set_color;
+        // the color reset in reinitForPool restores the default.
 
         kill();
         ensurePool().release(this);

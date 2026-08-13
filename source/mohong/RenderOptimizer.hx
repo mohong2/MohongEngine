@@ -5,45 +5,28 @@ import flixel.FlxSprite;
 import flixel.FlxState;
 
 /**
- * 渲染路径观测器（mohong 重写版）。
- *
- * 解决什么问题：
- *   旧实现宣称 draw call 统计/atlas 批处理/自动剔除，但计数器没有任何调用点
- *   （PlayState 只 import 未使用，ClientPrefs 只设开关）——纯"配置开关+零调用点"
- *   的假优化。重写为诚实的渲染观测：真实渲染段耗时、可见精灵采样、帧预算告警。
- *
- * 挂在哪个真实调用点：
- *   - Main.setupGame 用 FlxG.signals.preDraw/postDraw 接入 Flixel 渲染循环
- *     （FlxGame.draw 在渲染前后派发这两个信号，flixel 公共 API，不改任何库文件）；
- *   - ClientPrefs.loadDefaultKeys 继续接线 optimizationEnabled / renderQualityLevel，
- *     且 renderQualityLevel 现在有真实效果：采样频率与帧预算阈值。
- *
- * 怎么验证它真的在工作：
- *   - perf 模式 CSV 里可见精灵数随场景变化（标题画面 vs 打歌中）；
- *   - getStats() 的渲染耗时 p50/p95 有数据；
- *   - 渲染超预算时 TraceConsole 出现 throttled 告警日志。
- *
- * 明确不做：Stage3D 贴图、跨线程渲染、关 GC——都不是本类的职责。
+ * Render observer. Hooks FlxG.signals.preDraw/postDraw and samples
+ * visible sprites + render time. Observation only - no rendering changes.
  */
 class RenderOptimizer
 {
-	/** 是否启用观测（ClientPrefs.memoryOptimization 接线）。 */
+	/** On/off (ClientPrefs.memoryOptimization). */
 	public static var optimizationEnabled:Bool = true;
 
 	/**
-	 * 渲染质量 0=low 1=medium 2=high（ClientPrefs.renderQualityLevel 接线）。
-	 * 真实效果：可见精灵采样频率与帧预算告警阈值（观测强度）。
-	 * 视觉质量由引擎既有的 lowQuality/globalAntialiasing 设置负责，本类不碰。
+	 * Quality 0=low 1=med 2=high (ClientPrefs.renderQualityLevel).
+	 * Drives sampling rate and budget threshold.
+	 * Visual quality stays with lowQuality/globalAntialiasing.
 	 */
 	public static var renderQualityLevel:Int = 2;
 
-	/** 最近一次采样的可见精灵数（每 sampleInterval 帧刷新）。 */
+	/** Last sampled visible sprite count. */
 	public static var visibleSprites:Int = 0;
 
-	/** 上一帧渲染段耗时（ms，preDraw → postDraw）。 */
+	/** Last render span ms (preDraw->postDraw). */
 	public static var lastRenderTime:Float = 0;
 
-	// ── 渲染耗时环形缓冲（固定 1024 槽） ──
+	// ring buffer of render times (1024 slots)
 	static final RENDER_WINDOW:Int = 1024;
 	static var _renderTimes:Array<Float> = [for (_ in 0...RENDER_WINDOW) 0.0];
 	static var _renderCount:Int = 0;
@@ -52,7 +35,7 @@ class RenderOptimizer
 	static var _frameCounter:Int = 0;
 	static var _lastWarningAt:Float = 0;
 
-	/** 采样间隔（帧）：质量越低采样越稀（低端机少付遍历开销）。 */
+	/** Sampling interval in frames; lower quality = sparser. */
 	static function get_sampleInterval():Int
 	{
 		return switch (renderQualityLevel) {
@@ -62,7 +45,7 @@ class RenderOptimizer
 		}
 	}
 
-	/** 帧预算告警阈值（ms）。 */
+	/** Budget warning threshold, ms. */
 	static function get_budgetThreshold():Float
 	{
 		return switch (renderQualityLevel) {
@@ -72,7 +55,7 @@ class RenderOptimizer
 		}
 	}
 
-	/** 渲染前钩子（FlxG.signals.preDraw）。 */
+	/** preDraw hook. */
 	public static function onRenderStart():Void
 	{
 		if (!optimizationEnabled)
@@ -80,7 +63,7 @@ class RenderOptimizer
 		_renderStart = haxe.Timer.stamp() * 1000;
 	}
 
-	/** 渲染后钩子（FlxG.signals.postDraw）。 */
+	/** postDraw hook. */
 	public static function onRenderEnd():Void
 	{
 		if (!optimizationEnabled || _renderStart <= 0)
@@ -96,7 +79,7 @@ class RenderOptimizer
 
 		visibleSprites = countVisibleSprites();
 
-		// 帧预算告警：渲染段超阈值时输出，每秒最多一条
+		// warn when over budget, at most once per second
 		var now:Float = haxe.Timer.stamp();
 		if (lastRenderTime > get_budgetThreshold() && now - _lastWarningAt > 1.0)
 		{
@@ -108,8 +91,8 @@ class RenderOptimizer
 	}
 
 	/**
-	 * 遍历当前状态的 members，统计可见精灵数。
-	 * 只在采样帧调用（每 30/60/120 帧一次），不计子状态（文档化）。
+	 * Count visible sprites in the current state.
+	 * Sampled only, no substates.
 	 */
 	static function countVisibleSprites():Int
 	{
@@ -130,7 +113,7 @@ class RenderOptimizer
 	}
 
 	/**
-	 * 渲染耗时统计（对窗口内样本排序；仅显式调用时开销）。
+	 * Render-time percentiles (sort on demand).
 	 */
 	public static function getStats():RenderStats
 	{
@@ -160,7 +143,7 @@ class RenderOptimizer
 		};
 	}
 
-	/** 一行可读的观测摘要。 */
+	/** One-line summary. */
 	public static function getRenderStats():String
 	{
 		var s:RenderStats = getStats();
@@ -169,7 +152,7 @@ class RenderOptimizer
 	}
 }
 
-/** 渲染观测统计结果。 */
+/** Render stats result. */
 typedef RenderStats = {
 	samples:Int,
 	avgMs:Float,

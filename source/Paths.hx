@@ -73,12 +73,10 @@ class Paths
 	/** Maximum number of cached assets before triggering cleanup. 0 = unlimited. */
 	public static var maxCachedAssets:Int = #if mobile 200 #else 300 #end;
 
-	/** Whether loaded FlxGraphic objects auto-free when no sprite references them.
-	 *  全平台保持 false（有意为之，勿改）：destroyOnNoUse=true 会让"已入缓存但
-	 *  暂时没有精灵引用"的贴图（useCount 0）被立即销毁——整个 currentTrackedAssets
-	 *  缓存形同虚设，note 皮肤/角色贴图反复重载造成更严重的卡顿；还会误杀
-	 *  FlxBar 以 useCount 0 存活的前景贴图（见 isFlxBarCacheKey 的注释）。
-	 *  移动端内存上限改由 maxCachedAssets 的小容量（200）控制。 */
+	/** Auto-free when unreferenced. Keep false everywhere: destroyOnNoUse
+	 *  would kill cached-but-unreferenced graphics (useCount 0) and FlxBar's
+	 *  live cached graphics, defeating the whole cache. Mobile is bounded by
+	 *  the smaller maxCachedAssets instead. */
 	public static var allowGraphicAutoFree:Bool = false;
 
 	/// haya I love you for the base cache dump I took to the max
@@ -161,9 +159,8 @@ class Paths
 				purgeGraphicFromCaches(obj, key);
 			}
 		}
-		// run the garbage collector for good measure lmfao
-		// （perf P0-3 已移除：强制 System.gc() 会在切歌时同步全堆标记清扫，
-		//   造成数百 ms 顿挫；回收交给 hxcpp 运行时默认行为。）
+		// System.gc() was here; removed (perf P0-3). It hitched every song
+		// switch with a full sync collect. GC goes back to the default policy.
 	}
 
 	/**
@@ -729,7 +726,7 @@ class Paths
 			if (enableMemoryTracking) {
 				MemoryMonitor.trackGraphic(file, newGraphic);
 			}
-			// 贴图内存记账（GPUTextureManager 重写版接线点，与 useCount 生命周期同路径）
+			// Texture bookkeeping (same lifecycle as the useCount/zombie path).
 			GPUTextureManager.trackGraphic(file, newGraphic);
 			return newGraphic;
 		}

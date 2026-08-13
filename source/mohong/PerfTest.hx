@@ -12,23 +12,9 @@ import sys.FileSystem;
 #end
 
 /**
- * 性能验收自动化驱动（mohong 重写版的一部分——测量基建）。
- *
- * 解决什么问题：
- *   切歌 20 次 / 菜单往返的长时内存曲线需要无人值守驱动，
- *   否则"内存只涨不跌"无法复现、无法回归。
- *
- * 挂在哪个真实调用点：
- *   - Main.setupGame → PerfTest.init()（命令行参数解析与启动）；
- *   - PlayState.endSong → PerfTest.onSongComplete()（歌曲完成重试钩子）。
- *
- * 怎么验证它真的在工作：
- *   以 `--perf-test song` 启动后，游戏自动开 botplay 反复重试同一首歌，
- *   完成后 perf/perftest_song.csv + 摘要文件出现，进程自动退出。
- *
- * 用法（仅 sys 平台命令行参数生效；其他平台/无参数完全不激活）：
- *   SeiunEngine.exe --perf-test song   # 同一首歌 botplay 20 次重试
- *   SeiunEngine.exe --perf-test menu   # Title ↔ Freeplay 往返 20 次
+ * Unattended perf runner. CLI: --perf-test song|menu [N] [noseek].
+ * sys platforms only; no-op without the flag. Botplays the first chart
+ * found under mods, retries it, dumps CSV + summary, then exits.
  */
 class PerfTest
 {
@@ -37,7 +23,7 @@ class PerfTest
 	public static var maxRetries:Int = 20;
 	public static var retriesDone:Int = 0;
 	public static var roundTrips:Int = 0;
-	/** noseek：完整播放歌曲（seek 会让 overdue notes 一次性生成+销毁，影响池复用观测）。 */
+	/** noseek: full play; seeking makes the spawn catch-up destroy overdue notes. */
 	public static var noSeek:Bool = false;
 
 	static var startTime:Float = 0;
@@ -54,7 +40,7 @@ class PerfTest
 		enabled = true;
 		if (idx + 1 < args.length)
 			mode = args[idx + 1];
-		// 可选：第三个参数指定次数（默认 20）——短验证跑 3 次即可
+		// optional 3rd arg = retry count (default 20)
 		if (idx + 2 < args.length)
 		{
 			var n:Null<Int> = Std.parseInt(args[idx + 2]);
@@ -70,8 +56,8 @@ class PerfTest
 		RenderOptimizer.optimizationEnabled = true;
 		ClientPrefs.data.gameplaySettings.set('botplay', true);
 		ClientPrefs.data.autoPause = false;
-		// 无人值守运行：关掉 debug 构建的 flixel 调试器 UI，
-		// 防止误点系统按钮触发 Window.setVisible 崩溃。
+		// unattended: hide the debug-build debugger UI
+		// (stray clicks on its button crashed runs)
 		FlxG.debugger.visible = false;
 
 		startTime = haxe.Timer.stamp();
@@ -112,8 +98,8 @@ class PerfTest
 	}
 
 	/**
-	 * 从已安装 mod 中找第一张谱面并启动。
-	 * （本机 assets/data 为空，可玩谱面全部来自 mods/<mod>/data。）
+	 * Find the first chart under mods and start it.
+	 * (assets/data is empty; charts come from mods.)
 	 */
 	static function startSong():Void
 	{
@@ -143,9 +129,9 @@ class PerfTest
 	}
 
 	/**
-	 * 快进到歌曲最后 8 秒：每轮重试约 15 秒完成，20 次长测不必等完整歌曲。
-	 * 用 stage ENTER_FRAME 驱动（与 MemoryMonitor.onFrameStart 同款挂点，
-	 * 任何状态切换/定时器清理都影响不到它）。倒计时结束后执行一次 seek。
+	 * Seek to the last 8s so each retry is ~15s.
+	 * Driven by stage ENTER_FRAME (same hook as MemoryMonitor),
+	 * so state switches cannot stop it. Seeks once after the countdown.
 	 */
 	static var seekWatcher:openfl.events.Event->Void = null;
 	static var seekWatcherAccum:Float = 0;
@@ -183,8 +169,8 @@ class PerfTest
 				#end
 				if (!seekDone && canSeek && !noSeek)
 				{
-					// songLength 可能为 0（startSong 时流式音乐 length 尚不可用），
-					// 回退：重读 music.length → 谱面最后 note 时间。
+					// songLength can be 0 (streamed music length unknown at startSong)
+					// fall back: music.length, then last note time
 					var len:Float = ps.songLength;
 					if (len <= 10000 && FlxG.sound.music != null)
 						len = FlxG.sound.music.length;
@@ -214,7 +200,7 @@ class PerfTest
 	}
 
 	/**
-	 * 歌曲完成钩子（PlayState.endSong 调用）：记录快照并重试。
+	 * Called from PlayState.endSong: snapshot + retry.
 	 */
 	public static function onSongComplete():Void
 	{
@@ -251,7 +237,7 @@ class PerfTest
 		snapshots.push(line);
 		TraceManager.info('perfTest.snapshot', '{}', [line]);
 		#if sys
-		// 即时进度落盘（不等 finish，便于观察长跑进度）
+		// live progress file (no need to wait for finish)
 		try {
 			if (!FileSystem.exists('perf')) FileSystem.createDirectory('perf');
 			var fo:sys.io.FileOutput = sys.io.File.append('perf/progress.txt', false);
@@ -301,9 +287,9 @@ class PerfTest
 				for (f in files)
 				{
 					if (!f.endsWith('.json')) continue;
-					var base:String = f.substr(0, f.length - 5); // 去掉 .json
+					var base:String = f.substr(0, f.length - 5); // strip .json
 
-					// 从 <song>-<diff> 反推难度索引；匹配不到就当默认难度
+					// map <song>-<diff> back to a difficulty index
 					var diffIdx:Int = 0;
 					var dashIdx:Int = base.lastIndexOf('-');
 					if (dashIdx > 0)
@@ -328,7 +314,7 @@ class PerfTest
 	#end
 }
 
-/** 谱面定位结果。 */
+/** Found-chart result. */
 typedef FoundChart = {
 	mod:String,
 	song:String,

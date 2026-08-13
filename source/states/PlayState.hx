@@ -3089,7 +3089,7 @@ class PlayState extends MusicBeatState
 		{
 			// skipTexture=true：构造函数不预加载纹理/动画，统一由 setupNoteData 一次性完成，
 			// 避免几十万 Note 每枚都重复 reloadNote（构造 + setup 两次）带来的额外开销。
-			// 对象池借出（mohong.ObjectPool）：等价 new Note，但复用上一首歌归还的实例。
+			// Note pool borrow: same as new Note, reuses last song's instances.
 			var newNote:Note = Note.fromPool(pNote.strumTime, pNote.noteData, null, pNote.isSustainNote, false, true);
 			newNote.setupNoteData(pNote);
 			unspawnNotes.push(newNote);
@@ -4844,7 +4844,7 @@ class PlayState extends MusicBeatState
 			prevCamFollow = camFollow;
 			prevCamFollowPos = camFollowPos;
 
-			// 性能验收驱动（--perf-test song）：跳过结算子状态，直接进入下一轮
+			// Perf runner (--perf-test song): skip the results substate.
 			if (PerfTest.enabled && PerfTest.mode == 'song')
 			{
 				transitioning = true;
@@ -6508,11 +6508,10 @@ if (!cpuControlled) {
 		if (NoteMs != null) NoteMs = [];
 		if (NoteTime != null) NoteTime = [];
 
-		// Note 对象池（mohong.ObjectPool）：销毁前把本首歌的 Note 全部归还池。
-		// 注意：unspawnNotes 是游标设计——已生成的 Note 会一直留在数组里
-		// （spawn 只前进 notesAddedCount 游标），所以这里遍历 unspawnNotes
-		// 恰好覆盖本首歌的全部 Note 且每个只归还一次；
-		// notes 组只 clear（解绑分组），对象释放由 releaseToPool 内部完成。
+		// Return this song's notes to the pool. unspawnNotes uses a cursor
+		// (spawn only advances notesAddedCount), so it holds every note of
+		// the song exactly once; the group is just cleared (releaseToPool
+		// does the resource release).
 		if (unspawnNotes != null)
 		{
 			for (note in unspawnNotes)

@@ -9,66 +9,50 @@ import cpp.vm.Gc;
 #end
 
 /**
- * 内存与帧时间监控（mohong 重写版）。
- *
- * 解决什么问题：
- *   为"先测量后动手"提供测量基建：帧时间分位数、按平台分支的内存读数、
- *   贴图生命周期追踪、可导出的内存曲线。旧实现非 cpp 平台内存恒为 0，
- *   disposedBitmapCount 声明了却从不递增，且没有分位数统计。
- *
- * 挂在哪个真实调用点：
- *   - Main.hx ENTER_FRAME 每帧调用 onFrameStart()（已存在）；
- *   - Paths.hx cacheBitmap 调用 trackGraphic、purgeGraphicFromCaches 调用
- *     untrackGraphic（已存在），本类计数与贴图生命周期真实联动。
- *
- * 怎么验证它真的在工作：
- *   - Windows 实机：perf 测试模式导出的 CSV 里帧时间/内存/缓存数逐行变化；
- *   - 切歌 20 次后 cachedGraphicCount 回落到稳定值、disposedBitmapCount 持续增长；
- *   - HTML5（Chrome）：currentMemoryUsage 返回真实 JS heap 而非 0。
- *
- * 注意：本类只做"监控"，不做任何回收动作——回收交给运行时默认行为。
+ * Memory + frame-time sampler. Read-only: no GC, no reclaim here.
+ * Memory read is per-platform (cpp heap / js performance.memory / 0).
  */
 class MemoryMonitor
 {
-	/** 是否启用监控（ClientPrefs.memoryOptimization 接线）。 */
+	/** On/off (ClientPrefs.memoryOptimization). */
 	public static var monitoringEnabled:Bool = true;
 
-	/** 帧时间告警阈值（ms，约 30 FPS）。 */
+	/** Frame-time warn threshold, ms (~30fps). */
 	public static var frameTimeWarningThreshold:Float = 33.0;
 
-	/** 帧时间严重告警阈值（ms，约 20 FPS）。 */
+	/** Frame-time critical threshold, ms (~20fps). */
 	public static var frameTimeCriticalThreshold:Float = 50.0;
 
-	/** 是否记录帧时间环形缓冲（分位数统计需要；默认关以省内存）。 */
+	/** Record frame-time ring (for percentiles); off by default. */
 	public static var frameTimeTrackingEnabled:Bool = false;
 
-	/** 当前内存占用（字节）。平台分支见实现。 */
+	/** Current memory bytes, per platform. */
 	public static var currentMemoryUsage(get, never):Float;
 
-	/** 自启动以来观测到的内存峰值（字节）。 */
+	/** Peak memory since start. */
 	public static var peakMemoryUsage:Float = 0;
 
 	static var _lastFrameTimestamp:Float = 0;
 
-	/** 当前帧耗时（ms）。 */
+	/** Last frame time, ms. */
 	public static var currentFrameTime:Float = 0;
 
-	/** 帧时间指数滑动平均（ms）。 */
+	/** EMA of frame time, ms. */
 	public static var averageFrameTime:Float = 0;
 
-	/** 帧时间 EMA 平滑系数（0-1，越大越灵敏）。 */
+	/** EMA smoothing factor. */
 	public static var frameTimeSmoothingFactor:Float = 0.1;
 
-	/** FlxG.bitmap 缓存中的图条目数（每 60 帧刷新一次的缓存值）。 */
+	/** Cached graphic count (refreshed every 60 frames). */
 	public static var cachedGraphicCount(get, never):Int;
 
-	/** 累计被销毁/取消追踪的贴图数（untrackGraphic 时递增）。 */
+	/** Untracked/destroyed count. */
 	public static var disposedBitmapCount:Int = 0;
 
-	/** 受追踪的 FlxGraphic（key → graphic），用于泄漏检测。 */
+	/** Tracked graphics (key -> graphic). */
 	static var _trackedGraphics:Map<String, FlxGraphic> = new Map<String, FlxGraphic>();
 
-	/** 当前存活的受追踪贴图数（track/untrack 时直接维护，读取 O(1)）。 */
+	/** Live tracked count, kept O(1). */
 	static var _livingCount:Int = 0;
 
 	public static var livingGraphicCount(get, never):Int;
@@ -77,18 +61,18 @@ class MemoryMonitor
 	static var _frameCounter:Int = 0;
 	static var _cachedGraphicCountValue:Int = 0;
 
-	// ── 帧时间环形缓冲（固定大小，约 68 秒 @60fps） ──
+	// frame-time ring (~68s @60fps)
 	static final FRAME_WINDOW:Int = 4096;
 	static var _frameTimes:Array<Float> = [];
 	static var _frameTimeCount:Int = 0;
 
-	// ── 内存采样历史（每 MEM_SAMPLE_INTERVAL 帧一条，供导出曲线） ──
+	// memory sample history for the CSV curve
 	static final MEM_SAMPLE_INTERVAL:Int = 120;
 	static final MEM_HISTORY_CAP:Int = 10000;
 	static var _memHistory:Array<MemSample> = [];
 
 	#if cpp
-	/** hxcpp GC 堆当前值（含未回收垃圾；锯齿曲线可观测 GC 活动，仅 cpp）。 */
+	/** hxcpp GC heap now (sawtooth shows GC), cpp only. */
 	public static var gcCurrentMemory(get, never):Float;
 	static function get_gcCurrentMemory():Float
 	{
@@ -101,8 +85,8 @@ class MemoryMonitor
 		#if cpp
 		return System.totalMemory;
 		#elseif js
-		// 浏览器托管 GC：Chrome/Edge 提供 performance.memory（仅此二家）；
-		// 其他浏览器返回 0，标注清楚，不依赖平台专属 API 实现核心逻辑。
+		// browser GC: performance.memory is Chrome/Edge only;
+		// elsewhere return 0.
 		return untyped __js__('
 			(window.performance && window.performance.memory)
 				? window.performance.memory.usedJSHeapSize
@@ -123,7 +107,7 @@ class MemoryMonitor
 		return _livingCount;
 	}
 
-	/** 初始化（应用启动时调用一次）。 */
+	/** Init once at startup. */
 	public static function initialize():Void
 	{
 		if (_initialized)
@@ -136,8 +120,8 @@ class MemoryMonitor
 	}
 
 	/**
-	 * 每帧调用（Main ENTER_FRAME）：帧时间 EMA + 环形缓冲；
-	 * 内存采样与缓存计数按帧节流，避免每帧 syscall/遍历。
+	 * Per-frame (Main ENTER_FRAME): EMA + ring;
+	 * memory + cache counts are throttled.
 	 */
 	public static function onFrameStart():Void
 	{
@@ -161,7 +145,7 @@ class MemoryMonitor
 
 		_frameCounter++;
 
-		// 低频内存采样（每 ~120 帧一次）
+		// low-freq memory sample (~every 120 frames)
 		if (_frameCounter % MEM_SAMPLE_INTERVAL == 0)
 		{
 			var mem:Float = currentMemoryUsage;
@@ -180,7 +164,7 @@ class MemoryMonitor
 			}
 		}
 
-		// 低频刷新缓存图计数（每 60 帧遍历一次 FlxG.bitmap._cache）
+		// refresh cached-graphic count every 60 frames
 		if (_frameCounter % 60 == 0)
 		{
 			var count:Int = 0;
@@ -191,7 +175,7 @@ class MemoryMonitor
 		}
 	}
 
-	/** 当前内存状态摘要（一行文本）。 */
+	/** One-line memory summary. */
 	public static function getMemoryReport():String
 	{
 		var memMB:Int = Std.int(currentMemoryUsage / 1024 / 1024);
@@ -200,7 +184,7 @@ class MemoryMonitor
 			+ 'Graphics cached: ${cachedGraphicCount} | living tracked: ${livingGraphicCount}';
 	}
 
-	/** 帧时间分位数统计（对窗口内样本排序后计算；仅在显式调用时开销）。 */
+	/** Frame-time percentiles (sort on demand). */
 	public static function getFrameStats():FrameStats
 	{
 		var n:Int = Std.int(Math.min(_frameTimeCount, FRAME_WINDOW));
@@ -238,8 +222,8 @@ class MemoryMonitor
 	}
 
 	/**
-	 * 导出内存历史 + 帧时间统计到 CSV（仅 sys 平台；显式调用才写文件，
-	 * 平时零磁盘开销）。返回写出的完整路径，失败返回 null。
+	 * Export memory history + frame stats to CSV (sys only, on demand).
+	 * Returns the path or null.
 	 */
 	public static function exportStats(?path:String):String
 	{
@@ -272,7 +256,7 @@ class MemoryMonitor
 		#end
 	}
 
-	/** 登记一个 FlxGraphic 的生命周期。 */
+	/** Track a graphic. */
 	public static function trackGraphic(key:String, graphic:FlxGraphic):Void
 	{
 		if (graphic == null)
@@ -282,7 +266,7 @@ class MemoryMonitor
 		_trackedGraphics.set(key, graphic);
 	}
 
-	/** 取消登记；仅在确实移除了条目时递增销毁计数。 */
+	/** Untrack; bumps the destroy counter. */
 	public static function untrackGraphic(key:String):Void
 	{
 		if (!_trackedGraphics.exists(key))
@@ -293,7 +277,7 @@ class MemoryMonitor
 	}
 
 	/**
-	 * 找出 FlxG.bitmap 缓存中未被追踪的键（诊断用，O(n)，别在热路径调）。
+	 * Diagnostic: cache keys we are not tracking (O(n), not hot path).
 	 */
 	public static function detectUntrackedGraphics():Array<String>
 	{
@@ -308,7 +292,7 @@ class MemoryMonitor
 	}
 }
 
-/** 一条内存采样记录。 */
+/** One memory sample. */
 typedef MemSample = {
 	t:Float,
 	mem:Float,
@@ -317,7 +301,7 @@ typedef MemSample = {
 	living:Int
 }
 
-/** 帧时间统计结果。 */
+/** Frame-time stats result. */
 typedef FrameStats = {
 	frames:Int,
 	avg:Float,

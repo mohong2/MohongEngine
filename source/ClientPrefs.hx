@@ -115,9 +115,8 @@ import sys.io.Process;
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	// 注意：cacheOnGPU / preloadAssets 已移除——两处开关全项目零接线
-	// （唯一 UI 在 options/_backup 备份目录；逻辑里 cacheOnGPU 判断被注释）。
-	// 老存档里的同名键仍保留在 save 数据中，mod 的 getPref 读到的旧值不受影响。
+	// cacheOnGPU / preloadAssets were dead flags and got dropped from the
+	// struct. Old save keys stay; the static accessors read them via Reflect.
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
@@ -792,10 +791,8 @@ class ClientPrefs {
 			default:       2;
 		};
 
-		// 说明：此 fork 的 FlxSprite 没有 defaultAntialiasing（实例级 AA 由
-		// lowQuality/globalAntialiasing 控制），所以 renderQualityLevel 的
-		// 真实效果限定为渲染观测强度（采样频率、帧预算告警阈值），
-		// 视觉质量仍由 lowQuality 设置负责。
+		// This fork has no FlxSprite.defaultAntialiasing, so renderQualityLevel
+		// only tunes observation intensity; visuals stay with lowQuality.
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;
