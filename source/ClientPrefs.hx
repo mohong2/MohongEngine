@@ -141,6 +141,8 @@ import sys.io.Process;
 	public var judgementPreset:String = 'Leather Engine';
 	public var marvelousRatings:Bool = true;
 	public var marvelousWindow:Int = 25;
+	/** osu! 尾判: 长条松键时按释放时机判定尾部 (开启后影响成绩/回放) */
+	public var osuTailJudgement:Bool = false;
 
 	public var saveReplayData:Bool = true;
 	public var lastNoteAnimation:Bool = false;
@@ -279,6 +281,7 @@ class ClientPrefs {
 	public static var judgementPreset(get, never):String;
 	public static var marvelousRatings(get, never):Bool;
 	public static var marvelousWindow(get, never):Int;
+	public static var osuTailJudgement(get, never):Bool;
 	public static var touchSwipeEnabled(get, never):Bool;
 	public static var separateUpdateDraw(get, never):Bool;
 	public static var memoryOptimization(get, never):Bool;
@@ -372,6 +375,7 @@ class ClientPrefs {
 	static inline function get_judgementPreset() return data.judgementPreset;
 	static inline function get_marvelousRatings() return data.marvelousRatings;
 	static inline function get_marvelousWindow() return data.marvelousWindow;
+	static inline function get_osuTailJudgement() return data.osuTailJudgement;
 	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
 	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
 	static inline function get_memoryOptimization() return data.memoryOptimization;

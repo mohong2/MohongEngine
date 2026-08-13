@@ -745,6 +745,7 @@ class Note extends FlxSprite {
         noteData = chartNoteData.noteData;
         isSustainNote = chartNoteData.isSustainNote;
         isSustainEnd = chartNoteData.isSustainEnd;
+        sustainLength = chartNoteData.sustainLength;
         genStepCrochet = chartNoteData.stepCrochet;
 
         multSpeed = chartNoteData.multSpeed;

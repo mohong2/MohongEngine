@@ -36,5 +36,6 @@
     "ResultsScreen.replayMode": "回放",
     "ResultsScreen.overallDeviation": "总体偏差",
 	"ResultsScreen.instructions": "ENTER / 点击: 选择  |  方向键: 切换  |  ESC: 继续",
-"ResultsScreen.judge": "判定"
+"ResultsScreen.judge": "判定",
+"ResultsScreen.tailJudgement": "尾判"
 }

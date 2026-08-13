@@ -18,6 +18,8 @@
     "option.judgementPreset.desc": "Apply a preset judgement timing (Leather Engine / Psych Engine / Friday Night Funkin').\nManually changing any window below will switch this to Custom.",
     "option.marvelousWindow": "Marvelous! Hit Window",
     "option.marvelousWindow.desc": "Changes the amount of time you have\nfor hitting a \"Marvelous\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
+    "option.osuTailJudgement": "osu! Tail Judgement",
+    "option.osuTailJudgement.desc": "Judge Hold Note releases by tail timing (osu!mania style). Affects replays.",
 
     "option.language.desc": "Select the game display language.",
     "option.luattf.desc": "Change the font of lua (if lua is not set).",

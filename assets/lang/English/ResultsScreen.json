@@ -36,5 +36,6 @@
     "ResultsScreen.replayMode": "REPLAY",
     "ResultsScreen.overallDeviation": "Overall Diff",
 	"ResultsScreen.instructions": "ENTER / CLICK: Select  |  ARROWS: Switch  |  ESC: Continue",
-"ResultsScreen.judge": "Judge"
+"ResultsScreen.judge": "Judge",
+"ResultsScreen.tailJudgement": "Tail Judgement"
 }

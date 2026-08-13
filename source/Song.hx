@@ -190,6 +190,11 @@ class Song
 
 	public static function parseJSON(rawData:String, ?nameForError:String = null, ?convertTo:String = 'psych_v1'):SwagSong
 	{
+		// Strip UTF-8 BOM: haxe.format.JsonParser rejects U+FEFF at position 0,
+		// which crashes chart loading for files saved by Notepad/PowerShell etc.
+		if (rawData != null && rawData.length > 0 && rawData.charCodeAt(0) == 0xFEFF)
+			rawData = rawData.substr(1);
+
 		// Detect CNE (Codename Engine) format
 		if (rawData.indexOf('"codenameChart"') != -1)
 		{

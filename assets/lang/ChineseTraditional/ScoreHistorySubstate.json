@@ -21,6 +21,9 @@
 "ScoreHistorySubstate.emptyMsg" : "暫無歷史記錄,請在無Practice或BotPlay模式下進行遊戲記錄歷史記錄",
     "ScoreHistorySubstate.judgeWindows": "判定類型 / 區間",
     "ScoreHistorySubstate.custom" : "自訂",
+    "ScoreHistorySubstate.tailJudgement": "尾判",
+    "ScoreHistorySubstate.on" : "開",
+    "ScoreHistorySubstate.off" : "關",
     "ScoreHistorySubstate.replayDifficultyLock" : "回放模式下不允許調整難度.",
     "ScoreHistorySubstate.instructions": "上/下: 選擇  |  ENTER: 播放  |  RESET: 刪除  |  ESC: 返回"
 }

@@ -5805,7 +5805,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			fileDialog.open('song.json', 'Open a Psych Engine Chart JSON', function()
 			{
 				var filePath:String = fileDialog.path.replace('\\', '/');
-				var loadedChart:SwagSong = Song.parseJSON(fileDialog.data, filePath.substr(filePath.lastIndexOf('/')));
+				var loadedChart:SwagSong = null;
+				try { loadedChart = Song.parseJSON(fileDialog.data, filePath.substr(filePath.lastIndexOf('/'))); }
+				catch(e:Dynamic) { loadedChart = null; }
 				if(loadedChart == null || !Reflect.hasField(loadedChart, 'song')) //Check if chart is ACTUALLY a chart and valid
 				{
 					showOutput('newchartEditor_error_file_not_psych_chart', true);
@@ -5975,7 +5977,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 			fileDialog.open('chart.json', 'Open a V-Slice Chart file', function()
 			{
-				var chart:VSliceChart = cast Json.parse(fileDialog.data);
+				var chart:VSliceChart = null;
+				try { chart = cast Json.parse(fileDialog.data); } catch(e:Dynamic) { chart = null; }
 				if(chart == null || chart.version == null || chart.notes == null || chart.scrollSpeed == null)
 				{
 					showOutput('newchartEditor_error_invalid_vslice_chart', true);
@@ -5984,7 +5987,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 				fileDialog.open('metadata.json', 'Open a V-Slice Metadata file', function()
 				{
-					var metadata:VSliceMetadata = cast Json.parse(fileDialog.data);
+					var metadata:VSliceMetadata = null;
+					try { metadata = cast Json.parse(fileDialog.data); } catch(e:Dynamic) { metadata = null; }
 					if(metadata == null || metadata.version == null || metadata.playData == null || metadata.songName == null ||
 						metadata.playData.difficulties == null || metadata.timeChanges == null || metadata.timeChanges.length < 1)
 					{
@@ -7516,22 +7520,32 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function overwriteCheck(savePath:String, overwriteName:String, saveData:String, continueFunc:Void->Void = null, ?continueOnCancel:Bool = false)
 	{
 		#if sys
+		function doSave():Void
+		{
+			try
+			{
+				// Make sure the parent directory exists before writing. Folder
+				// pickers can hand back odd paths, and saveContent on a missing
+				// parent used to crash the whole editor.
+				var parent:String = savePath.substr(0, savePath.lastIndexOf('/'));
+				if (parent.length > 0 && !FileSystem.exists(parent))
+					FileSystem.createDirectory(parent);
+				File.saveContent(savePath, saveData);
+				overwriteSavedSomething = true;
+				if(continueFunc != null) continueFunc();
+			}
+			catch(e:Dynamic)
+			{
+				showOutput('newchartEditor_error_save', true);
+				TraceManager.error('trace.editor.fileSaveError', 'Save failed: {} - {}', [savePath, Std.string(e)]);
+			}
+		}
 		if(FileSystem.exists(savePath))
 		{
-			openSubState(new Prompt('${Language.get("newchartEditor_overwrite", "Overwrite")}: "$overwriteName"?', function()
-			{
-				overwriteSavedSomething = true;
-				File.saveContent(savePath, saveData);
-				if(continueFunc != null) continueFunc();
-			},
+			openSubState(new Prompt('${Language.get("newchartEditor_overwrite", "Overwrite")}: "$overwriteName"?', doSave,
 			continueOnCancel ? (function() if(continueFunc != null) continueFunc()) : null));
 		}
-		else
-		{
-			overwriteSavedSomething = true;
-			File.saveContent(savePath, saveData);
-			if(continueFunc != null) continueFunc();
-		}
+		else doSave();
 		#else
 		overwriteSavedSomething = true;
 		if(continueFunc != null) continueFunc();

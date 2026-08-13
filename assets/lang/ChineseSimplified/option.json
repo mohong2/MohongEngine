@@ -18,6 +18,8 @@
     "option.judgementPreset.desc": "应用预设判定区间 (Leather Engine / Psych Engine / Friday Night Funkin')。\n手动修改下方任意窗口后会自动变为自定义。",
     "option.marvelousWindow": "Marvelous 判定窗口",
     "option.marvelousWindow.desc": "修改“Marvelous”判定所需的时间 (毫秒)。\n(手动修改会将判定预设变为自定义)",
+    "option.osuTailJudgement": "osu! 尾判",
+    "option.osuTailJudgement.desc": "长条松键按尾端时机判定（osu!mania 风格）。影响回放成绩。",
 
     "option.language.desc": "选择游戏显示语言.",
     "option.luattf.desc": "改变lua的字体(如果lua没有设置).",

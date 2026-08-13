@@ -477,6 +477,15 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			if (judgeType.length == 0)
 				judgeType = Language.get("ScoreHistorySubstate.custom", "Custom");
 			rows2.push(mk(Language.get("ScoreHistorySubstate.judgeWindows", "Judge Type / Win"), judgeType + " (" + judgeStr + ")", FlxColor.fromRGB(180, 180, 200)));
+
+			// osu! 尾判: 显示该成绩是否开启尾判 (老记录没有字段则跳过)
+			if (e.details.length > 27 && e.details[27] != null)
+			{
+				var tailOn:Bool = (e.details[27] == true || Std.string(e.details[27]).toLowerCase() == 'true');
+				rows2.push(mk(Language.get("ScoreHistorySubstate.tailJudgement", "Tail Judgement"),
+					tailOn ? Language.get("ScoreHistorySubstate.on", "ON") : Language.get("ScoreHistorySubstate.off", "OFF"),
+					tailOn ? FlxColor.fromRGB(255, 215, 0) : FlxColor.GRAY));
+			}
 		}
 
 		// ---- Measure widest label per column (capped so long labels never crush the value column) ----
@@ -809,6 +818,11 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 				judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
 				judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
 				marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
+				marvelousWindow: details != null && details.length > 30 && details[30] != null ? details[30] : null,
+				// osu! 尾判 / 判定相关手感: 从成绩详情强制还原
+				osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
+				ratingOffset: details != null && details.length > 28 && details[28] != null ? details[28] : null,
+				guitarHeroSustains: details != null && details.length > 29 && details[29] != null ? details[29] : null,
 				replayVersion: 2
 			};
 

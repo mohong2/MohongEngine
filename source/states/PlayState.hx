@@ -304,6 +304,8 @@ class PlayState extends MusicBeatState
 	public var replayTxt:FlxText;
 	/** LeatherEngine 移植: 回放判定手感还原提示 */
 	public var judgeRestoreTxt:FlxText;
+	/** osu! 尾判: HUD 开启标识 (一眼确认开关与构建生效) */
+	public var tailBadgeTxt:FlxText;
 	var botplayUsed:Bool = false;
 	var strumsHit:Array<Bool> = [false, false, false, false, false, false, false, false];
 	var _suppressNoteAnim:Bool = false;
@@ -313,6 +315,14 @@ class PlayState extends MusicBeatState
 	private var _hold:Array<Bool> = [];
 	private var _press:Array<Bool> = [];
 	private var _release:Array<Bool> = [];
+
+	// ---- osu! 尾判: 每轨当前按住的"长条头部"与尾端时间 ----
+	/** 每轨活动长条的尾端时间 (0 = 无活动长条) */
+	private var activeTailEnd:Array<Float> = [];
+	/** 每轨活动长条的头部 Note (取 hitHealth/missHealth 用) */
+	private var activeHoldNote:Array<Note> = [];
+	/** 尾判判定窗口 = 普通判定窗口 × 2 (FNF 长条与 osu LN 机制不同, 松键宽容一点) */
+	private static final TAIL_WINDOW_MULT:Float = 2.0;
 
 
 	public var iconP1:HealthIcon;
@@ -421,6 +431,8 @@ class PlayState extends MusicBeatState
 
 	//Achievement shit
 	var keysPressed:Array<Bool> = [];
+	/** 多k 移动端: 触摸当前按住的轨道 (FlxHitbox 直接驱动, 供 keysCheck 长条按住判定用)。 */
+	public var mobileHeld:Array<Bool> = [];
 	var boyfriendIdleTime:Float = 0.0;
 	var boyfriendIdled:Bool = false;
 
@@ -529,6 +541,7 @@ class PlayState extends MusicBeatState
 		for (i in 0...keysArray.length)
 		{
 			keysPressed.push(false);
+			mobileHeld.push(false);
 		}
 
 		if (FlxG.sound.music != null)
@@ -554,6 +567,17 @@ class PlayState extends MusicBeatState
                         Replay.dbgLog('[DEBUG-rpl] PlayState.create frames=' + replayExam.getFrameData().length);
 			// 回放恢复了录制时的判定手感, 重建评级数据使其立即生效
 			buildRatingsData();
+			// 回放强制还原了判定设置且与玩家当前设置不同 → 弹窗提醒
+			if (replayExam.judgementRestoredDifferent)
+			{
+				var rInfo:String = (replayExam.judgementRestoreInfo != null && replayExam.judgementRestoreInfo.length > 0)
+					? replayExam.judgementRestoreInfo
+					: Language.get("replayJudgeRestored", "Replay Judgement:");
+				backend.Dialog.show(
+					Language.get("replaySettingsRestoredTitle", "Replay Settings Restored"),
+					Language.get("replaySettingsRestoredMsg", "This replay restores the original judgement settings used when it was recorded, so the score stays accurate.\n\n") + rInfo,
+					'Warning');
+			}
 			// 回放模式下强制关闭 botplay/practice 防止冲突
 			cpuControlled = false;
 			practiceMode = false;
@@ -1561,6 +1585,17 @@ class PlayState extends MusicBeatState
 		msTxtKade.borderSize = 2;
 		msTxtKade.font = Paths.font("kadems.ttf"); 
 		add(msTxtKade);
+
+		tailBadgeTxt = new FlxText(ClientPrefs.data.comboOffset[6], ClientPrefs.data.comboOffset[7] + 26, 0, "", 14);
+		tailBadgeTxt.text = Language.get("osuTailBadge", "TAIL");
+		tailBadgeTxt.scrollFactor.set();
+		tailBadgeTxt.cameras = [camHUD];
+		tailBadgeTxt.visible = ClientPrefs.data.osuTailJudgement && !ClientPrefs.data.hideHud;
+		tailBadgeTxt.color = 0xFFFFD700;
+		tailBadgeTxt.setFormat(14, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		tailBadgeTxt.borderSize = 1.5;
+		tailBadgeTxt.font = Paths.font("kadems.ttf");
+		add(tailBadgeTxt);
 
 		var songName:String = PlayState.SONG.song; 
 		var difficultyName:String = displayDifficultyString();
@@ -4778,7 +4813,12 @@ class PlayState extends MusicBeatState
 					ClientPrefs.data.safeFrames,
 					ClientPrefs.data.judgementTimings,
 					ClientPrefs.data.marvelousRatings,
-					ClientPrefs.data.judgementPreset
+					ClientPrefs.data.judgementPreset,
+					// osu! 尾判 + 判定相关手感 (27-30, 回放/成绩详情强制还原用)
+					ClientPrefs.data.osuTailJudgement,
+					ClientPrefs.data.ratingOffset,
+					ClientPrefs.data.guitarHeroSustains,
+					ClientPrefs.data.marvelousWindow
 				];
 				Highscore.saveScore(SONG.song, songScore, storyDifficulty, percent,sicks, goods, bads, shits, songMisses, maxcombo);
 				Allscore.addEntry(
@@ -5192,7 +5232,11 @@ class PlayState extends MusicBeatState
 		/** 多k: 供安卓 Hitbox 直接触发额外轨道 (4K 以上)。 */
 		public function mobileKeyPressed(key:Int):Void
 		{
-			if (replayMode || cpuControlled || paused || key < 0 || key >= Note.ammo[mania])
+			if (key < 0 || key >= Note.ammo[mania] || key >= mobileHeld.length)
+				return;
+			// 触摸按住状态: 即使暂停/回放也如实记录, keysCheck 才能持续命中长条段
+			mobileHeld[key] = true;
+			if (replayMode || cpuControlled || paused)
 				return;
 			keyPressed(key);
 		}
@@ -5200,8 +5244,9 @@ class PlayState extends MusicBeatState
 		/** 多k: 供安卓 Hitbox 直接释放额外轨道 (4K 以上)。 */
 		public function mobileKeyReleased(key:Int):Void
 		{
-			if (key < 0 || key >= Note.ammo[mania])
+			if (key < 0 || key >= Note.ammo[mania] || key >= mobileHeld.length)
 				return;
+			mobileHeld[key] = false;
 			keyReleased(key);
 		}
 		
@@ -5227,7 +5272,7 @@ class PlayState extends MusicBeatState
 				keyReleased(key);
 		}
 
-		public function keyReleased(key:Int):Void
+		public function keyReleased(key:Int, ?time:Float = -999999):Void
 		{
 			if (cpuControlled || !startedCountdown || paused)
 				return;
@@ -5239,6 +5284,16 @@ class PlayState extends MusicBeatState
 			if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
 				return;
 
+			// osu! 尾判: 松键时按释放时机相对长条尾端判定
+			if (ClientPrefs.data.osuTailJudgement
+				&& key >= 0 && key < activeTailEnd.length
+				&& activeTailEnd[key] > 0
+				&& (strumsBlocked.length <= key || strumsBlocked[key] != true))
+			{
+				var releaseTime:Float = (time != -999999) ? time : Conductor.songPosition;
+				judgeTailRelease(key, releaseTime);
+			}
+
 			var spr:StrumNote = playerStrums.members[key];
 			if (spr != null)
 			{
@@ -5246,6 +5301,275 @@ class PlayState extends MusicBeatState
 				spr.resetAnim = 0;
 			}
 			callOnScripts('onKeyRelease', [key]);
+		}
+
+		// ======================== osu! 尾判 ========================
+
+		/** osu! 尾判: 初始化轨道数组 (mania 可能变化) */
+		private function ensureTailArrays():Void
+		{
+			var laneCount:Int = Note.ammo[mania];
+			if (activeTailEnd.length != laneCount)
+			{
+				activeTailEnd = [for (i in 0...laneCount) 0.0];
+				activeHoldNote = [for (i in 0...laneCount) null];
+			}
+		}
+
+		/** osu! 尾判: 清除指定轨道的活动长条 */
+		private function clearActiveHold(lane:Int):Void
+		{
+			if (lane >= 0 && lane < activeTailEnd.length)
+			{
+				activeTailEnd[lane] = 0;
+				activeHoldNote[lane] = null;
+			}
+		}
+
+		/** osu! 尾判: 长条头部命中时注册活动长条 (记录尾端时间与头部 Note) */
+		private function registerActiveHold(note:Note):Void
+		{
+			if (note == null || cpuControlled || playOpponent || note.isSustainNote || note.sustainLength < 1) return;
+			if (!note.mustPress) return;
+			ensureTailArrays();
+			var lane:Int = Std.int(Math.abs(note.noteData));
+			if (lane < 0 || lane >= activeTailEnd.length) return;
+
+			// 长条链: 上一根长条还挂着就按下新头部 → 上一根视为按住完成, 结算其长条分数
+			if (activeTailEnd[lane] > 0)
+			{
+				if (!practiceMode)
+				{
+					songScore += sustainNotescore;
+					updateScore();
+				}
+				sustainNotescore = 0;
+				clearActiveHold(lane);
+			}
+
+			activeTailEnd[lane] = computeTailEnd(note);
+			activeHoldNote[lane] = note;
+		}
+
+		/**
+		 * osu! 尾判: 计算长条的视觉尾端时间。
+		 * 不能直接用 strumTime + sustainLength —— 谱面生成时尾段会额外偏移
+		 * (stepCrochet / songSpeed), 玩家松手是对着屏幕上的尾段松的。
+		 * 沿 nextNote 链找到最后一个 sustain 段 (isSustainEnd) 用它的 strumTime;
+		 * 短到没生成尾段的兜底用 chart 时长。
+		 */
+		private function computeTailEnd(head:Note):Float
+		{
+			var fallback:Float = head.strumTime + head.sustainLength;
+			if (head.nextNote == null) return fallback;
+			var headParentST:Float = head.strumTime - ClientPrefs.data.noteOffset;
+			var n:Note = head.nextNote;
+			var endPiece:Note = null;
+			while (n != null && n.isSustainNote && n.parentST == headParentST)
+			{
+				// 链中最后一个同头部 sustain 段就是视觉尾段
+				endPiece = n;
+				n = n.nextNote;
+			}
+			return (endPiece != null) ? endPiece.strumTime : fallback;
+		}
+
+		/**
+		 * osu! 尾判: 松键判定 (由 keyReleased 调用)。
+		 * - 松键误差 = 松键时间 - 尾端时间, 与普通音符一样按 |误差| 使用同一套判定窗口
+		 * - 误差超出安全区 → miss (早放/晚放都算)
+		 * - 按住超过尾端 + 安全区仍不松 → 由每帧超时检查判 miss (osu: 超过晚 miss 窗口仍按住 = miss)
+		 */
+		private function judgeTailRelease(lane:Int, releaseTime:Float):Void
+		{
+			if (lane < 0 || lane >= activeTailEnd.length) return;
+			var tailEnd:Float = activeTailEnd[lane];
+			if (tailEnd <= 0) return;
+
+			var diff:Float = releaseTime - tailEnd;
+			var rating:String = tailRatingFor(diff);
+			if (rating == 'miss')
+				tailMiss(lane, tailEnd, releaseTime);
+			else
+				tailHit(lane, tailEnd, diff, rating);
+			clearActiveHold(lane);
+		}
+
+		/**
+		 * osu! 尾判: 松键评级 (完全还原 osu!mania: 早放/晚放对称使用同一套窗口)。
+		 * - |误差| ≤ marvelous/sick/good/bad 窗口 → 对应评级
+		 * - bad 窗口 < |误差| ≤ 安全区 → shit
+		 * - |误差| > 安全区 → miss
+		 */
+		private function tailRatingFor(diff:Float):String
+		{
+			var absDiff:Float = Math.abs(diff);
+			if (absDiff > Conductor.safeZoneOffset * TAIL_WINDOW_MULT) return 'miss';
+			// 尾判窗口放宽 2 倍
+			return backend.Ratings.getRating(absDiff / TAIL_WINDOW_MULT);
+		}
+
+		/** osu! 尾判: 松键命中 → 结算长条分数 + 评级分数, 显示延迟与评级图标 */
+		private function tailHit(lane:Int, tailEnd:Float, diff:Float, rating:String):Void
+		{
+			var head:Note = (lane < activeHoldNote.length) ? activeHoldNote[lane] : null;
+
+			// 回放时优先使用录制的高精度尾判, 100% 还原评分与 ms
+			var recordedJ = null;
+			if (replayMode && replayExam != null && replayExam.hasJudgments)
+				recordedJ = replayExam.getRecordedJudgment(tailEnd, lane);
+
+			if (recordedJ != null) rating = recordedJ.rating;
+
+			if (!replayMode && replayExam != null)
+				replayExam.recordJudgment(tailEnd, lane, diff, rating, true);
+
+			// 尾判命中: 剩余长条段直接作废, 不再逐段判定
+			if (head != null) invalidateRemainingSustain(lane, head);
+
+			if (rating == 'marvelous') msTxtKade.color = 0xFFFFD700;
+			else if (rating == 'sick') msTxtKade.color = 0x00FFFF;
+			else if (rating == 'good') msTxtKade.color = 0x006400;
+			else if (rating == 'bad') msTxtKade.color = 0xEEFF00;
+			else msTxtKade.color = 0xFF0000;
+
+			var showMs:Float = (recordedJ != null) ? recordedJ.hitDiff : diff;
+			msTxtKade.text = Std.string(FlxMath.roundDecimal(showMs, 3)) + "ms";
+			msTxtKade.alpha = 1;
+			if (msScaleTween != null) msScaleTween.cancel();
+			msTxtKade.scale.set(1.15, 1.15);
+			msScaleTween = FlxTween.tween(msTxtKade.scale, {x: 1, y: 1}, 0.15, {ease: FlxEase.backOut});
+			if (msTween != null) msTween.cancel();
+			msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
+
+			var score:Int = backend.Ratings.getScore(rating);
+			if (!practiceMode && !cpuControlled)
+			{
+				// 尾判命中才结算长条按住期间累积的分数 (osu: 断条不结算)
+				songScore += sustainNotescore;
+				songScore += score;
+				songHits++;
+				// 尾判命中计入评级计数 (marvelouses/sicks/goods/bads/shits), 与准确率一致
+				var counterName:String = (rating == 'marvelous') ? 'marvelouses' : rating + 's';
+				Reflect.setField(this, counterName, Reflect.field(this, counterName) + 1);
+			}
+			sustainNotescore = 0;
+			updateScore();
+			totalPlayed++;
+			// 尾判命中按评级计入准确率 (与普通音符一致), 否则全 perfect 也会被长条拉低准确率
+			var tailMod:Float = 1;
+			if (rating == 'good') tailMod = 0.7;
+			else if (rating == 'bad') tailMod = 0.4;
+			else if (rating == 'shit') tailMod = 0;
+			totalNotesHit += tailMod;
+			RecalculateRating(false);
+
+			// 评级弹窗 (只显示评级图, 不叠 combo 数字: 连击由头部音符负责)
+			if (ratingPopup != null)
+				ratingPopup.show(rating, combo, playbackRate, FlxG.width * 0.35,
+					ClientPrefs.data.hideHud, showRating, false, false,
+					[for (v in ClientPrefs.data.comboOffset) Std.int(v)], Conductor.crochet,
+					ClientPrefs.data.comboStacking);
+		}
+
+		/** osu! 尾判: 提前过多松键 → 尾判失误 (断连/扣血/计 miss) */
+		private function tailMiss(lane:Int, tailEnd:Float, releaseTime:Float):Void
+		{
+			var head:Note = (lane < activeHoldNote.length) ? activeHoldNote[lane] : null;
+			var diff:Float = releaseTime - tailEnd;
+
+			if (!replayMode && replayExam != null)
+				replayExam.recordJudgment(tailEnd, lane, diff, 'miss', true);
+
+			// miss: 长条段恢复未按住状态, 让它们像普通 miss 一样划过接收器 (只计一次失误)
+			if (head != null) markRemainingSustainMissed(lane, head);
+
+			combo = 0;
+			if (!endingSong) songMisses++;
+			totalPlayed++;
+			sustainNotescore = 0;
+			NoteMs.push(167);
+			NoteTime.push(tailEnd);
+			RecalculateRating(true);
+
+			if (head != null)
+			{
+				if (playOpponent) health += head.missHealth * healthLoss;
+				else health -= head.missHealth * healthLoss;
+			}
+			else
+			{
+				if (playOpponent) health += 0.05 * healthLoss;
+				else health -= 0.05 * healthLoss;
+			}
+
+			// 模拟普通 miss 效果: 角色 miss 动画 / gf 难过
+			if (head != null && !head.noMissAnimation)
+			{
+				var missChar:Character = playOpponent ? dad : boyfriend;
+				if (head.gfNote) missChar = gf;
+				if (missChar != null && missChar.hasMissAnimations)
+				{
+					var animToPlay:String = getSingAnim(head) + 'miss' + head.animSuffix;
+					missChar.playAnim(animToPlay, true);
+				}
+			}
+			if (combo > 5 && gf != null && gf.animOffsets.exists('sad'))
+				gf.playAnim('sad');
+
+			msTxtKade.color = 0xFF0000;
+			msTxtKade.text = 'Miss';
+			msTxtKade.alpha = 1;
+			if (msTween != null) msTween.cancel();
+			msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
+
+			if (instakillOnMiss)
+			{
+				vocals.volume = 0;
+				vocalsPlayer.volume = 0;
+				doDeathCheck(true);
+			}
+			FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
+			clearActiveHold(lane);
+		}
+
+		/** osu! 尾判: 命中时丢弃长条剩余未命中段, 防止松键后被逐段判 miss */
+		private function invalidateRemainingSustain(lane:Int, head:Note):Void
+		{
+			if (head == null) return;
+			var headParentST:Float = head.strumTime - ClientPrefs.data.noteOffset;
+			notes.forEachAlive(function(n:Note)
+			{
+				if (n != null && n.isSustainNote && n.mustPress && n.noteData == lane
+					&& n.parentST == headParentST && !n.wasGoodHit && !n.missed && !n.ignoreNote)
+				{
+					n.missed = true;
+					n.ignoreNote = true;
+					n.wasGoodHit = true;
+					n.tooLate = true;
+					invalidateNote(n);
+				}
+			});
+		}
+
+		/** osu! 尾判: 判 miss 时把长条剩余段恢复为未按住状态, 让它们像普通 miss 一样划过接收器 */
+		private function markRemainingSustainMissed(lane:Int, head:Note):Void
+		{
+			if (head == null) return;
+			var headParentST:Float = head.strumTime - ClientPrefs.data.noteOffset;
+			notes.forEachAlive(function(n:Note)
+			{
+				if (n != null && n.isSustainNote && n.mustPress && n.noteData == lane
+					&& n.parentST == headParentST && !n.missed)
+				{
+					n.wasGoodHit = false; // 恢复未按住状态
+					n.missed = true;
+					n.ignoreNote = true;
+					n.tooLate = true;
+					n.multAlpha = 0.3;
+					n.alpha = 0.3;
+				}
+			});
 		}
 
 	/**
@@ -5326,7 +5650,18 @@ class PlayState extends MusicBeatState
 			for (i in 0..._release.length)
 			{
 				if (_release[i] || strumsBlocked[i] == true)
-					keyReleased(i);
+					keyReleased(i, frameTime);
+			}
+		}
+
+		// osu! 尾判: 回放中按住超过尾端 + 安全区仍不松 → 按太久 miss (与实机判定一致)
+		if (ClientPrefs.data.osuTailJudgement && activeTailEnd.length > 0)
+		{
+			for (i in 0..._hold.length)
+			{
+				if (activeTailEnd[i] > 0 && _hold[i]
+					&& frameTime > activeTailEnd[i] + Conductor.safeZoneOffset * TAIL_WINDOW_MULT)
+					tailMiss(i, activeTailEnd[i], frameTime);
 			}
 		}
 	}
@@ -5388,6 +5723,10 @@ class PlayState extends MusicBeatState
 							}
 						}
 					}
+					// 多k 移动端: 触摸按住的轨道也算"按住", 否则 FlxHitbox 按下的长条段
+					// 永远收不到 goodNoteHit (4K 走 Controls 通路所以正常)
+					if (i < mobileHeld.length && mobileHeld[i])
+						held = true;
 					holdArray.push(held);
 					pressArray.push(pressed);
 					releaseArray.push(released);
@@ -5446,6 +5785,9 @@ class PlayState extends MusicBeatState
 			}
 			for (i in 0...laneCount)
 			{
+				// osu! 尾判/按键释放回调: 桌面轮询路径也走 keyReleased (之前只有移动端/回放会触发)
+				if (releaseArray[i])
+					keyReleased(i, time);
 				if (releaseArray[i] || strumsBlocked[i] == true)
 				{
 					var spr:StrumNote = playerStrums.members[i];
@@ -5455,6 +5797,16 @@ class PlayState extends MusicBeatState
 						spr.resetAnim = 0;
 					}
 					keyboardDisplay.released(i);
+				}
+			}
+			// osu! 尾判: 按住超过尾端 + 安全区仍不松 → 按太久 miss (osu: 超过晚 miss 窗口仍按住 = miss)
+			if (ClientPrefs.data.osuTailJudgement && activeTailEnd.length > 0)
+			{
+				for (i in 0...laneCount)
+				{
+					if (activeTailEnd[i] > 0 && holdArray[i]
+						&& Conductor.songPosition > activeTailEnd[i] + Conductor.safeZoneOffset * TAIL_WINDOW_MULT)
+						tailMiss(i, activeTailEnd[i], Conductor.songPosition);
 				}
 			}
 	}
@@ -5791,6 +6143,16 @@ function playHitsound():Void
 
 function goodNoteHit(note:Note, ?time:Float = -999999):Void
 {
+// osu! 尾判: 长条头部命中 → 注册活动长条; 尾段命中 → 长条完成
+if (!note.isSustainNote)
+	registerActiveHold(note);
+else if (note.isSustainEnd && !ClientPrefs.data.osuTailJudgement)
+{
+	var lane:Int = Std.int(Math.abs(note.noteData));
+	if (lane >= 0 && lane < activeTailEnd.length && activeTailEnd[lane] > 0)
+		clearActiveHold(lane);
+}
+
 if (note.isSustainNote) {
 sustainNotescore += 10;
 }
@@ -5918,7 +6280,7 @@ if (!cpuControlled) {
 				combo += 1;
 				popUpScore(note, time);
 			} 
-			if (note.isSustainEnd && !cpuControlled && !practiceMode) {
+			if (note.isSustainEnd && !ClientPrefs.data.osuTailJudgement && !cpuControlled && !practiceMode) {
 			songScore += sustainNotescore;
 			updateScore();
 			sustainNotescore = 0;

@@ -434,7 +434,22 @@ class FileDialogHandler extends FlxBasic
     function onLoadDirectoryComplete(_)
     {
         @:privateAccess
-        this.path = _fileRef.__path;
+        var p:String = _fileRef.__path;
+        #if sys
+        // FileReference.browse() opens a *file* picker, not a folder picker. When
+        // the user picks a file inside the target folder (or types a file name),
+        // treat that file's parent directory as the chosen output directory.
+        // Otherwise callers build "dir\file.json\out.json" paths and crash on save.
+        if (p != null && p.length > 0 && !FileSystem.isDirectory(p))
+        {
+            var sep:Int = p.lastIndexOf('/');
+            #if windows
+            if (sep < 0) sep = p.lastIndexOf('\\');
+            #end
+            if (sep > 0) p = p.substr(0, sep);
+        }
+        #end
+        this.path = p;
         this.completed = true;
         TraceManager.info('trace.editor.dirLoaded', 'Loaded directory: {}', [path]);
 

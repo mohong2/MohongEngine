@@ -5,7 +5,6 @@ import Song;
 import Section.SwagSection;
 import backend.Difficulty;
 import flixel.util.FlxSort;
-import haxe.Json;
 
 // Chart Types
 typedef VSliceChart =
@@ -88,60 +87,38 @@ class VSlice
 	public static final metadataVersion = '2.2.3';
 
 	/**
-	 * Converts V-Slice chart + metadata to Psych Engine chart format.
-	 *
-	 * V-Slice is the community name for the official FNF 0.7.5+ engine. Its chart
-	 * format (version 2.0.0, same on the latest original source) stores each note as
-	 * `{t, d, l, k, p}`:
-	 *   - `t` = time in ms
-	 *   - `d` = note data: `floor(d / strumlineSize)` is the strumline index
-	 *     (0 = player, 1 = opponent, ...), `d % strumlineSize` is the direction.
-	 *     See source/funkin/data/song/SongData.hx -> SongNoteDataRaw.getMustHitNote()
-	 *     in the original repo: `getMustHitNote() == (getStrumlineIndex() == 0)`.
-	 *   - `l` = sustain length in ms
-	 *   - `k` = note kind (custom note type)
-	 *   - `p` = per-note params array (unused by Psych 0.6.3)
-	 *
-	 * Psych Engine uses the SAME `data` encoding (0-3 player, 4-7 opponent for 4K),
-	 * so note data passes through unchanged. mustHitSection / gfSection are derived
-	 * from FocusCamera events (which only tell the camera which character to follow
-	 * in V-Slice); they must NOT be used to flip the note sides.
-	 *
-	 * - Custom events whose value is an object are serialized as JSON into value1
-	 *   so no data is lost during conversion.
+	 * Converts V-Slice chart + metadata to Psych Engine chart format
 	 */
 	public static function convertToPsych(chart:VSliceChart, metadata:VSliceMetadata):PsychPackage
 	{
 		var songDifficulties:Map<String, SwagSong> = new Map<String, SwagSong>();
-
-		// ---- Time changes (copy so we never mutate the caller's array) ----
-		var timeChanges:Array<VSliceTimeChange> = metadata.timeChanges != null ? metadata.timeChanges.copy() : [];
-		if (timeChanges.length == 0)
-			timeChanges = [{t: 0, bpm: 120, n: 4, d: 4}];
+		
+		// Sort time changes
+		var timeChanges:Array<VSliceTimeChange> = cast metadata.timeChanges;
 		timeChanges.sort(sortByTime);
-
+		
 		var songBpm:Float = timeChanges[0].bpm;
-		var initialBeatsPerMeasure:Int = (timeChanges[0].n != null && timeChanges[0].n > 0) ? timeChanges[0].n : 4;
 		timeChanges.shift(); // Remove first entry (it's the initial BPM)
 
 		// Stage name conversion
-		var stage:String = metadata.playData.stage != null ? convertStageName(metadata.playData.stage) : 'stage';
+		var stage:String = metadata.playData.stage;
+		stage = convertStageName(stage);
 
 		// Find last note time across all difficulties
 		var lastNoteTime:Float = 0;
 		var notesMap:Map<String, Array<VSliceNote>> = new Map<String, Array<VSliceNote>>();
-
+		
 		for (diff in metadata.playData.difficulties)
 		{
 			var diffNotes:Array<VSliceNote> = cast Reflect.field(chart.notes, diff);
-			if (diffNotes == null) diffNotes = [];
+			if(diffNotes == null) diffNotes = [];
 			diffNotes.sort(sortByTime);
 			notesMap.set(diff, diffNotes);
 
-			if (diffNotes.length > 0)
+			if(diffNotes.length > 0)
 			{
 				var lastNote = diffNotes[diffNotes.length - 1];
-				if (lastNote.t > lastNoteTime) lastNoteTime = lastNote.t;
+				if(lastNote.t > lastNoteTime) lastNoteTime = lastNote.t;
 			}
 		}
 
@@ -151,19 +128,26 @@ class VSlice
 		var sectionBpms:Array<Float> = [];     // BPM per section
 		var time:Float = 0;
 		var bpm:Float = songBpm;
-		var beatsPerMeasure:Int = initialBeatsPerMeasure;
 		var bpmChangeIndex:Int = 0;
 
-		while (time < lastNoteTime + 1)
+		while(time < lastNoteTime + 1)
 		{
-			// Apply any BPM/time-signature changes that occur AT or before this section start time
+			// Apply any BPM changes that occur AT or before this section start time
 			while (bpmChangeIndex < timeChanges.length && time >= timeChanges[bpmChangeIndex].t)
 			{
 				bpm = timeChanges[bpmChangeIndex].bpm;
-				if (timeChanges[bpmChangeIndex].n != null && timeChanges[bpmChangeIndex].n > 0)
-					beatsPerMeasure = timeChanges[bpmChangeIndex].n;
 				bpmChangeIndex++;
 			}
+
+			// Use beats per measure from timeChange if available (default 4)
+			var beatsPerMeasure:Float = 4;
+			if (bpmChangeIndex > 0 && bpmChangeIndex <= timeChanges.length)
+			{
+				var prevChange = timeChanges[bpmChangeIndex - 1];
+				if (prevChange.n != null) beatsPerMeasure = prevChange.n;
+			}
+			else if (timeChanges.length > 0 && timeChanges[0].n != null)
+				beatsPerMeasure = timeChanges[0].n;
 
 			var sectionTime:Float = Conductor.calculateCrochet(bpm) * beatsPerMeasure;
 
@@ -173,65 +157,59 @@ class VSlice
 			time += sectionTime;
 		}
 
-		// Determine mustHit / gf sections from FocusCamera events.
-		// V-Slice: char 0 = player focus (mustHitSection = true),
-		//          char 1 = opponent focus (mustHitSection = false),
-		//          char 2 = girlfriend focus (gfSection = true).
-		// FocusCamera with x/y (or char -1) is a "Camera Follow Pos" event and does
-		// NOT change the mustHit state.
+		// Determine mustHit sections from FocusCamera events
 		var sectionMustHits:Array<Bool> = [];
-		var sectionGfSections:Array<Bool> = [];
-		var lastMustHit:Bool = false;    // default to opponent focus
-		var lastGfSection:Bool = false;
+		var lastMustHit:Bool = false; // default to opponent focus
 
-		var focusEvents:Array<VSliceEvent> = [];
-		if (chart.events != null)
-			for (e in chart.events)
-				if (e.e == 'FocusCamera')
-					focusEvents.push(e);
-		focusEvents.sort(sortByTime);
-
-		var focusIdx:Int = 0;
-		for (i in 0...sectionTimes.length)
+		if(chart.events != null)
 		{
-			var sectionStart:Float = sectionTimes[i];
-			var sectionEnd:Float = (i + 1 < sectionTimes.length) ? sectionTimes[i + 1] : Math.POSITIVE_INFINITY;
+			var focusEvents = chart.events.filter(function(e) return e.e == 'FocusCamera');
+			focusEvents.sort(sortByTime);
 
-			// Process FocusCamera events that fall within or at the start of this section
-			while (focusIdx < focusEvents.length && focusEvents[focusIdx].t < sectionEnd)
+			var focusIdx:Int = 0;
+			for (i in 0...sectionTimes.length)
 			{
-				if (focusEvents[focusIdx].t >= sectionStart || focusIdx == 0)
+				var sectionStart = sectionTimes[i];
+				var sectionEnd = (i + 1 < sectionTimes.length) ? sectionTimes[i + 1] : Math.POSITIVE_INFINITY;
+				
+				// Process FocusCamera events that fall within or at the start of this section
+				while (focusIdx < focusEvents.length && focusEvents[focusIdx].t < sectionEnd)
 				{
-					var target:Null<Int> = getFocusTarget(focusEvents[focusIdx].v);
-					if (target != null)
+					if (focusEvents[focusIdx].t >= sectionStart || focusIdx == 0)
 					{
+						var event = focusEvents[focusIdx];
+						var target:Int = 0;
+						
+						if (Std.isOfType(event.v, String))
+							target = Std.parseInt(event.v);
+						else if (Reflect.hasField(event.v, 'char'))
+							target = Std.parseInt(Std.string(Reflect.field(event.v, 'char')));
+						
+						// In V-Slice: 0 = player focused, 1 = opponent focused
+						// In Psych: mustHitSection = true means player focused
 						lastMustHit = (target == 0);
-						lastGfSection = (target == 2);
 					}
+					focusIdx++;
 				}
-				focusIdx++;
+				sectionMustHits[i] = lastMustHit;
 			}
-			sectionMustHits[i] = lastMustHit;
-			sectionGfSections[i] = lastGfSection;
 		}
-
-		// Fill remaining mustHit/gf sections with the last known state
+		
+		// Fill remaining mustHit sections with the last known mustHit state
 		while (sectionMustHits.length < sectionTimes.length)
 			sectionMustHits.push(lastMustHit);
-		while (sectionGfSections.length < sectionTimes.length)
-			sectionGfSections.push(lastGfSection);
 
 		// Create sections for each difficulty
 		for (diff in metadata.playData.difficulties)
 		{
 			var notes:Array<VSliceNote> = notesMap.get(diff);
-			if (notes == null) notes = [];
+			if(notes == null) notes = [];
 			notes.sort(sortByTime);
 
 			var scrollSpeed:Float = 1.0;
-			if (Reflect.hasField(chart.scrollSpeed, diff))
+			if(Reflect.hasField(chart.scrollSpeed, diff))
 				scrollSpeed = Reflect.field(chart.scrollSpeed, diff);
-			else if (Reflect.hasField(chart.scrollSpeed, 'default'))
+			else if(Reflect.hasField(chart.scrollSpeed, 'default'))
 				scrollSpeed = Reflect.field(chart.scrollSpeed, 'default');
 
 			var sections:Array<SwagSection> = [];
@@ -252,11 +230,11 @@ class VSlice
 					sectionNotes: [],
 					sectionBeats: sectionBeatsArr[i],
 					mustHitSection: sectionMustHits[i],
-					gfSection: sectionGfSections[i],
+					gfSection: false,
 					altAnim: false
 				};
 
-				if (currentBpm != lastBpm || (i == 0))
+				if(currentBpm != lastBpm || (i == 0))
 				{
 					sec.changeBPM = true;
 					sec.bpm = currentBpm;
@@ -266,21 +244,40 @@ class VSlice
 				sections.push(sec);
 			}
 
-			// Assign notes to sections.
-			// V-Slice / FNF 0.7.5+ `d` already encodes direction + strumline index
-			// (`floor(d / 4)` = 0 player / 1 opponent, `d % 4` = direction), exactly
-			// like Psych Engine, so the data passes through without any flipping.
+			// Assign notes to sections
 			var noteIndex:Int = 0;
 			for (i in 0...sections.length)
 			{
 				var secEndTime:Float = (i + 1 < sectionTimes.length) ? sectionTimes[i + 1] : Math.POSITIVE_INFINITY;
-
-				while (noteIndex < notes.length && notes[noteIndex].t < secEndTime)
+				
+				while(noteIndex < notes.length && notes[noteIndex].t < secEndTime)
 				{
 					var vsNote = notes[noteIndex];
+					
+					// Convert note data for mustHitSection
+					var noteData:Int = vsNote.d;
+					var mustHit:Bool = sections[i].mustHitSection;
+					
+					// In V-Slice: 0-3 = left side, 4-7 = right side
+					// In Psych: 0-3 = player, 4-7 = opponent
+					// If mustHit: left side (0-3) is player, right side (4-7) is opponent
+					// If !mustHit: left side is opponent, right side is player
+					var psychNoteData:Int = vsNote.d % 4;
+					var isLeftSide:Bool = (vsNote.d < 4);
+					
+					if(sections[i].mustHitSection)
+					{
+						// Player section: left = player(0-3), right = opponent(4-7)
+						psychNoteData = isLeftSide ? psychNoteData : psychNoteData + 4;
+					}
+					else
+					{
+						// Opponent section: left = opponent(4-7), right = player(0-3)
+						psychNoteData = isLeftSide ? psychNoteData + 4 : psychNoteData;
+					}
 
-					var psychNote:Array<Dynamic> = [vsNote.t, vsNote.d, vsNote.l != null ? vsNote.l : 0];
-					if (vsNote.k != null && vsNote.k.length > 0 && vsNote.k != 'normal')
+					var psychNote:Array<Dynamic> = [vsNote.t, psychNoteData, vsNote.l != null ? vsNote.l : 0];
+					if(vsNote.k != null && vsNote.k.length > 0 && vsNote.k != 'normal')
 						psychNote.push(vsNote.k);
 
 					sections[i].sectionNotes.push(psychNote);
@@ -309,107 +306,43 @@ class VSlice
 
 		// Handle events
 		var eventsSong:Song.SwagSong = null;
-		if (chart.events != null && chart.events.length > 0)
+		if(chart.events != null && chart.events.length > 0)
 		{
 			var psychEvents:Array<Dynamic> = [];
-
+			
 			for (event in chart.events)
 			{
-				var evName:String = event.e;
+				if(event.e == 'FocusCamera') continue; // Skip camera events
 
-				if (evName == 'FocusCamera')
+				var eventData:Array<Array<String>> = [[event.e, '', '']];
+				
+				// Convert event values
+				if(event.v != null)
 				{
-					// FocusCamera is used for mustHit/gf sections above. If it also
-					// carries an explicit x/y position, emit a "Camera Follow Pos"
-					// event so the forced camera position survives conversion.
-					var fx:Null<Float> = getNumericField(event.v, 'x');
-					var fy:Null<Float> = getNumericField(event.v, 'y');
-					if (fx != null || fy != null)
+					if(Std.isOfType(event.v, String))
 					{
-						psychEvents.push([event.t,
-							[['Camera Follow Pos',
-								fx != null ? Std.string(fx) : '',
-								fy != null ? Std.string(fy) : '']]]);
+						eventData[0][1] = event.v;
 					}
-					continue;
+					else if(Std.isOfType(event.v, Array))
+					{
+						var arr:Array<Dynamic> = cast event.v;
+						if(arr.length > 0) eventData[0][1] = Std.string(arr[0]);
+						if(arr.length > 1) eventData[0][2] = Std.string(arr[1]);
+					}
+					else
+					{
+						// Object type
+						var fields:Array<String> = Reflect.fields(event.v);
+						if(fields.length > 0) eventData[0][1] = Std.string(Reflect.field(event.v, fields[0]));
+						if(fields.length > 1) eventData[0][2] = Std.string(Reflect.field(event.v, fields[1]));
+					}
 				}
 
-				var v1:String = '';
-				var v2:String = '';
-
-				switch (evName)
-				{
-					case 'PlayAnimation':
-						v1 = getStringField(event.v, 'anim');
-						var target:String = getStringField(event.v, 'target');
-						if (target == null) target = '';
-						target = target.toLowerCase();
-						if (target == 'boyfriend') target = 'bf';
-						else if (target == 'girlfriend') target = 'gf';
-						else if (target == 'opponent') target = 'dad';
-						v2 = target;
-						psychEvents.push([event.t, [['Play Animation', v1, v2]]]);
-
-					case 'ChangeCharacter':
-						// Common V-Slice community event: {character: bf/dad/gf, newchar: id}
-						// Psych has a built-in "Change Character" event with identical semantics.
-						var oldChar:String = getStringField(event.v, 'character');
-						if (oldChar == null) oldChar = 'bf';
-						var newChar:String = getStringField(event.v, 'newchar');
-						if (newChar == null) newChar = '';
-						psychEvents.push([event.t, [['Change Character', oldChar.toLowerCase(), newChar]]]);
-
-					case 'ZoomCamera':
-						var zoom:Null<Float> = getNumericField(event.v, 'zoom');
-						var mode:String = getStringField(event.v, 'mode');
-						if (mode == null) mode = '';
-						// V-Slice: mode 'set' is an absolute zoom level, 'add' is a delta.
-						// Psych's "Add Camera Zoom" only adds, so convert 'set' to a delta.
-						var delta:Float = 0;
-						if (zoom != null)
-							delta = (mode.toLowerCase() == 'set') ? zoom - 1 : zoom;
-						psychEvents.push([event.t, [['Add Camera Zoom', Std.string(delta), '0']]]);
-
-					case 'ScrollSpeed':
-						var scroll:Null<Float> = getNumericField(event.v, 'scroll');
-						if (scroll == null) scroll = 1;
-						var durSteps:Null<Float> = getNumericField(event.v, 'duration');
-						if (durSteps == null) durSteps = 0;
-						// V-Slice duration is in steps; Psych's "Change Scroll Speed"
-						// value2 is in seconds: 1 step = 1/4 beat = 60/bpm/4 seconds.
-						var bpmAtEvent:Float = getBpmAtTime(sectionBpms, sectionTimes, event.t, songBpm);
-						var durSeconds:Float = (bpmAtEvent > 0) ? durSteps * (60 / bpmAtEvent) / 4 : 0;
-						psychEvents.push([event.t, [['Change Scroll Speed', Std.string(scroll), Std.string(durSeconds)]]]);
-
-					case 'SetProperty':
-						v1 = getStringField(event.v, 'value1');
-						v2 = getStringField(event.v, 'value2');
-						psychEvents.push([event.t, [['Set Property', v1, v2]]]);
-
-					default:
-						// Custom events: keep all the data. A plain value goes to value1,
-						// an array goes to value1/value2, and an object is serialized as
-						// JSON into value1 so nothing is lost to alphabetical field order.
-						var val:Dynamic = event.v;
-						if (val == null)
-							v1 = '';
-						else if (Std.isOfType(val, String) || Std.isOfType(val, Bool) || Std.isOfType(val, Int) || Std.isOfType(val, Float))
-							v1 = Std.string(val);
-						else if (Std.isOfType(val, Array))
-						{
-							var arr:Array<Dynamic> = cast val;
-							if (arr.length > 0) v1 = Std.string(arr[0]);
-							if (arr.length > 1) v2 = Std.string(arr[1]);
-						}
-						else
-							v1 = Json.stringify(val);
-
-						psychEvents.push([event.t, [[evName, v1, v2]]]);
-				}
+				psychEvents.push([event.t, eventData]);
 			}
-
+			
 			psychEvents.sort(function(a, b) return FlxSort.byValues(FlxSort.ASCENDING, a[0], b[0]));
-
+			
 			eventsSong = {
 				song: metadata.songName,
 				notes: [],
@@ -431,71 +364,6 @@ class VSlice
 			difficulties: songDifficulties,
 			events: eventsSong
 		};
-	}
-
-	/**
-	 * Reads the FocusCamera target character (0 = player, 1 = opponent, 2 = girlfriend).
-	 * Accepts a plain Int/Float/String or an object with a `char` field.
-	 * Returns null when there is no usable target (e.g. char -1 / x-y focus).
-	 */
-	static function getFocusTarget(v:Dynamic):Null<Int>
-	{
-		if (v == null) return null;
-
-		if (Std.isOfType(v, String))
-		{
-			var n:Null<Float> = Std.parseFloat(v);
-			if (n != null && !Math.isNaN(n)) return Std.int(n);
-			return null;
-		}
-		if (Std.isOfType(v, Int) || Std.isOfType(v, Float))
-			return Std.int(v);
-
-		if (Reflect.isObject(v) && Reflect.hasField(v, 'char'))
-		{
-			var c:Dynamic = Reflect.field(v, 'char');
-			if (Std.isOfType(c, String))
-			{
-				var n:Null<Float> = Std.parseFloat(c);
-				if (n != null && !Math.isNaN(n)) return Std.int(n);
-				return null;
-			}
-			if (Std.isOfType(c, Int) || Std.isOfType(c, Float))
-				return Std.int(c);
-		}
-		return null;
-	}
-
-	/** Returns a String field from a JSON-ish object, or null. */
-	static function getStringField(v:Dynamic, field:String):String
-	{
-		if (v == null || !Reflect.isObject(v) || !Reflect.hasField(v, field)) return null;
-		var val:Dynamic = Reflect.field(v, field);
-		if (val == null) return null;
-		return Std.string(val);
-	}
-
-	/** Returns a numeric field from a JSON-ish object, or null. */
-	static function getNumericField(v:Dynamic, field:String):Null<Float>
-	{
-		if (v == null || !Reflect.isObject(v) || !Reflect.hasField(v, field)) return null;
-		var val:Dynamic = Reflect.field(v, field);
-		if (val == null) return null;
-		var n:Null<Float> = Std.parseFloat(Std.string(val));
-		if (n != null && !Math.isNaN(n)) return n;
-		return null;
-	}
-
-	/** Finds the BPM in effect at `atTime` from the section table. */
-	static function getBpmAtTime(sectionBpms:Array<Float>, sectionTimes:Array<Float>, atTime:Float, defaultBpm:Float):Float
-	{
-		var bpm:Float = defaultBpm;
-		for (i in 0...sectionTimes.length)
-		{
-			if (sectionTimes[i] <= atTime) bpm = sectionBpms[i];
-			else break;
-		}
-		return bpm;
 	}
 
 	/**
@@ -535,29 +403,10 @@ class VSlice
 		}
 		var diffKey:String = Paths.formatToSongPath(difficultyName);
 
-		// Build a BPM-at-time table from sections first, so ScrollSpeed durations
-		// (Psych seconds -> V-Slice steps) can be converted correctly.
-		var sectionStartTimes:Array<Float> = [];
-		var sectionBpms:Array<Float> = [];
-		var secTime:Float = 0;
-		var secBpm:Float = songData.bpm;
-		if (songData.notes != null)
-		{
-			for (section in songData.notes)
-			{
-				sectionStartTimes.push(secTime);
-				sectionBpms.push(secBpm);
-				if (section.changeBPM && section.bpm != null)
-					secBpm = section.bpm;
-				var beat:Float = section.sectionBeats != 0 ? section.sectionBeats : 4;
-				secTime += Conductor.calculateCrochet(secBpm) * beat;
-			}
-		}
-
 		// Process events - convert Psych events to V-Slice format
 		var events:Array<VSliceEvent> = [];
 		var focusCameraEvents:Array<VSliceEvent> = [];
-
+		
 		if(songData.events != null && songData.events.length > 0)
 		{
 			for (event in songData.events)
@@ -575,8 +424,8 @@ class VSlice
 						switch(eventName)
 						{
 							case 'Add Camera Zoom':
-								var camZoom:Float = (val1 is Float || val1 is Int) ? Std.parseFloat(Std.string(val1)) : 0.015;
-								var uiZoom:Float = (val2 is Float || val2 is Int) ? Std.parseFloat(Std.string(val2)) : 0.03;
+								var camZoom:Float = (val1 is Float) ? val1 : 0.015;
+								var uiZoom:Float = (val2 is Float) ? val2 : 0.03;
 								events.push({
 									t: eventTime,
 									e: 'ZoomCamera',
@@ -588,50 +437,42 @@ class VSlice
 									}
 								});
 							case 'Play Animation':
-								var target:String = Std.string(val2 != null ? val2 : '').toLowerCase();
-								// V-Slice PlayAnimation targets are bf/dad/gf.
+								var target:String = Std.string(val2).toLowerCase();
 								var vsTarget:String = switch(target) {
-									case 'bf' | 'boyfriend' | '0': 'bf';
-									case 'dad' | 'opponent' | '1': 'dad';
-									case 'gf' | 'girlfriend' | '2': 'gf';
-									default: 'bf';
+									case 'bf': 'boyfriend';
+									case 'dad': 'opponent';
+									default: 'girlfriend';
 								};
 								events.push({
 									t: eventTime,
 									e: 'PlayAnimation',
 									v: {
 										target: vsTarget,
-										anim: Std.string(val1 != null ? val1 : ''),
+										anim: Std.string(val1),
 										force: true
 									}
 								});
 							case 'Camera Follow Pos':
-								var fx:Float = (val1 is Float || val1 is Int) ? Std.parseFloat(Std.string(val1)) : 0;
-								var fy:Float = (val2 is Float || val2 is Int) ? Std.parseFloat(Std.string(val2)) : 0;
 								events.push({
 									t: eventTime,
 									e: 'FocusCamera',
 									v: {
 										char: -1,
 										ease: 'INSTANT',
-										x: fx,
-										y: fy
+										x: val1 != null ? Std.parseFloat(val1) : 0,
+										y: val2 != null ? Std.parseFloat(val2) : 0
 									}
 								});
 							case 'Change Scroll Speed':
-								var multiplier:Float = (val1 is Float || val1 is Int) ? Std.parseFloat(Std.string(val1)) : 1.0;
-								var duration:Float = (val2 is Float || val2 is Int) ? Std.parseFloat(Std.string(val2)) : 0;
-								// Psych value2 is in seconds; V-Slice ScrollSpeed duration
-								// is in steps: 1 second = bpm / 15 steps (1 step = 1/4 beat).
-								var bpmAtEvent:Float = getBpmAtTime(sectionBpms, sectionStartTimes, eventTime, songData.bpm);
-								var durSteps:Float = (bpmAtEvent > 0) ? duration * bpmAtEvent / 15 : 0;
+								var multiplier:Float = (val1 is Float) ? val1 : 1.0;
+								var duration:Float = (val2 is Float) ? val2 : 0;
 								events.push({
 									t: eventTime,
 									e: 'ScrollSpeed',
 									v: {
 										ease: duration > 0 ? 'linear' : 'INSTANT',
 										scroll: multiplier,
-										duration: durSteps,
+										duration: duration > 0 ? duration * 4 : 0,
 										absolute: false
 									}
 								});
@@ -658,11 +499,11 @@ class VSlice
 		// Process notes and time changes from sections
 		var notes:Array<VSliceNote> = [];
 		var timeChanges:Array<VSliceTimeChange> = [];
-
+		
 		var time:Float = 0;
 		var bpm:Float = songData.bpm;
 		timeChanges.push({t: 0, bpm: bpm});
-
+		
 		var lastMustHit:Bool = false;
 		var firstSection:Bool = true;
 
@@ -692,21 +533,32 @@ class VSlice
 						var susLength:Float = note[2] > 0 ? note[2] : 0;
 						var noteType:String = (note.length > 3 && note[3] != null) ? Std.string(note[3]) : null;
 
-						// Psych note data is direction + strumlineIndex * 4, which is
-						// exactly the encoding V-Slice / FNF 0.7.5 uses, so it passes
-						// through unchanged.
-						var vsNoteData:Int = noteData;
+						// Convert Psych note data to V-Slice note data
+						// In Psych: 0-3 = left/player side, 4-7 = right/opponent side
+						// But mustHitSection determines which side is player vs opponent
+						// In V-Slice: 0-3 = left, 4-7 = right (independent of mustHit)
+						var vsNoteData:Int;
+						if (section.mustHitSection)
+						{
+							// Player section: 0-3 = player, 4-7 = opponent
+							vsNoteData = noteData;
+						}
+						else
+						{
+							// Opponent section: 0-3 = opponent, 4-7 = player
+							vsNoteData = (noteData < 4) ? noteData + 4 : noteData - 4;
+						}
 
 						var vsliceNote:VSliceNote = {
 							t: noteTime,
 							d: vsNoteData
 						};
-
+						
 						if(susLength > 0)
 							vsliceNote.l = susLength;
 						if(noteType != null && noteType.length > 0 && noteType != '')
 							vsliceNote.k = noteType;
-
+						
 						notes.push(vsliceNote);
 					}
 				}
@@ -734,7 +586,7 @@ class VSlice
 		// Build scrollSpeed and notes maps (only for the current difficulty)
 		var scrollSpeed:Dynamic = {};
 		var notesMap:Dynamic = {};
-
+		
 		Reflect.setField(scrollSpeed, diffKey, songData.speed);
 		Reflect.setField(notesMap, diffKey, notes);
 

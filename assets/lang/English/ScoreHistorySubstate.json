@@ -21,6 +21,9 @@
     "ScoreHistorySubstate.emptyMsg" : "No saved scores.\nPlay without Practice/Botplay to record.",
     "ScoreHistorySubstate.judgeWindows": "Judge Type / Windows",
     "ScoreHistorySubstate.custom" : "Custom",
+    "ScoreHistorySubstate.tailJudgement": "Tail Judgement",
+    "ScoreHistorySubstate.on" : "ON",
+    "ScoreHistorySubstate.off" : "OFF",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
     "ScoreHistorySubstate.instructions": "UP/DOWN: Select  |  ENTER: Play  |  RESET: Delete  |  ESC: Back"

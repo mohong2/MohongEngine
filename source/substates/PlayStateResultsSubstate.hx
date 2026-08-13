@@ -462,7 +462,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 		// --- Status header (moved to the top so it never overlaps the rating icon) ---
 		var statusLineH:Float = 15;
-		var statusCount:Int = 3 + (isReplay ? 1 : 0) + (best != null ? 1 : 0);
+		var statusCount:Int = 4 + (isReplay ? 1 : 0) + (best != null ? 1 : 0);
 		// LeatherEngine 移植: 回放判定被还原时多一行提示
 		if (isReplay && game.replayExam != null && game.replayExam.judgementRestoredDifferent) statusCount++;
 		var statusY:Float = leftPanel.y + 14;
@@ -537,6 +537,12 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			+ Std.string(ClientPrefs.data.badWindow) + ") / "
 			+ Std.string(ClientPrefs.data.safeFrames) + "f";
 		addStatusLine(si++, judgeInfo, FlxColor.fromRGB(180, 180, 200));
+
+		// osu! 尾判: 显示本次游玩/回放是否开启尾判
+		var tailOn:Bool = ClientPrefs.data.osuTailJudgement;
+		addStatusLine(si++, Language.get("ResultsScreen.tailJudgement", "Tail Judgement") + ": "
+			+ (tailOn ? Language.get("ResultsScreen.on", "ON") : Language.get("ResultsScreen.off", "OFF")),
+			tailOn ? FlxColor.fromRGB(255, 215, 0) : FlxColor.GRAY);
 
 		var shouldSave = !isReplay && !game.practiceMode && !game.cpuControlled && !PlayState.chartingMode;
 		var validScore = shouldSave && (PlayState.SONG.validScore || PlayState.SONG.validScore == null);
@@ -1041,6 +1047,11 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 						judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
 						judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
 						marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
+						marvelousWindow: details != null && details.length > 30 && details[30] != null ? details[30] : null,
+						// osu! 尾判 / 判定相关手感: 从成绩详情强制还原
+						osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
+						ratingOffset: details != null && details.length > 28 && details[28] != null ? details[28] : null,
+						guitarHeroSustains: details != null && details.length > 29 && details[29] != null ? details[29] : null,
 						replayVersion: 2
 					};
 

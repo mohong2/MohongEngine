@@ -82,7 +82,7 @@ class FunkinLua {
 	"timeBar.visible" => [{target: "timeBarBG.visible", val: null}]
 	];
 
-	public static var luaversion:String = "0.63.1fix-2";
+	public static var luaversion:String = "0.64.1";
 	public var callbacks:Map<String, Dynamic> = new Map<String, Dynamic>();
 	public static var Function_Stop:Dynamic = 1;
 	public static var Function_Continue:Dynamic = 0;

@@ -265,6 +265,15 @@
 		"onChange": "onChangeBadWindow"
 	},
 	{
+		"nameKey": "option.osuTailJudgement",
+		"defaultName": "osu! Tail Judgement",
+		"descKey": "option.osuTailJudgement.desc",
+		"defaultDesc": "Judge Hold Note releases by tail timing (osu!mania style). Affects replays.",
+		"variable": "osuTailJudgement",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
 		"nameKey": "option.sustainsAsOneNote",
 		"defaultName": "Sustains as One Note",
 		"descKey": "option.sustainsAsOneNote.desc",

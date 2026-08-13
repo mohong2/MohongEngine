@@ -67,6 +67,11 @@ typedef StateRecord = {
 	@:optional var judgementPreset:String;
 	@:optional var marvelousRatings:Bool;
 	@:optional var marvelousWindow:Int;
+	/** osu! 尾判: 录制时是否开启尾判 + 尾判窗口 (ms) */
+	@:optional var osuTailJudgement:Bool;
+	/** 判定相关手感: 录制时的评级偏移 / 长条是否按单音符判定 */
+	@:optional var ratingOffset:Int;
+	@:optional var guitarHeroSustains:Bool;
 	var replayVersion:Int;
 	/** 多k: 录制时的键数 (mania+1, 用于回放校验) */
 	@:optional var mania:Int;
@@ -303,6 +308,9 @@ class Replay extends FlxBasic
 		var prevBad:Int = ClientPrefs.data.badWindow;
 		var prevMarv:Int = ClientPrefs.data.marvelousWindow;
 		var prevMarvOn:Bool = ClientPrefs.data.marvelousRatings;
+		var prevTailOn:Bool = ClientPrefs.data.osuTailJudgement;
+		var prevRatingOffset:Int = ClientPrefs.data.ratingOffset;
+		var prevGuitarHero:Bool = ClientPrefs.data.guitarHeroSustains;
 
 		if (stateRecord.songSpeed != null) ps.songSpeed = stateRecord.songSpeed;
 		if (stateRecord.playbackRate != null) ps.playbackRate = stateRecord.playbackRate;
@@ -319,7 +327,7 @@ class Replay extends FlxBasic
 		// LeatherEngine 移植: 回放时恢复录制时的判定手感, 保证评分/评级完全一致
 		if (stateRecord.judgementTimings != null)
 		{
-			ClientPrefs.data.judgementTimings = stateRecord.judgementTimings;
+			ClientPrefs.data.judgementTimings = stateRecord.judgementTimings.copy();
 			backend.Ratings.syncWindows();
 		}
 		if (stateRecord.judgementPreset != null && stateRecord.judgementPreset.length > 0)
@@ -328,6 +336,19 @@ class Replay extends FlxBasic
 			ClientPrefs.data.judgementPreset = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
 		if (stateRecord.marvelousRatings != null) ClientPrefs.data.marvelousRatings = stateRecord.marvelousRatings;
 		if (stateRecord.marvelousWindow != null) ClientPrefs.data.marvelousWindow = stateRecord.marvelousWindow;
+		// osu! 尾判: 强制还原录制时的尾判开关与窗口, 保证尾判成绩可复现
+		if (stateRecord.osuTailJudgement != null)
+			ClientPrefs.data.osuTailJudgement = stateRecord.osuTailJudgement;
+		else
+			// 老版本回放没有尾判字段: 按关闭处理, 与录制时 (无尾判) 的行为一致
+			ClientPrefs.data.osuTailJudgement = false;
+		// 判定相关手感补全: 评级偏移 / 长条单音符判定 (此前未强制还原)
+		if (stateRecord.ratingOffset != null) ClientPrefs.data.ratingOffset = stateRecord.ratingOffset;
+		if (stateRecord.guitarHeroSustains != null)
+		{
+			ClientPrefs.data.guitarHeroSustains = stateRecord.guitarHeroSustains;
+			if (ps != null) ps.guitarHeroSustains = stateRecord.guitarHeroSustains;
+		}
 		if (stateRecord.replayVersion != null) replayVersion = stateRecord.replayVersion;
 
 		// 判定手感变化检测: 只有在回放判定与当前设置不同时才提示
@@ -336,7 +357,10 @@ class Replay extends FlxBasic
 			|| prevGood != ClientPrefs.data.goodWindow
 			|| prevBad != ClientPrefs.data.badWindow
 			|| prevMarv != ClientPrefs.data.marvelousWindow
-			|| prevMarvOn != ClientPrefs.data.marvelousRatings);
+			|| prevMarvOn != ClientPrefs.data.marvelousRatings
+			|| prevTailOn != ClientPrefs.data.osuTailJudgement
+			|| prevRatingOffset != ClientPrefs.data.ratingOffset
+			|| prevGuitarHero != ClientPrefs.data.guitarHeroSustains);
 
 		if (judgementRestoredDifferent)
 		{
@@ -344,6 +368,16 @@ class Replay extends FlxBasic
 			judgementRestoreInfo =
 				ClientPrefs.data.judgementPreset + " (" + Std.string(t[0]) + "/" + Std.string(t[1]) + "/" + Std.string(t[2]) + "/" + Std.string(t[3]) + ")"
 				+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
+			// osu! 尾判 / 评级偏移 / 长条单音符判定 的还原信息 (仅列出入)
+			var extra:Array<String> = [];
+			if (prevTailOn != ClientPrefs.data.osuTailJudgement)
+				extra.push("osu! Tail: " + (ClientPrefs.data.osuTailJudgement ? "ON" : "OFF"));
+			if (prevRatingOffset != ClientPrefs.data.ratingOffset)
+				extra.push("Rating Offset: " + Std.string(ClientPrefs.data.ratingOffset) + "ms");
+			if (prevGuitarHero != ClientPrefs.data.guitarHeroSustains)
+				extra.push("Sustains as One Note: " + (ClientPrefs.data.guitarHeroSustains ? "ON" : "OFF"));
+			if (extra.length > 0)
+				judgementRestoreInfo += "\n" + extra.join("\n");
 			// 回放还原的窗口与玩家设置不同 → 判定类型标记为自定义
 			ClientPrefs.data.judgementPreset = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
 		}
@@ -396,6 +430,9 @@ class Replay extends FlxBasic
 			judgementPreset: ClientPrefs.data.judgementPreset,
 			marvelousRatings: ClientPrefs.data.marvelousRatings,
 			marvelousWindow: ClientPrefs.data.marvelousWindow,
+			osuTailJudgement: ClientPrefs.data.osuTailJudgement,
+			ratingOffset: ClientPrefs.data.ratingOffset,
+			guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
 			replayVersion: ClientPrefs.data.saveReplayData ? 2 : 1,
 			mania: PlayState.mania
 		};

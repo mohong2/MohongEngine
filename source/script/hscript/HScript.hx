@@ -64,7 +64,7 @@ import hxcodec.flixel.FlxVideoSprite;
 class HScript
 {
 	public static var globalScripts:Array<HScript> = [];
-	public static var hscriptVersion:String = "0.2.0";
+	public static var hscriptVersion:String = "0.2.1h";
 
 	public var interp:Interp;
 	public var parser:Parser;
@@ -348,7 +348,15 @@ class HScript
 			"Math" => Math, "Std" => Std, "StringTools" => StringTools,
 			"Sys" => Sys, "Type" => Type, "Reflect" => Reflect,
 			"Date" => Date, "DateTools" => DateTools, "Lambda" => Lambda,
-			"EReg" => EReg, "Xml" => Xml, "Json" => haxe.Json,
+			// haxe.Json's parse/stringify are inline statics, so they do NOT exist
+			// at runtime and can't be called from scripts via reflection (they would
+			// silently fail with "Null Function Pointer"). Bind a reflectable wrapper
+			// so `Json.parse(...)` / `Json.stringify(...)` work inside hscripts.
+			"Json" => {
+				parse: function(text:String):Dynamic return haxe.format.JsonParser.parse(text),
+				stringify: function(value:Dynamic, ?replacer:Dynamic = null, ?space:String = null):String
+					return haxe.format.JsonPrinter.print(value, replacer, space)
+			},
 			"String" => String, "Array" => Array,
 
 			// Flixel

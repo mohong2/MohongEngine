@@ -128,7 +128,7 @@ class NoteSplash extends FlxSprite
 		rgbShader = new PixelSplashShaderRef();
 		shader = colorSwap.shader;
 
-		setupNoteSplash(x, y, note);
+		setupNoteSplash(x, y, note, skin);
 		antialiasing = ClientPrefs.data.globalAntialiasing;
 		if (PlayState.isPixelStage || !ClientPrefs.data.globalAntialiasing)
 			antialiasing = false;
