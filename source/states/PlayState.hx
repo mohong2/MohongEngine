@@ -66,7 +66,6 @@ import DialogueBoxPsych;
 import Conductor.Rating;
 import backend.Ratings;
 import mohong.TraceManager;
-import mohong.RenderOptimizer;
 import popup.RatingPopup;
 #if !flash 
 import flixel.addons.display.FlxRuntimeShader;

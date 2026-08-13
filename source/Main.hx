@@ -28,6 +28,7 @@ import mohong.Windows;
 import mohong.TraceManager;
 import mohong.TraceConsole;
 import mohong.MemoryMonitor;
+import mohong.RenderOptimizer;
 import backend.Dialog;
 import states.CrashCatcherState;
 
@@ -204,6 +205,11 @@ class Main extends Sprite
 		// Ensure draw wrapper is null (threaded rendering removed)
 		if (FlxG.game != null)
 			FlxG.game.drawWrapper = null;
+
+		// 渲染观测接线（RenderOptimizer 重写版）：挂 flixel 公开的
+		// preDraw/postDraw 信号（FlxGame.draw 在真实渲染前后派发），不改库、不改渲染行为。
+		FlxG.signals.preDraw.add(function() RenderOptimizer.onRenderStart());
+		FlxG.signals.postDraw.add(function() RenderOptimizer.onRenderEnd());
 
 		#if CRASH_HANDLER
 		// Wire the timer crash callback so separate-update-mode errors are

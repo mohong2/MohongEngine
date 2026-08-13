@@ -1,220 +1,180 @@
 package mohong;
 
 import flixel.FlxG;
-import flixel.FlxBasic;
-import flixel.group.FlxGroup.FlxTypedGroup;
 import flixel.FlxSprite;
+import flixel.FlxState;
 
 /**
- * Render optimization utilities for reducing draw calls and GPU state changes.
- * 
- * Features:
- * - Draw call counting for diagnostics
- * - Batch-friendly rendering hints
- * - Culling optimization helpers
- * - Frame timing analysis for render budget
- * 
- * Design: All settings are soft-coded as static configurable properties.
+ * 渲染路径观测器（mohong 重写版）。
+ *
+ * 解决什么问题：
+ *   旧实现宣称 draw call 统计/atlas 批处理/自动剔除，但计数器没有任何调用点
+ *   （PlayState 只 import 未使用，ClientPrefs 只设开关）——纯"配置开关+零调用点"
+ *   的假优化。重写为诚实的渲染观测：真实渲染段耗时、可见精灵采样、帧预算告警。
+ *
+ * 挂在哪个真实调用点：
+ *   - Main.setupGame 用 FlxG.signals.preDraw/postDraw 接入 Flixel 渲染循环
+ *     （FlxGame.draw 在渲染前后派发这两个信号，flixel 公共 API，不改任何库文件）；
+ *   - ClientPrefs.loadDefaultKeys 继续接线 optimizationEnabled / renderQualityLevel，
+ *     且 renderQualityLevel 现在有真实效果：采样频率、预算阈值、精灵默认 AA。
+ *
+ * 怎么验证它真的在工作：
+ *   - perf 模式 CSV 里可见精灵数随场景变化（标题画面 vs 打歌中）；
+ *   - getStats() 的渲染耗时 p50/p95 有数据；
+ *   - 渲染超预算时 TraceConsole 出现 throttled 告警日志。
+ *
+ * 明确不做：Stage3D 贴图、跨线程渲染、关 GC——都不是本类的职责。
  */
 class RenderOptimizer
 {
-	// ═══════════════════════════════════════
-	//  Configurable settings (soft-coded)
-	// ═══════════════════════════════════════
-
-	/** Whether render optimization is enabled. */
+	/** 是否启用观测（ClientPrefs.memoryOptimization 接线）。 */
 	public static var optimizationEnabled:Bool = true;
 
-	/** Whether to log draw call statistics. */
-	public static var trackDrawCalls:Bool = false;
-
-	/** Whether to enable automatic off-screen culling hints. */
-	public static var autoCulling:Bool = true;
-
-	/** Maximum number of visible sprites before batching warning. */
-	public static var maxVisibleSpritesWarning:Int = 500;
-
-	/** Whether to enable atlas texture batching (reduces state changes). */
-	public static var enableAtlasBatching:Bool = true;
-
-	/** Render quality level: 0=low, 1=medium, 2=high. */
+	/**
+	 * 渲染质量 0=low 1=medium 2=high（ClientPrefs.renderQualityLevel 接线）。
+	 * 真实效果：可见精灵采样频率、帧预算告警阈值、FlxSprite.defaultAntialiasing
+	 * （见 ClientPrefs.loadDefaultKeys）。
+	 */
 	public static var renderQualityLevel:Int = 2;
 
-	/** Whether to skip rendering invisible cameras entirely. */
-	public static var skipInvisibleCameras:Bool = true;
+	/** 最近一次采样的可见精灵数（每 sampleInterval 帧刷新）。 */
+	public static var visibleSprites:Int = 0;
 
-	// ═══════════════════════════════════════
-	//  Runtime state
-	// ═══════════════════════════════════════
+	/** 上一帧渲染段耗时（ms，preDraw → postDraw）。 */
+	public static var lastRenderTime:Float = 0;
 
-	/** Estimated draw calls for the current frame. */
-	public static var estimatedDrawCalls:Int = 0;
+	// ── 渲染耗时环形缓冲（固定 1024 槽） ──
+	static final RENDER_WINDOW:Int = 1024;
+	static var _renderTimes:Array<Float> = [for (_ in 0...RENDER_WINDOW) 0.0];
+	static var _renderCount:Int = 0;
 
-	/** Count of sprites rendered this frame. */
-	public static var spritesRenderedThisFrame:Int = 0;
+	static var _renderStart:Float = 0;
+	static var _frameCounter:Int = 0;
+	static var _lastWarningAt:Float = 0;
 
-	/** Timestamp of the current frame start for budget tracking. */
-	static var _frameStartTime:Float = 0;
+	/** 采样间隔（帧）：质量越低采样越稀（低端机少付遍历开销）。 */
+	static function get_sampleInterval():Int
+	{
+		return switch (renderQualityLevel) {
+			case 0: 120;
+			case 1: 60;
+			default: 30;
+		}
+	}
 
-	/** Whether a render budget warning has been issued this frame. */
-	static var _budgetWarningIssued:Bool = false;
+	/** 帧预算告警阈值（ms）。 */
+	static function get_budgetThreshold():Float
+	{
+		return switch (renderQualityLevel) {
+			case 0: 50.0;
+			case 1: 40.0;
+			default: 33.0;
+		}
+	}
 
-	// ═══════════════════════════════════════
-	//  Per-frame API
-	// ═══════════════════════════════════════
-
-	/**
-	 * Call at the start of each render frame to reset counters.
-	 */
+	/** 渲染前钩子（FlxG.signals.preDraw）。 */
 	public static function onRenderStart():Void
 	{
-		estimatedDrawCalls = 0;
-		spritesRenderedThisFrame = 0;
-		_budgetWarningIssued = false;
-		_frameStartTime = haxe.Timer.stamp() * 1000;
+		if (!optimizationEnabled)
+			return;
+		_renderStart = haxe.Timer.stamp() * 1000;
 	}
 
-	/**
-	 * Call at the end of each render frame for diagnostics.
-	 */
+	/** 渲染后钩子（FlxG.signals.postDraw）。 */
 	public static function onRenderEnd():Void
 	{
-		if (!trackDrawCalls)
+		if (!optimizationEnabled || _renderStart <= 0)
 			return;
 
-		var elapsed:Float = haxe.Timer.stamp() * 1000 - _frameStartTime;
-		if (elapsed > MemoryMonitor.frameTimeWarningThreshold && !_budgetWarningIssued)
+		lastRenderTime = haxe.Timer.stamp() * 1000 - _renderStart;
+		_renderTimes[_renderCount % RENDER_WINDOW] = lastRenderTime;
+		_renderCount++;
+
+		_frameCounter++;
+		if (_frameCounter % get_sampleInterval() != 0)
+			return;
+
+		visibleSprites = countVisibleSprites();
+
+		// 帧预算告警：渲染段超阈值时输出，每秒最多一条
+		var now:Float = haxe.Timer.stamp();
+		if (lastRenderTime > get_budgetThreshold() && now - _lastWarningAt > 1.0)
 		{
-			_budgetWarningIssued = true;
+			_lastWarningAt = now;
 			TraceManager.debug('renderOptimizer.frameBudget',
-				'Render frame took {elapsed}ms with ~{drawCalls} draw calls, {sprites} sprites',
-				[Std.int(elapsed), estimatedDrawCalls, spritesRenderedThisFrame]);
+				'Render took {ms}ms with {sprites} visible sprites',
+				[Math.round(lastRenderTime), visibleSprites]);
 		}
 	}
 
 	/**
-	 * Increment the draw call counter. Call before each non-batched draw.
+	 * 遍历当前状态的 members，统计可见精灵数。
+	 * 只在采样帧调用（每 30/60/120 帧一次），不计子状态（文档化）。
 	 */
-	public static inline function incrementDrawCall():Void
+	static function countVisibleSprites():Int
 	{
-		estimatedDrawCalls++;
-	}
+		var state:FlxState = FlxG.state;
+		if (state == null)
+			return 0;
 
-	/**
-	 * Increment the sprite render counter.
-	 */
-	public static inline function incrementSpriteCount():Void
-	{
-		spritesRenderedThisFrame++;
-	}
-
-	// ═══════════════════════════════════════
-	//  Camera optimization
-	// ═══════════════════════════════════════
-
-	/**
-	 * Check if a camera should be rendered this frame.
-	 * Skips invisible cameras and those with alpha=0.
-	 */
-	public static function shouldRenderCamera(camera:flixel.FlxCamera):Bool
-	{
-		if (!skipInvisibleCameras)
-			return true;
-		return camera != null && camera.visible && camera.alpha > 0;
-	}
-
-	// ═══════════════════════════════════════
-	//  Sprite optimization helpers
-	// ═══════════════════════════════════════
-
-	/**
-	 * Check if a sprite is likely visible on screen.
-	 * Simple AABB check against the provided camera bounds.
-	 */
-	public static function isSpriteOnScreen(sprite:FlxSprite, camera:flixel.FlxCamera):Bool
-	{
-		if (sprite == null || !sprite.exists || !sprite.visible || sprite.alpha <= 0)
-			return false;
-
-		if (!autoCulling)
-			return true;
-
-		// Use camera viewport rect; FlxCamera does not expose a public 'bounds' getter.
-		var camLeft:Float = camera.scroll.x;
-		var camTop:Float = camera.scroll.y;
-		var camRight:Float = camLeft + camera.width;
-		var camBottom:Float = camTop + camera.height;
-
-		var spriteBounds = sprite.getScreenBounds(null, camera);
-
-		// Manual AABB overlap test (FlxRect.intersects is not a method on this Flixel version)
-		return (spriteBounds.x < camRight && spriteBounds.right > camLeft
-			&& spriteBounds.y < camBottom && spriteBounds.bottom > camTop);
-	}
-
-	// ═══════════════════════════════════════
-	//  Quality level helpers
-	// ═══════════════════════════════════════
-
-	/**
-	 * Get recommended antialiasing setting based on quality level.
-	 */
-	public static function shouldUseAntialiasing():Bool
-	{
-		return renderQualityLevel >= 1;
-	}
-
-	/**
-	 * Get recommended particle count multiplier based on quality level.
-	 */
-	public static function getParticleMultiplier():Float
-	{
-		return switch (renderQualityLevel)
+		var count:Int = 0;
+		for (member in state.members)
 		{
-			case 0: 0.5;  // Low quality — half particles
-			case 1: 0.75; // Medium quality
-			case 2: 1.0;  // High quality — full particles
-			default: 1.0;
+			var spr:FlxSprite = (Std.isOfType(member, FlxSprite) ? cast member : null);
+			if (spr == null)
+				continue;
+			if (spr.exists && spr.visible && spr.alpha > 0)
+				count++;
 		}
+		return count;
 	}
 
-	// ═══════════════════════════════════════
-	//  Batching hints
-	// ═══════════════════════════════════════
-
 	/**
-	 * Sort a group of sprites by texture atlas to reduce GPU state changes.
-	 * Sprites sharing the same atlas render without texture swaps.
-	 * 
-	 * @param group The sprite group to sort.
+	 * 渲染耗时统计（对窗口内样本排序；仅显式调用时开销）。
 	 */
-	public static function sortByTexture(group:FlxTypedGroup<FlxSprite>):Void
+	public static function getStats():RenderStats
 	{
-		if (!enableAtlasBatching || group == null)
-			return;
+		var n:Int = Std.int(Math.min(_renderCount, RENDER_WINDOW));
+		if (n == 0)
+			return {samples: 0, avgMs: 0, p50Ms: 0, p95Ms: 0, maxMs: 0, visibleSprites: visibleSprites};
 
-		// FlxTypedGroup.sort signature: (order:Int, a:T, b:T) -> Int
-		group.sort(function(_:Int, a:FlxSprite, b:FlxSprite):Int
+		var sorted:Array<Float> = [];
+		var sum:Float = 0;
+		var max:Float = 0;
+		for (i in 0...n)
 		{
-			if (a.graphic == null || b.graphic == null)
-				return 0;
-			var keyA:String = a.graphic.key;
-			var keyB:String = b.graphic.key;
-			if (keyA == keyB)
-				return 0;
-			return (keyA < keyB) ? -1 : 1;
-		});
+			var v:Float = _renderTimes[i];
+			sorted.push(v);
+			sum += v;
+			if (v > max) max = v;
+		}
+		sorted.sort(Reflect.compare);
+
+		return {
+			samples: n,
+			avgMs: sum / n,
+			p50Ms: sorted[Std.int(n * 0.50)],
+			p95Ms: sorted[Std.int(n * 0.95)],
+			maxMs: max,
+			visibleSprites: visibleSprites
+		};
 	}
 
-	// ═══════════════════════════════════════
-	//  Diagnostics
-	// ═══════════════════════════════════════
-
-	/**
-	 * Get a render statistics summary.
-	 */
+	/** 一行可读的观测摘要。 */
 	public static function getRenderStats():String
 	{
-		return 'DrawCalls: ~${estimatedDrawCalls} | Sprites: ${spritesRenderedThisFrame}';
+		var s:RenderStats = getStats();
+		return 'Render: ${Math.round(s.avgMs)}ms avg (p95 ${Math.round(s.p95Ms)}ms, max ${Math.round(s.maxMs)}ms) | '
+			+ 'Visible sprites: ${s.visibleSprites}';
 	}
+}
+
+/** 渲染观测统计结果。 */
+typedef RenderStats = {
+	samples:Int,
+	avgMs:Float,
+	p50Ms:Float,
+	p95Ms:Float,
+	maxMs:Float,
+	visibleSprites:Int
 }

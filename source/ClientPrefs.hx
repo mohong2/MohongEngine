@@ -4,6 +4,7 @@ package;
 import flixel.util.FlxSave;
 import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
+import flixel.FlxSprite;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
 import mohong.MemoryMonitor;
@@ -788,7 +789,12 @@ class ClientPrefs {
 			case "medium": 1;
 			case "high":   2;
 			default:       2;
-		}
+		};
+
+		// renderQualityLevel 的真实渲染效果：低质量关闭精灵默认抗锯齿
+		// （省 GPU 填充率，视觉上像素化）。显式设置 antialiasing 的精灵不受影响。
+		// 默认 High → defaultAntialiasing=true，与引擎原行为一致。
+		FlxSprite.defaultAntialiasing = (RenderOptimizer.renderQualityLevel >= 1);
 
 		if (FlxG.save.data.gameplaySettings != null) {
 			var savedMap:Map<String, Dynamic> = FlxG.save.data.gameplaySettings;
