@@ -37,6 +37,8 @@ class PerfTest
 	public static var maxRetries:Int = 20;
 	public static var retriesDone:Int = 0;
 	public static var roundTrips:Int = 0;
+	/** noseek：完整播放歌曲（seek 会让 overdue notes 一次性生成+销毁，影响池复用观测）。 */
+	public static var noSeek:Bool = false;
 
 	static var startTime:Float = 0;
 	static var snapshots:Array<String> = [];
@@ -58,6 +60,7 @@ class PerfTest
 			var n:Null<Int> = Std.parseInt(args[idx + 2]);
 			if (n != null && n > 0) maxRetries = n;
 		}
+		if (args.indexOf('noseek') >= 0) noSeek = true;
 		#else
 		return;
 		#end
@@ -141,41 +144,73 @@ class PerfTest
 
 	/**
 	 * 快进到歌曲最后 8 秒：每轮重试约 15 秒完成，20 次长测不必等完整歌曲。
-	 * 倒计时结束后执行一次 seek（music/vocals.time + Conductor.songPosition）。
+	 * 用 stage ENTER_FRAME 驱动（与 MemoryMonitor.onFrameStart 同款挂点，
+	 * 任何状态切换/定时器清理都影响不到它）。倒计时结束后执行一次 seek。
 	 */
+	static var seekWatcher:openfl.events.Event->Void = null;
+	static var seekWatcherAccum:Float = 0;
+
 	static function startSeekWatcher():Void
 	{
 		if (!enabled || mode != 'song')
 			return;
 
-		new FlxTimer().start(0.5, function(tmr:FlxTimer)
+		if (seekWatcher == null)
 		{
-			if (finishing)
+			seekWatcher = function(_:openfl.events.Event)
 			{
-				tmr.cancel();
-				return;
-			}
+				if (finishing)
+					return;
 
-			var ps:PlayState = PlayState.instance;
-			var canSeek:Bool = false;
-			@:privateAccess canSeek = (ps != null && ps.startedCountdown && ps.generatedMusic);
-			if (!seekDone && canSeek)
-			{
-				var len:Float = ps.songLength;
-				if (len > 10000)
+				seekWatcherAccum += FlxG.elapsed;
+				if (seekWatcherAccum < 0.5)
+					return;
+				seekWatcherAccum = 0;
+
+				var ps:PlayState = PlayState.instance;
+				var canSeek:Bool = false;
+				@:privateAccess canSeek = (ps != null && ps.startedCountdown && ps.generatedMusic);
+				#if sys
+				if (!seekDone)
 				{
-					var to:Float = len - 8000;
 					try {
-						if (FlxG.sound.music != null) FlxG.sound.music.time = to;
-						if (ps.vocals != null) ps.vocals.time = to;
+						if (!FileSystem.exists('perf')) FileSystem.createDirectory('perf');
+						var fo:sys.io.FileOutput = sys.io.File.append('perf/progress.txt', false);
+						fo.writeString('[seek] tick ps=' + (ps != null) + ' canSeek=' + canSeek + ' len=' + (ps != null ? Math.round(ps.songLength) : -1) + ' pos=' + Math.round(Conductor.songPosition) + '\n');
+						fo.close();
 					} catch (e:Dynamic) {}
-					Conductor.songPosition = to;
-					TraceManager.info('perfTest.seek', 'Seeked to {}ms (songLength {}ms)', [Math.round(to), Math.round(len)]);
 				}
-				seekDone = true;
-				tmr.cancel();
-			}
-		}, 0); // 0 loops = 每 0.5s 重复，直到 cancel
+				#end
+				if (!seekDone && canSeek && !noSeek)
+				{
+					// songLength 可能为 0（startSong 时流式音乐 length 尚不可用），
+					// 回退：重读 music.length → 谱面最后 note 时间。
+					var len:Float = ps.songLength;
+					if (len <= 10000 && FlxG.sound.music != null)
+						len = FlxG.sound.music.length;
+					if (len <= 10000)
+						len = ps.lastChartNoteTime + 4000;
+
+					if (len > 10000)
+					{
+						var to:Float = len - 8000;
+						try {
+							if (FlxG.sound.music != null) FlxG.sound.music.time = to;
+							if (ps.vocals != null) ps.vocals.time = to;
+						} catch (e:Dynamic) {}
+						Conductor.songPosition = to;
+						TraceManager.info('perfTest.seek', 'Seeked to {}ms (songLength {}ms, chart {}ms)', [Math.round(to), Math.round(ps.songLength), Math.round(ps.lastChartNoteTime)]);
+					}
+					else
+					{
+						TraceManager.info('perfTest.seek', 'Cannot determine song length - playing full song');
+					}
+					seekDone = true;
+				}
+			};
+			openfl.Lib.current.stage.addEventListener(openfl.events.Event.ENTER_FRAME, seekWatcher);
+		}
+		seekWatcherAccum = 0;
 	}
 
 	/**
@@ -215,6 +250,15 @@ class PerfTest
 			+ 'sprites=${r.visibleSprites} | ${Note.pool != null ? Note.pool.getDiagnostics() : 'pool=none'}';
 		snapshots.push(line);
 		TraceManager.info('perfTest.snapshot', '{}', [line]);
+		#if sys
+		// 即时进度落盘（不等 finish，便于观察长跑进度）
+		try {
+			if (!FileSystem.exists('perf')) FileSystem.createDirectory('perf');
+			var fo:sys.io.FileOutput = sys.io.File.append('perf/progress.txt', false);
+			fo.writeString(line + '\n');
+			fo.close();
+		} catch (e:Dynamic) {}
+		#end
 	}
 
 	static function finish():Void
