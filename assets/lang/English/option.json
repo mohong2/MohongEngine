@@ -260,18 +260,8 @@
     "option.storageType": "Storage Type",
     "option.storageType.desc": "Choose how the game accesses storage.\nEXTERNAL_DATA (safest) → /Android/data/<package>/files\nEXTERNAL (legacy) → /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\nIf the selected path fails, the game falls back automatically.",
 
-    "option.memoryOptimization": "Memory Optimization",
-    "option.memoryOptimization.desc": "Enables automatic memory management: periodic garbage collection, cache cleanup, and memory pressure detection.\nRecommended for devices with limited RAM.",
     "option.texturePooling": "GPU Texture Pooling",
     "option.texturePooling.desc": "Enables GPU texture reuse to reduce video memory fragmentation and allocation overhead.\nRecommended for systems with a dedicated graphics processor.",
-    "option.renderQualityLevel": "Render Quality",
-    "option.renderQualityLevel.desc": "Adjusts the balance between rendering quality and performance.\nLow: Reduced particles, no anti-aliasing, higher frame rate.\nMedium: Standard effects and anti-aliasing.\nHigh: Full visual effects and anti-aliasing.",
-
-    "memoryMonitor.pressure": "Memory pressure detected: {mem}MB / {threshold}MB — clearing caches.",
-    "memoryMonitor.critical": "Critical memory pressure: {mem}MB / {threshold}MB — emergency cleanup triggered.",
-    "memoryMonitor.gcComplete": "Garbage Collection #{count}: {before}MB → {after}MB (freed {freed}MB)",
-
-    "renderOptimizer.frameBudget": "Render frame exceeded budget: {elapsed}ms, ~{drawCalls} draw calls, {sprites} sprites.",
 
     "gpuTextureManager.orphanWarning": "Detected {count} orphaned GPU texture(s) — possible video memory leak."
 }

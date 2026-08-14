@@ -192,7 +192,7 @@ class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.Psyc
 					weekFile.songs.push([splittedText[i], 'dad', [146, 113, 253]]);
 				} else {
 					weekFile.songs[i][0] = splittedText[i];
-					if(weekFile.songs[i][1] == null || weekFile.songs[i][1]) {
+					if(weekFile.songs[i][1] == null || weekFile.songs[i][1] == '') {
 						weekFile.songs[i][1] = 'dad';
 						weekFile.songs[i][2] = [146, 113, 253];
 					}
@@ -319,6 +319,7 @@ class WeekEditorState extends MusicBeatState implements PsychUIEventHandler.Psyc
 	}
 
 	function reloadAllShit() {
+		if(weekFile.songs.length < 1) return;
 		var weekString:String = weekFile.songs[0][0];
 		for (i in 1...weekFile.songs.length) {
 			weekString += ', ' + weekFile.songs[i][0];
@@ -793,8 +794,8 @@ class WeekEditorFreeplayState extends MusicBeatState implements PsychUIEventHand
 				confirmExitFreeplay();
 			}
 
-			if(controls.UI_UP_P) changeSelection(-1);
-			if(controls.UI_DOWN_P) changeSelection(1);
+			if(controls.UI_UP_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end) changeSelection(-1);
+			if(controls.UI_DOWN_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end) changeSelection(1);
 		}
 		super.update(elapsed);
 	}

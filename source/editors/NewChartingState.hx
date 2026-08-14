@@ -139,6 +139,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 	public var quantizations:Array<Int> = [
 		4,
+		6,
 		8,
 		12,
 		16,
@@ -148,10 +149,12 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		48,
 		64,
 		96,
+		128,
 		192
 	];
 	public var quantColors:Array<FlxColor> = [
 		0xFFDF0000,
+		0xFF801080,
 		0xFF4040CF,
 		0xFFAF00AF,
 		0xFFFFAF00,
@@ -161,6 +164,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		0xFF00CFCF,
 		0xFF00CF00,
 		0xFF9F9F9F,
+		0xFF5F5FAF,
 		0xFF3F3F3F,
 	];
 	var curQuant(default, set):Int = 16;
@@ -250,6 +254,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	var infoText:EditorsText;
 
 	var autoSaveIcon:FlxSprite;
+	var autoSaveTxt:FlxText;
 	var outputTxt:EditorsText;
 	var modIndicatorTxt:EditorsText;
 
@@ -549,6 +554,13 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		autoSaveIcon.scrollFactor.set();
 		autoSaveIcon.alpha = 0;
 		add(autoSaveIcon);
+
+		autoSaveTxt = new FlxText(autoSaveIcon.x + autoSaveIcon.width * 0.6 + 6, autoSaveIcon.y, 160, '', 14);
+		autoSaveTxt.font = 'assets/fonts/editors.ttf';
+		autoSaveTxt.color = FlxColor.WHITE;
+		autoSaveTxt.scrollFactor.set();
+		autoSaveTxt.visible = false;
+		add(autoSaveTxt);
 
 		// save data positions for the UI boxes
 		if(chartEditorSave.data.mainBoxPosition != null && chartEditorSave.data.mainBoxPosition.length > 1)
@@ -926,9 +938,14 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		for (num => key in keysArray)
 			_keysPressedBuffer[num] = FlxG.keys.checkStatus(key, JUST_PRESSED);
 
+		autoSaveTxt.visible = false;
 		if(ClientPrefs.data.chartAutosave && autoSaveCap > 0)
 		{
 			autoSaveTime += elapsed / 60.0;
+			// 自动保存倒计时显示
+			var remainingSecs:Int = Std.int(Math.max(0, (autoSaveCap - autoSaveTime) * 60));
+			autoSaveTxt.text = Std.string(Std.int(remainingSecs / 60)) + ':' + StringTools.lpad(Std.string(remainingSecs % 60), '0', 2);
+			autoSaveTxt.visible = true;
 			//trace(autoSaveTime);
 			//#if debug if(FlxG.keys.justPressed.J) autoSaveTime += 20/60.0; #end
 			if(autoSaveTime >= autoSaveCap #if debug || FlxG.keys.justPressed.NUMPADMULTIPLY #end)
@@ -1173,7 +1190,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					loadSection(PlayState.SONG.notes.length - 1);
 					Conductor.songPosition = FlxG.sound.music.time = FlxG.sound.music.length - 1;
 				}
-				else if(FlxG.keys.justPressed.R)
+				else if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end FlxG.keys.justPressed.R)
 				{
 					var timeToGoBack:Float = 0;
 					if(#if (android || desktop) (virtualPad == null || !virtualPad.buttonY.pressed) || #end !FlxG.keys.pressed.SHIFT) timeToGoBack = cachedSectionTimes[curSec] + (curSec > 0 ? 0.000001 : 0);
@@ -1372,6 +1389,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 					isMovingNotes = false;
 					selectedNotes = [];
 					onSelectNote();
+					// 删除残影动画 (ghost fade-out)
+					for (n in removedNotes) spawnDeleteGhost(n);
+					for (ev in removedEvents) spawnDeleteGhost(ev);
 					softReloadNotes();
 					addUndoAction(DELETE_NOTE, {notes: removedNotes, events: removedEvents});
 					for (ev in removedEvents)
@@ -1382,10 +1402,24 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			{
 				if(FlxG.keys.justPressed.LEFT != FlxG.keys.justPressed.RIGHT) //Lower/Higher quant
 				{
-					if(FlxG.keys.justPressed.LEFT)
-						curQuant = quantizations[Std.int(Math.max(quantizations.indexOf(curQuant) - 1, 0))];
+					if (FlxG.keys.pressed.CONTROL)
+					{
+						// Coarse preset jumps (power-of-two beat snaps)
+						var presetSnaps:Array<Int> = [4, 8, 16, 32, 64, 128, 192];
+						var idx:Int = presetSnaps.indexOf(curQuant);
+						if (idx < 0) idx = 0;
+						idx += FlxG.keys.justPressed.RIGHT ? 1 : -1;
+						if (idx < 0) idx = presetSnaps.length - 1;
+						if (idx >= presetSnaps.length) idx = 0;
+						curQuant = presetSnaps[idx];
+					}
 					else
-						curQuant = quantizations[Std.int(Math.min(quantizations.indexOf(curQuant) + 1, quantizations.length - 1))];
+					{
+						if(FlxG.keys.justPressed.LEFT)
+							curQuant = quantizations[Std.int(Math.max(quantizations.indexOf(curQuant) - 1, 0))];
+						else
+							curQuant = quantizations[Std.int(Math.min(quantizations.indexOf(curQuant) + 1, quantizations.length - 1))];
+					}
 					forceDataUpdate = true;
 				}
 			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end FlxG.keys.justPressed.Z != #if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) || #end FlxG.keys.justPressed.X) //Decrease/Increase Zoom
@@ -2609,6 +2643,9 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		{
 			try
 			{
+				// 空谱/直接进入时 section 缓存尚未建立, 必须先缓存,
+				// 否则 updateGridVisibility -> softReloadNotes 越界读空数组 (release 下挂死)
+				_cacheSections();
 				createGrids(false);
 				rebuildStrumNotes();
 				repositionEditorUI();
@@ -3677,7 +3714,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	function loadSection(?sec:Null<Int> = null)
 	{
 		if(sec != null) curSec = sec;
-		curSec = Std.int(FlxMath.bound(curSec, 0, PlayState.SONG.notes.length-1));
+		curSec = Std.int(FlxMath.bound(curSec, 0, Math.max(0, PlayState.SONG.notes.length-1)));
 		Conductor.bpm = cachedSectionBPMs[curSec];
 
 		// 多k: 切节后先按新的上/中/下三窗重建主网格与事件分段 (主网格列数随窗口小节变化)
@@ -3765,7 +3802,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		if(!onlyCurrent) behindRenderedNotes.clear();
 		curRenderedNotes.clear();
 
-		final curStepCrochet:Float = cachedSectionCrochets[curSec] / 4;
+		// 缓存未建立 (空谱直接进入) 时回退到当前步长, 避免越界读空数组
+		final curStepCrochet:Float = (curSec >= 0 && curSec < cachedSectionCrochets.length) ? cachedSectionCrochets[curSec] / 4 : Conductor.stepCrochet;
 		final songPos:Float = Conductor.songPosition;
 
 		// 当前段落的时间范围
@@ -3916,6 +3954,10 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			Reflect.setField(characterData, 'iconP$i', data != null && data.healthicon != null ? data.healthicon : 'face');
 			//Reflect.setField(characterData, 'vocalsP$i', data != null && data.vocals_file != null ? data.vocals_file : '');
 		}
+
+		// 角色数据变化后立即刷新头部图标 (初次进入时 updateHeads 先于本函数执行,
+		// 图标加载成回退图; 若不在此刷新, 优化守卫会一直跳过)
+		updateHeads(true);
 	}
 	
 	var _lastSec:Int = -1;
@@ -3926,14 +3968,26 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 	{
 		var curSecData:SwagSection = PlayState.SONG.notes[curSec];
 		var isGfSection:Bool = (curSecData != null && curSecData.gfSection == true);
-		if(_lastGfSection == isGfSection && _lastSec == curSec && !ignoreCheck) return; //optimization
+
+		// 小节状态没变也可能需要刷图标: characterData 可能在两次调用之间被
+		// updateJsonData 更新 (初次进入加载了回退图标), 只按小节状态判断会漏刷。
+		var iconsMismatch:Bool = false;
+		for (i in 0...GRID_PLAYERS)
+		{
+			var icon:HealthIcon = icons[i];
+			if (icon == null) continue;
+			var target:String = Reflect.field(characterData, 'iconP${icon.ID}');
+			if (icon.getCharacter() != target) { iconsMismatch = true; break; }
+		}
+
+		if(!ignoreCheck && !iconsMismatch && _lastGfSection == isGfSection && _lastSec == curSec) return; //optimization
 
 		for (i in 0...GRID_PLAYERS)
 		{
 			var icon:HealthIcon = icons[i];
 			//trace('changing iconP${icon.ID}');
 			var iconName:String = Reflect.field(characterData, 'iconP${icon.ID}');
-			icon.changeIcon(iconName);
+			if (iconName != null) icon.changeIcon(iconName);
 		}
 
 		if(icons.length > 1)
@@ -4425,7 +4479,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			}
 
 			var nextSectionTime:Null<Float> = cachedSectionTimes[curSec - secOff + 1];
-			if(nextSectionTime == null) Math.POSITIVE_INFINITY;
+			if(nextSectionTime == null) nextSectionTime = Math.POSITIVE_INFINITY;
 
 			var notesCopyNum:Int = 0;
 			if(affectNotes.checked)
@@ -5016,7 +5070,6 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(scrollSpeedStepper);
 		tab_group.add(audioOffsetStepper);
 		tab_group.add(maniaStepper);
-		tab_group.add(convertModeDropDown);
 
 		tab_group.add(new EditorsText(stageDropDown.x, stageDropDown.y - 15, 80, Language.get('newchartEditor_stage', 'Stage:')));
 		tab_group.add(new EditorsText(playerDropDown.x, playerDropDown.y - 15, 80, Language.get('newchartEditor_player', 'Player:')));
@@ -5026,6 +5079,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		tab_group.add(girlfriendDropDown);
 		tab_group.add(opponentDropDown);
 		tab_group.add(playerDropDown);
+		tab_group.add(convertModeDropDown);
 	}
 
 	// ========================================================================
@@ -6452,7 +6506,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				}
 			));
 		}, btnWid);
-		btn.text.y = btn.y + 3;
+		btn.text.y += 3;
 		btn.text.alignment = LEFT;
 		btn.cameras = tab_group.cameras; 
 		tab_group.add(btn);
@@ -7096,8 +7150,25 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
         }
 
 
+	function spawnDeleteGhost(note:MetaNote):Void
+	{
+		if (note == null || note.frames == null || note.graphic == null || note.graphic.bitmap == null) return;
+		var ghost:FlxSprite = new FlxSprite(note.x, note.y);
+		ghost.frames = note.frames;
+		ghost.animation.copyFrom(note.animation);
+		ghost.alpha = 0.65;
+		ghost.scrollFactor.copyFrom(note.scrollFactor);
+		ghost.cameras = note.cameras;
+		add(ghost);
+		FlxTween.tween(ghost, {alpha: 0, 'scale.x': ghost.scale.x * 1.25, 'scale.y': ghost.scale.y * 1.25}, 0.25, {ease: FlxEase.quadOut,
+			onComplete: function(_) ghost.destroy()});
+	}
+
 	function updateGridVisibility()
 	{
+		// loadChart 在编辑器 UI 构建前就会调用本函数 (网格重建链),
+		// 此时 showLastGridButton 等控件还是 null, 直接访问会空引用挂死。
+		if (showLastGridButton == null) { return; }
 		showLastGridButton.text.text = showPreviousSection	? Language.get('newchartEditor_hide_last_section', 'Hide Last Section') :  Language.get('newchartEditor_show_last_section', 'Show Last Section');
 		showNextGridButton.text.text = showNextSection		? Language.get('newchartEditor_hide_next_section', 'Hide Next Section') :  Language.get('newchartEditor_show_next_section', 'Show Next Section');
 
@@ -7141,9 +7212,10 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				{
 					TraceManager.warn('trace.editor.failsafe', 'failsafe, cancel early and delete notes after this');
 					var changedSelected:Bool = false;
-					for(i in num...notes.length)
+					var i:Int = notes.length - 1;
+					while (i >= num)
 					{
-						var n = notes[num];
+						var n:MetaNote = notes[i];
 						if(n != null)
 						{
 							if(selectedNotes.contains(n))
@@ -7151,9 +7223,10 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 								selectedNotes.remove(n);
 								changedSelected = true;
 							}
-							notes.remove(n);
-							note.destroy();
+							notes.splice(i, 1);
+							n.destroy();
 						}
+						i--;
 					}
 					if(changedSelected) onSelectNote();
 					loadSection();

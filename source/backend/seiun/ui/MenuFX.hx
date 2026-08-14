@@ -126,6 +126,54 @@ class MenuFX
 		FlxTween.tween(spr.scale, {x: ox, y: oy}, duration, {ease: FlxEase.quadOut});
 	}
 
+	/**
+	 * Smoothly tween a sprite's alpha to `target`, cancelling any previous
+	 * alpha tween first. Used for hover highlights so a cursor hovering near
+	 * an item's edge can never cause a hard on/off flicker.
+	 */
+	public static function fadeAlpha(spr:FlxSprite, target:Float, duration:Float = 0.18):Void
+	{
+		if (spr == null || !spr.exists) return;
+		FlxTween.cancelTweensOf(spr, ['alpha']);
+		FlxTween.tween(spr, {alpha: target}, duration, {ease: FlxEase.sineOut});
+	}
+
+	/**
+	 * Pulse a glow's alpha up to `peak` and settle back to `rest`. Replaces the
+	 * repeated "cancel / set / tween back" blocks in the menu beat handlers.
+	 */
+	public static function glowPulse(glow:FlxSprite, peak:Float = 0.95, rest:Float = 0.45, duration:Float = 0.4):Void
+	{
+		if (glow == null || !glow.exists) return;
+		FlxTween.cancelTweensOf(glow, ['alpha']);
+		glow.alpha = peak;
+		FlxTween.tween(glow, {alpha: rest}, duration, {ease: FlxEase.sineOut});
+	}
+
+	/**
+	 * Per-frame drift for a soft aurora glow: moves it along a sine/cosine path,
+	 * breathes its alpha and optionally hue-cycles or tints its color.
+	 * Every Seiun menu uses this one method so all backgrounds share the same
+	 * calm, continuous motion feel across state switches.
+	 */
+	public static function driftGlow(glow:FlxSprite, t:Float,
+		centerX:Float, centerY:Float,
+		ampX:Float, ampY:Float, speedX:Float, speedY:Float, phaseX:Float, phaseY:Float,
+		alphaBase:Float, alphaAmp:Float, alphaSpeed:Float, alphaPhase:Float,
+		color:Int, hueSpeed:Float = 0, tint:Int = 0, mix:Float = 0):Void
+	{
+		if (glow == null) return;
+		glow.x = centerX + Math.sin(t * speedX + phaseX) * ampX - glow.width * 0.5;
+		glow.y = centerY + Math.cos(t * speedY + phaseY) * ampY - glow.height * 0.5;
+		glow.alpha = alphaBase + Math.sin(t * alphaSpeed + alphaPhase) * alphaAmp;
+		if (hueSpeed > 0)
+			glow.color = cycleHue(color, hueSpeed);
+		else if (mix > 0)
+			glow.color = mixColor(color, tint, mix);
+		else
+			glow.color = color;
+	}
+
 	/** Create a soft radial glow sprite with the given color and alpha. */
 	public static function makeGlow(size:Float, color:Int, alpha:Float = 1):FlxSprite
 	{

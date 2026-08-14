@@ -324,7 +324,7 @@ class MenuCharacterEditorState extends MusicBeatState implements PsychUIEventHan
 				updateOffset();
 			}
 
-			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) ||#end FlxG.keys.justPressed.SPACE && curTypeSelected == 1) {
+			if((#if (android || desktop) (virtualPad != null && virtualPad.buttonA.justPressed) || #end FlxG.keys.justPressed.SPACE) && curTypeSelected == 1) {
 				grpWeekCharacters.members[curTypeSelected].animation.play('confirm', true);
 			}
 		}

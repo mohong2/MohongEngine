@@ -259,18 +259,8 @@
     "option.storageType": "存储类型",
     "option.storageType.desc": "选择游戏访问存储的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（旧版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所选路径不可用，游戏会自动回退。",
 
-    "option.memoryOptimization": "内存优化",
-    "option.memoryOptimization.desc": "启用自动内存管理机制：定期执行垃圾回收、清理缓存并检测内存压力。\n建议内存较小的设备开启此选项。",
     "option.texturePooling": "GPU 纹理池化",
     "option.texturePooling.desc": "启用 GPU 纹理复用机制，以减少显存碎片化和重复分配开销。\n建议配备独立显卡的系统开启此选项。",
-    "option.renderQualityLevel": "渲染质量",
-    "option.renderQualityLevel.desc": "调整渲染质量与性能之间的平衡。\n低：减少粒子效果、关闭抗锯齿，提高帧率。\n中：标准特效与抗锯齿。\n高：完整视觉特效与抗锯齿。",
-
-    "memoryMonitor.pressure": "检测到内存压力：{mem}MB / {threshold}MB — 正在清理缓存。",
-    "memoryMonitor.critical": "检测到严重内存压力：{mem}MB / {threshold}MB — 已触发紧急清理。",
-    "memoryMonitor.gcComplete": "垃圾回收 #{count}：{before}MB → {after}MB（已释放 {freed}MB）",
-
-    "renderOptimizer.frameBudget": "渲染帧超出时间预算：{elapsed}ms，约 {drawCalls} 次绘制调用，{sprites} 个精灵。",
-
+    
     "gpuTextureManager.orphanWarning": "检测到 {count} 个孤立 GPU 纹理 — 可能存在显存泄漏。"
 }

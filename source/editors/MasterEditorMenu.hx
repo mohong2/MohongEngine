@@ -161,16 +161,17 @@ class MasterEditorMenu extends MusicBeatState
 		if (onMods)
 		{
 			// focus on mod list
-			if (controls.UI_UP_P)
+			if (controls.UI_UP_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end)
 				changeModSelection(-1);
-			if (controls.UI_DOWN_P)
+			if (controls.UI_DOWN_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end)
 				changeModSelection(1);
-			if (controls.UI_LEFT_P || controls.BACK)
+			if (controls.UI_LEFT_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft.justPressed) #end
+				|| controls.BACK #if (android || desktop) || (virtualPad != null && virtualPad.buttonB.justPressed) #end)
 			{
 				onMods = false;
 				FlxG.sound.play(Paths.sound('cancelMenu'));
 			}
-			if (controls.ACCEPT)
+			if (controls.ACCEPT #if (android || desktop) || (virtualPad != null && virtualPad.buttonA.justPressed) #end)
 			{
 				curDirectory = curSelectedMod;
 				if (directories[curDirectory] == null || directories[curDirectory].length < 1)
@@ -191,20 +192,20 @@ class MasterEditorMenu extends MusicBeatState
 		else
 		{
 			// focus on editor options
-			if (controls.UI_UP_P)
+			if (controls.UI_UP_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end)
 				changeSelection(-1);
-			if (controls.UI_DOWN_P)
+			if (controls.UI_DOWN_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end)
 				changeSelection(1);
-			if (controls.UI_RIGHT_P)
+			if (controls.UI_RIGHT_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonRight.justPressed) #end)
 			{
 				onMods = true;
 				FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
 			}
-			if (controls.BACK)
+			if (controls.BACK #if (android || desktop) || (virtualPad != null && virtualPad.buttonB.justPressed) #end)
 			{
 				MusicBeatState.switchState(new MainMenuState());
 			}
-			if (controls.ACCEPT)
+			if (controls.ACCEPT #if (android || desktop) || (virtualPad != null && virtualPad.buttonA.justPressed) #end)
 			{
 				switch(options[curSelected]) {
 					case 'editors_character':
@@ -239,13 +240,13 @@ class MasterEditorMenu extends MusicBeatState
 		updateModItemsAlpha();
 		#else
 		// Without MODS_ALLOWED
-		if (controls.UI_UP_P)
+		if (controls.UI_UP_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end)
 			changeSelection(-1);
-		if (controls.UI_DOWN_P)
+		if (controls.UI_DOWN_P #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end)
 			changeSelection(1);
-		if (controls.BACK)
+		if (controls.BACK #if (android || desktop) || (virtualPad != null && virtualPad.buttonB.justPressed) #end)
 			MusicBeatState.switchState(new MainMenuState());
-		if (controls.ACCEPT)
+		if (controls.ACCEPT #if (android || desktop) || (virtualPad != null && virtualPad.buttonA.justPressed) #end)
 		{
 			switch(options[curSelected]) {
 				case 'editors_character':

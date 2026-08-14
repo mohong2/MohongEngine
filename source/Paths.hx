@@ -25,7 +25,6 @@ import flash.media.Sound;
 
 using StringTools;
 import mohong.TraceManager;
-import mohong.MemoryMonitor;
 import mohong.GPUTextureManager;
 
 class Paths
@@ -67,11 +66,7 @@ class Paths
 		'assets/shared/music/breakfast.$SOUND_EXT',
 		'assets/shared/music/tea-time.$SOUND_EXT',
 	];
-	/** Whether to track graphic loads via MemoryMonitor for leak detection. */
-	public static var enableMemoryTracking:Bool = true;
 
-	/** Maximum number of cached assets before triggering cleanup. 0 = unlimited. */
-	public static var maxCachedAssets:Int = #if mobile 200 #else 300 #end;
 
 	/** Auto-free when unreferenced. Keep false everywhere: destroyOnNoUse
 	 *  would kill cached-but-unreferenced graphics (useCount 0) and FlxBar's
@@ -110,7 +105,6 @@ class Paths
 		if (fileKey != null)
 		{
 			currentTrackedAssets.remove(fileKey);
-			MemoryMonitor.untrackGraphic(fileKey);
 			GPUTextureManager.untrackGraphic(fileKey);
 		}
 		else
@@ -121,13 +115,29 @@ class Paths
 			for (ck in fileKeys)
 			{
 				currentTrackedAssets.remove(ck);
-				MemoryMonitor.untrackGraphic(ck);
 				GPUTextureManager.untrackGraphic(ck);
 			}
 		}
 		// Safety net: never destroy a graphic a live sprite still references.
 		if (obj.useCount <= 0)
+		{
+			// The cached sparrow-atlas frames hold a reference to this graphic and
+			// are registered in its frameCollections, so destroy() nulls their
+			// frames/parent. Evict them now — otherwise getSparrowAtlas() would
+			// return a zombie husk and mods that build sprites from cached atlases
+			// (e.g. FruitNinja-style spawners) would render nothing and end up in
+			// a Lua error loop until the whole script gets silently disabled.
+			var staleAtlasKeys:Array<String> = [];
+			for (cacheKey => frames in atlasFramesCache)
+			{
+				if (frames == null || frames.parent == obj)
+					staleAtlasKeys.push(cacheKey);
+			}
+			for (k in staleAtlasKeys)
+				atlasFramesCache.remove(k);
+
 			obj.destroy();
+		}
 	}
 
 	// FlxBar's cached bar graphics keep useCount 0 but are held by live FlxBar via _frontFrame;
@@ -691,15 +701,6 @@ class Paths
 				currentTrackedAssets.remove(file); // zombie — force a fresh load
 			}
 
-			// Enforce cache size limit to prevent memory bloat
-			if (maxCachedAssets > 0) {
-				var currentCount:Int = 0;
-				for (_ in currentTrackedAssets) currentCount++;
-				if (currentCount >= maxCachedAssets) {
-					clearUnusedMemory();
-				}
-			}
-
 			if (bitmap == null) {
 				#if MODS_ALLOWED
 				if (FileSystem.exists(file)) bitmap = BitmapData.fromFile(file);
@@ -719,13 +720,9 @@ class Paths
 			// graphic got re-loaded a few times). We always use the plain
 			// CPU-side FlxGraphic cache now — it is reliable and safe.
 			var newGraphic: FlxGraphic = FlxGraphic.fromBitmapData(bitmap, false, file);
-		newGraphic.persist = !allowGraphicAutoFree;
-		newGraphic.destroyOnNoUse = allowGraphicAutoFree;
+			newGraphic.persist = !allowGraphicAutoFree;
+			newGraphic.destroyOnNoUse = allowGraphicAutoFree;
 			currentTrackedAssets.set(file, newGraphic);
-			// Track graphic lifecycle for leak detection
-			if (enableMemoryTracking) {
-				MemoryMonitor.trackGraphic(file, newGraphic);
-			}
 			// Texture bookkeeping (same lifecycle as the useCount/zombie path).
 			GPUTextureManager.trackGraphic(file, newGraphic);
 			return newGraphic;
@@ -768,11 +765,19 @@ class Paths
 		atlasFramesCache = [];
 	}
 
-	inline static public function getSparrowAtlas(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
+	static public function getSparrowAtlas(key:String, ?library:String = null, ?allowGPU:Bool = true):FlxAtlasFrames
 	{
 		var cacheKey:String = key + '::' + (library != null ? library : '');
 		var cached:FlxAtlasFrames = atlasFramesCache.get(cacheKey);
-		if (cached != null) return cached;
+		if (cached != null)
+		{
+			// The parent graphic may have been destroyed by the periodic unused-
+			// graphics purge after this was cached; a destroyed collection has null
+			// frames and null parent. Rebuild instead of returning a zombie.
+			if (isGraphicAlive(cached.parent))
+				return cached;
+			atlasFramesCache.remove(cacheKey);
+		}
 
 		var imageLoaded:FlxGraphic = image(key, library, allowGPU);
 		if (imageLoaded == null) return null;

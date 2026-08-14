@@ -252,18 +252,8 @@
     "option.adaptiveResolution": "自適應解析度",
     "option.adaptiveResolution.desc": "不再鎖定 1280x720，而是自動適配該裝置的最大解析度，\n畫面填滿整個螢幕且更清晰。\n重新啟動遊戲後生效。\n在低效能裝置上可能會降低幀率。",
 
-    "option.memoryOptimization": "記憶體最佳化",
-    "option.memoryOptimization.desc": "啟用自動記憶體管理機制：定期執行垃圾回收、清理快取並偵測記憶體壓力。\n建議記憶體較小的裝置開啟此選項。",
     "option.texturePooling": "GPU 紋理池化",
     "option.texturePooling.desc": "啟用 GPU 紋理復用機制，以減少顯示記憶體碎片化與重複分配開銷。\n建議配備獨立顯示卡的系統開啟此選項。",
-    "option.renderQualityLevel": "渲染品質",
-    "option.renderQualityLevel.desc": "調整渲染品質與效能之間的平衡。\n低：減少粒子效果、關閉抗鋸齒，提高幀率。\n中：標準特效與抗鋸齒。\n高：完整視覺特效與抗鋸齒。",
-
-    "memoryMonitor.pressure": "偵測到記憶體壓力：{mem}MB / {threshold}MB — 正在清理快取。",
-    "memoryMonitor.critical": "偵測到嚴重記憶體壓力：{mem}MB / {threshold}MB — 已觸發緊急清理。",
-    "memoryMonitor.gcComplete": "垃圾回收 #{count}：{before}MB → {after}MB（已釋放 {freed}MB）",
-
-    "renderOptimizer.frameBudget": "渲染幀超出時間預算：{elapsed}ms，約 {drawCalls} 次繪製呼叫，{sprites} 個精靈。",
 
     "gpuTextureManager.orphanWarning": "偵測到 {count} 個孤立 GPU 紋理 — 可能存在顯示記憶體流失。"
 }

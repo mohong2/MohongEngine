@@ -242,14 +242,17 @@ class OptionsState extends MusicBeatState
 		categorySprites.push(catSelectorRight);
 
 		#if (TOUCH_CONTROLS || desktop)
-		catTipText = new FlxText(10, FlxG.height - 24, 0,
-			Language.get("option.tipText", "Press C to customize your mobile controls"), 16);
-		catTipText.setFormat(Paths.optionsfont(), 16, FlxColor.WHITE, LEFT,
-			FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		catTipText.borderSize = 2.4;
-		catTipText.scrollFactor.set();
-		add(catTipText);
-		categorySprites.push(catTipText);
+		if (ClientPrefs.touchUIEnabled())
+		{
+			catTipText = new FlxText(10, FlxG.height - 24, 0,
+				Language.get("option.tipText", "Press C to customize your mobile controls"), 16);
+			catTipText.setFormat(Paths.optionsfont(), 16, FlxColor.WHITE, LEFT,
+				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			catTipText.borderSize = 2.4;
+			catTipText.scrollFactor.set();
+			add(catTipText);
+			categorySprites.push(catTipText);
+		}
 		#end
 
 		targetScrollOffset = -(curSelected * itemSpacing);

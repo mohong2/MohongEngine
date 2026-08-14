@@ -1,4 +1,4 @@
-﻿package states;
+package states;
 
 import backend.seiun.ui.*;
 import substates.ResetScoreSubState;
@@ -83,7 +83,6 @@ class FreeplayState extends SeiunMenuState
 	var auroraGlowB:FlxSprite;
 	var selGlow:FlxSprite;
 	var selCursor:Alphabet;
-	var scaleKick:Float = 0;
 	var ambientTimer:Float = 0;
 	var autoPreviewNext:Bool = false;
 	var autoMusicActive:Bool = false;
@@ -197,19 +196,23 @@ class FreeplayState extends SeiunMenuState
 			add(auroraGlowB);
 		}
 
-		grpSongs = new FlxTypedGroup<Alphabet>();
-		add(grpSongs);
-
 		if (MenuFX.enabled())
 		{
-			// Glow + cursor that follow the selected song
+			// Halo that follows the selected song. Added before the song list so
+			// it renders *behind* the text instead of washing it out.
 			selGlow = MenuFX.makeGlow(300, 0xFFFFFFFF, 0.5);
 			selGlow.scale.set(1.5, 0.8);
 			selGlow.updateHitbox();
 			selGlow.blend = ADD;
 			selGlow.visible = false;
 			add(selGlow);
+		}
 
+		grpSongs = new FlxTypedGroup<Alphabet>();
+		add(grpSongs);
+
+		if (MenuFX.enabled())
+		{
 			selCursor = new Alphabet(0, 0, '>', true);
 			selCursor.visible = false;
 			add(selCursor);
@@ -398,22 +401,16 @@ class FreeplayState extends SeiunMenuState
 
 
 		#if PRELOAD_ALL
-		var leText:String = Language.get("FreeplayState.leText", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
+		var leText:String = ClientPrefs.touchUIEnabled()
+			? Language.get("FreeplayState.leText.android", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.")
+			: Language.get("FreeplayState.leText", "Press SPACE to listen to the Song / Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
 		var size:Int = 16;
-
-		#if (TOUCH_CONTROLS || desktop)
-		var leText:String = Language.get("FreeplayState.leText.android", "Press X to listen to the Song / Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
-		var size:Int = 16;
-		#end
 
 		#else
-		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
+		var leText:String = ClientPrefs.touchUIEnabled()
+			? Language.get("FreeplayState.leText.NOTRELOAD_ALL.android", "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.")
+			: Language.get("FreeplayState.leText.NOTRELOAD_ALL", "Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy. / Press H to view the Score History.");
 		var size:Int = 18;
-
-		#if (TOUCH_CONTROLS || desktop)
-		var leText:String = Language.get("FreeplayState.leText.NOTRELOAD_ALL.android", "Press C to open the Gameplay Changers Menu / Press Y to Reset your Score and Accuracy. / Press V to view the Score History.");
-		var size:Int = 16;
-		#end
 
 		#end
 		var text:FlxText = new FlxText(textBG.x, textBG.y + 4, FlxG.width, leText, size);
@@ -514,11 +511,9 @@ class FreeplayState extends SeiunMenuState
 
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 50, 0,
-			#if (TOUCH_CONTROLS || desktop)
-			Language.get('Mod.hint.android', '[G] Switch Mod'),
-			#else
-			Language.get('Mod.hint', '[TAB] Switch Mod'),
-			#end
+			ClientPrefs.touchUIEnabled()
+				? Language.get('Mod.hint.android', '[G] Switch Mod')
+				: Language.get('Mod.hint', '[TAB] Switch Mod'),
 			16);
 		hint.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT);
 		hint.alpha = 0.5;
@@ -733,29 +728,17 @@ class FreeplayState extends SeiunMenuState
 		}
 
 		// ── Seiun menu animations ──
-		scaleKick *= Math.exp(-elapsed * 9);
-		if (scaleKick < 0.001) scaleKick = 0;
-
 		if (auroraGlowA != null)
 		{
 			var t:Float = MenuFX.time;
 			var baseCol:Int = bg.color;
-			auroraGlowA.x = FlxG.width * 0.42 + Math.sin(t * 0.35) * 150 - auroraGlowA.width * 0.5;
-			auroraGlowA.y = FlxG.height * 0.42 + Math.cos(t * 0.28) * 75 - auroraGlowA.height * 0.5;
-			auroraGlowA.alpha = 0.26 + Math.sin(t * 0.5) * 0.08;
-			auroraGlowA.color = MenuFX.mixColor(0xFFFD719B, baseCol, 0.55);
-
-			auroraGlowB.x = FlxG.width * 0.76 + Math.sin(t * 0.23 + 2.1) * 125 - auroraGlowB.width * 0.5;
-			auroraGlowB.y = FlxG.height * 0.66 + Math.cos(t * 0.31 + 1.2) * 65 - auroraGlowB.height * 0.5;
-			auroraGlowB.alpha = 0.2 + Math.sin(t * 0.42 + 1.0) * 0.07;
-			auroraGlowB.color = MenuFX.mixColor(0xFF8A5CFF, baseCol, 0.45);
+			MenuFX.driftGlow(auroraGlowA, t, FlxG.width * 0.42, FlxG.height * 0.42, 150, 75, 0.35, 0.28, 0, 0, 0.26, 0.08, 0.5, 0, 0xFFFD719B, 0, baseCol, 0.55);
+			MenuFX.driftGlow(auroraGlowB, t, FlxG.width * 0.76, FlxG.height * 0.66, 125, 65, 0.23, 0.31, 2.1, 1.2, 0.2, 0.07, 0.42, 1.0, 0xFF8A5CFF, 0, baseCol, 0.45);
 		}
 
 		if (curSelected >= 0 && curSelected < grpSongs.length)
 		{
 			var sel:Alphabet = grpSongs.members[curSelected];
-			var kickScale:Float = 1 + scaleKick * 0.35;
-			sel.scale.set(1.2 * kickScale, 1.2 * kickScale);
 
 			if (selGlow != null)
 			{
@@ -840,14 +823,16 @@ class FreeplayState extends SeiunMenuState
 		}
 		
 		if (mouseOverlapIndex != newMouseOverlapIndex) {
-			if (mouseOverlapIndex >= 0 && mouseOverlapIndex != curSelected) {
-				grpSongs.members[mouseOverlapIndex].alpha = 0.6;
-				iconArray[mouseOverlapIndex].alpha = 0.6;
+			if (mouseOverlapIndex >= 0 && mouseOverlapIndex < grpSongs.length && mouseOverlapIndex != curSelected) {
+				MenuFX.fadeAlpha(grpSongs.members[mouseOverlapIndex], 0.6, 0.15);
+				if (mouseOverlapIndex < iconArray.length)
+					MenuFX.fadeAlpha(iconArray[mouseOverlapIndex], 0.6, 0.15);
 			}
 			
 			if (newMouseOverlapIndex >= 0 && newMouseOverlapIndex != curSelected) {
-				grpSongs.members[newMouseOverlapIndex].alpha = 1.0;
-				iconArray[newMouseOverlapIndex].alpha = 1.0;
+				MenuFX.fadeAlpha(grpSongs.members[newMouseOverlapIndex], 1.0, 0.15);
+				if (newMouseOverlapIndex < iconArray.length)
+					MenuFX.fadeAlpha(iconArray[newMouseOverlapIndex], 1.0, 0.15);
 			}
 			
 			mouseOverlapIndex = newMouseOverlapIndex;
@@ -1276,38 +1261,30 @@ class FreeplayState extends SeiunMenuState
 		isShowingError = false;
 		
 		for (i in 0...grpSongs.length) {
-        var item = grpSongs.members[i];
-        var icon = iconArray[i];
-        FlxTween.cancelTweensOf(item.scale);
-        FlxTween.cancelTweensOf(icon.scale);
-		if (i == curSelected)
-		{
-			// Selected song scale is modulated per-frame in update() for the beat kick
-			item.scale.set(1.2, 1.2);
-			FlxTween.tween(icon.scale, {x: 1.2, y: 1.2}, 0.2, {ease: FlxEase.backOut});
+			var item = grpSongs.members[i];
+			var icon = iconArray[i];
+			FlxTween.cancelTweensOf(item.scale);
+			FlxTween.cancelTweensOf(icon.scale);
+			if (i == curSelected)
+			{
+				FlxTween.tween(item.scale, {x: 1.2, y: 1.2}, 0.25, {ease: FlxEase.backOut});
+				FlxTween.tween(icon.scale, {x: 1.2, y: 1.2}, 0.25, {ease: FlxEase.backOut});
+			}
+			else
+			{
+				FlxTween.tween(item.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
+				FlxTween.tween(icon.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
+			}
 		}
-		else
-		{
-			FlxTween.tween(item.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
-			FlxTween.tween(icon.scale, {x: 0.85, y: 0.85}, 0.25, {ease: FlxEase.quadOut});
+
+		// Icon highlight + losing/winning face (health icons with 3 frames)
+		for (i in 0...iconArray.length) {
+			var isSel:Bool = (i == curSelected);
+			iconArray[i].alpha = isSel ? 1 : 0.6;
+			if (iconArray[i].frameCount == 3) {
+				iconArray[i].animation.curAnim.curFrame = isSel ? 2 : 0;
+			}
 		}
-    }
-
-
-    for (i in 0...iconArray.length) {
-        iconArray[i].alpha = 0.6;
-        
-        if (iconArray[i].frameCount == 3) {
-            iconArray[i].animation.curAnim.curFrame = 0;
-        }
-    }
-
-    iconArray[curSelected].alpha = 1;
-    
-    if (iconArray[curSelected].frameCount == 3) {
-        iconArray[curSelected].animation.curAnim.curFrame = 2;
-    }
-
 
 		// selector.y = (70 * curSelected) + 30;
 
@@ -1319,27 +1296,11 @@ class FreeplayState extends SeiunMenuState
 		#end
 
 		var bullShit:Int = 0;
-
-		for (i in 0...iconArray.length)
-		{
-			iconArray[i].alpha = 0.6;
-		}
-
-		iconArray[curSelected].alpha = 1;
-
 		for (item in grpSongs.members)
 		{
 			item.targetY = bullShit - curSelected;
 			bullShit++;
-
-			item.alpha = 0.6;
-			// item.setGraphicSize(Std.int(item.width * 0.8));
-
-			if (item.targetY == 0)
-			{
-				item.alpha = 1;
-				// item.setGraphicSize(Std.int(item.width));
-			}
+			item.alpha = (item.targetY == 0) ? 1 : 0.6;
 		}
 
 		// NOTE: Do NOT set Paths.currentModDirectory here!
@@ -1392,8 +1353,8 @@ class FreeplayState extends SeiunMenuState
 		if (curSelected >= 0 && curSelected < grpSongs.length)
 		{
 			var sel:Alphabet = grpSongs.members[curSelected];
-			var icon:HealthIcon = iconArray[curSelected];
-			MenuFX.pulse(icon, 0.12, 0.18);
+			// Note: the icon "pop" is already handled by the backOut scale tween
+			// above, so we avoid a second scale pulse that would fight it.
 			MenuFX.punchZoom(0.018);
 			MenuFX.burstParticles(particleGroup, sel.x + sel.width * 0.5, sel.y + sel.height * 0.5, curSong.color, 10, 190);
 			if (selGlow != null) MenuFX.pulse(selGlow, 0.25, 0.25);
@@ -1758,17 +1719,11 @@ class FreeplayState extends SeiunMenuState
 			|| curSelected < 0 || curSelected >= grpSongs.length)
 			return;
 
-		scaleKick = 0.22;
 		if (curSelected < iconArray.length)
 			MenuFX.pulse(iconArray[curSelected], 0.1, 0.16);
 		if (selCursor != null)
 			MenuFX.pulse(selCursor, 0.22, 0.14);
-		if (selGlow != null)
-		{
-			FlxTween.cancelTweensOf(selGlow, ['alpha']);
-			selGlow.alpha = 0.95;
-			FlxTween.tween(selGlow, {alpha: 0.5}, 0.4, {ease: FlxEase.sineOut});
-		}
+		MenuFX.glowPulse(selGlow, 0.95, 0.5, 0.4);
 		MenuFX.punchZoom(0.012);
 	}
 

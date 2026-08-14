@@ -66,7 +66,6 @@ import DialogueBoxPsych;
 import Conductor.Rating;
 import backend.Ratings;
 import mohong.TraceManager;
-import mohong.PerfTest;
 import popup.RatingPopup;
 #if !flash 
 import flixel.addons.display.FlxRuntimeShader;
@@ -4843,14 +4842,6 @@ class PlayState extends MusicBeatState
 
 			prevCamFollow = camFollow;
 			prevCamFollowPos = camFollowPos;
-
-			// Perf runner (--perf-test song): skip the results substate.
-			if (PerfTest.enabled && PerfTest.mode == 'song')
-			{
-				transitioning = true;
-				PerfTest.onSongComplete();
-				return;
-			}
 
 			openSubState(new PlayStateResultsSubstate());
 			transitioning = true;

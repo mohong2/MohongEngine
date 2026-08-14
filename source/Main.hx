@@ -27,9 +27,6 @@ import Discord.DiscordClient;
 import mohong.Windows;
 import mohong.TraceManager;
 import mohong.TraceConsole;
-import mohong.MemoryMonitor;
-import mohong.RenderOptimizer;
-import mohong.PerfTest;
 import backend.Dialog;
 import states.CrashCatcherState;
 
@@ -203,13 +200,6 @@ class Main extends Sprite
 		if (FlxG.game != null)
 			FlxG.game.drawWrapper = null;
 
-		// Render observer hooks (flixel's own signals; no lib changes).
-		FlxG.signals.preDraw.add(function() RenderOptimizer.onRenderStart());
-		FlxG.signals.postDraw.add(function() RenderOptimizer.onRenderEnd());
-
-		// Perf runner, sys + --perf-test only.
-		PerfTest.init();
-
 		#if CRASH_HANDLER
 		// Wire the timer crash callback so separate-update-mode errors are
 		// handled gracefully with the original stack trace preserved.
@@ -299,19 +289,14 @@ class Main extends Sprite
 			oldFpsVar.visible = ClientPrefs.data.showFPS && useOldFPS;
 		}
 
-		// 内存监控：每帧计时 + 低频内存压力/定时 GC 检查（syscall 已按 ~120 帧节流）
-		MemoryMonitor.initialize();
 
 		// 每帧通过 hscript 触发 onFrameUpdate 事件，供脚本自定义更新
 		#if HSCRIPT_ALLOWED
 		addEventListener(Event.ENTER_FRAME, function(_) {
-			MemoryMonitor.onFrameStart();
 			HScript.callOnGlobalScript("onFrameUpdate", []);
 		});
 		#else
-		addEventListener(Event.ENTER_FRAME, function(_) {
-			MemoryMonitor.onFrameStart();
-		});
+
 		#end
 		#if html5
 		FlxG.autoPause = false;

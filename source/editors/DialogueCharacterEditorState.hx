@@ -483,8 +483,8 @@ class DialogueCharacterEditorState extends MusicBeatState implements PsychUIEven
 		}
 		character.x += character.jsonFile.position[0] + mainGroup.x;
 		character.y += character.jsonFile.position[1] + mainGroup.y;
-		character.playAnim(character.jsonFile.animations[0].anim);
 		if(character.jsonFile.animations.length > 0) {
+			character.playAnim(character.jsonFile.animations[0].anim);
 			curSelectedAnim = character.jsonFile.animations[0].anim;
 			var animShit:DialogueAnimArray = character.dialogueAnimations.get(curSelectedAnim);
 			ghostLoop.playAnim(animShit.anim);
@@ -583,8 +583,8 @@ class DialogueCharacterEditorState extends MusicBeatState implements PsychUIEven
 			if(UI_mainbox.selectedName == Language.get('dialogueCharacterEditor_animations', 'Animations') && curSelectedAnim != null && character.dialogueAnimations.exists(curSelectedAnim)) {
 				var moved:Bool = false;
 				var animShit:DialogueAnimArray = character.dialogueAnimations.get(curSelectedAnim);
-				var controlArrayLoop:Array<Bool> = [FlxG.keys.justPressed.A #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft2.justPressed) #end, FlxG.keys.justPressed.W #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp2.justPressed)#end,  FlxG.keys.justPressed.D || #if (android || desktop) (virtualPad != null && virtualPad.buttonRight2.justPressed) ,#end  FlxG.keys.justPressed.S #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown2.justPressed) #end];
-				var controlArrayIdle:Array<Bool> = [FlxG.keys.justPressed.LEFT #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft.justPressed) #end, FlxG.keys.justPressed.UP #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed)#end,  FlxG.keys.justPressed.RIGHT || #if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed),#end  FlxG.keys.justPressed.DOWN #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end];
+				var controlArrayLoop:Array<Bool> = [FlxG.keys.justPressed.A #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft2.justPressed) #end, FlxG.keys.justPressed.W #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp2.justPressed) #end, FlxG.keys.justPressed.D #if (android || desktop) || (virtualPad != null && virtualPad.buttonRight2.justPressed) #end, FlxG.keys.justPressed.S #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown2.justPressed) #end];
+				var controlArrayIdle:Array<Bool> = [FlxG.keys.justPressed.LEFT #if (android || desktop) || (virtualPad != null && virtualPad.buttonLeft.justPressed) #end, FlxG.keys.justPressed.UP #if (android || desktop) || (virtualPad != null && virtualPad.buttonUp.justPressed) #end, FlxG.keys.justPressed.RIGHT #if (android || desktop) || (virtualPad != null && virtualPad.buttonRight.justPressed) #end, FlxG.keys.justPressed.DOWN #if (android || desktop) || (virtualPad != null && virtualPad.buttonDown.justPressed) #end];
 				for (i in 0...controlArrayLoop.length) {
 					if(controlArrayLoop[i]) {
 						if(i % 2 == 1) {

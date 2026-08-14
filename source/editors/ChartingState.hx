@@ -114,7 +114,6 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var strumLineNotes:FlxTypedGroup<StrumNote>;
 	var curSong:String = 'Test';
 	var amountSteps:Int = 0;
-	var bullshitUI:FlxGroup;
 
 	var highlight:FlxSprite;
 
@@ -1057,7 +1056,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 
 		saveEvents.text.font = 'assets/fonts/editors.ttf';
 
-		var clear_events:PsychUIButton = new PsychUIButton(320, 310, Language.get("newchartEditor_clear_events_btn", "Clear events"), function()
+		var clear_events:PsychUIButton = new PsychUIButton(180, 310, Language.get("newchartEditor_clear_events_btn", "Clear events"), function()
 			{
 				openSubState(new Prompt('This action will clear current progress.\n\nProceed?', clearEvents));
 			});
@@ -1065,9 +1064,9 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 		clear_events.bg.color = FlxColor.RED;
 		clear_events.text.color = FlxColor.WHITE;
 
-		var clear_notes:PsychUIButton = new PsychUIButton(320, clear_events.y + 30, Language.get("newchartEditor_clear_notes_btn", "Clear notes"), function()
+		var clear_notes:PsychUIButton = new PsychUIButton(180, clear_events.y + 30, Language.get("newchartEditor_clear_notes_btn", "Clear notes"), function()
 			{
-openSubState(new Prompt('This action will clear current progress.\n\nProceed?', function(){for (sec in 0..._song.notes.length) {
+openSubState(new Prompt('This action will clear current progress.\n\nProceed?', function(){pushUndo(); for (sec in 0..._song.notes.length) {
 				_song.notes[sec].sectionNotes = [];
 			}
 			updateGrid();
@@ -1096,7 +1095,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		uiManiaStepper.name = 'mania';
 		blockPressWhileTypingOnStepper.push(uiManiaStepper);
 		// Key conversion mode: sequential / shuffle / auto-double / shuffle+double.
-		convertModeDropDown = new PsychUIDropDownMenu(250, 128, [
+		convertModeDropDown = new PsychUIDropDownMenu(150, 180, [
 			Language.get('newchartEditor_convert_sequential', '顺序映射'),
 			Language.get('newchartEditor_convert_shuffle', '自动打乱'),
 			Language.get('newchartEditor_convert_double', '自动补双押'),
@@ -1138,6 +1137,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		var player1DropDown = new PsychUIDropDownMenu(10, stepperSpeed.y + 45, characters, function(index:Int, label:String)
 		{
 			_song.player1 = characters[index];
+			markUnsaved();
 			updateHeads();
 		});
 		player1DropDown.textObj.font = 'assets/fonts/editors.ttf';
@@ -1147,6 +1147,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		var gfVersionDropDown = new PsychUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, characters, function(index:Int, label:String)
 		{
 			_song.gfVersion = characters[index];
+			markUnsaved();
 			updateHeads();
 		});
 		gfVersionDropDown.textObj.font = 'assets/fonts/editors.ttf';
@@ -1156,6 +1157,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		var player2DropDown = new PsychUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, characters, function(index:Int, label:String)
 		{
 			_song.player2 = characters[index];
+			markUnsaved();
 			updateHeads();
 		});
 		player2DropDown.textObj.font = 'assets/fonts/editors.ttf';
@@ -1203,6 +1205,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		stageDropDown = new PsychUIDropDownMenu(player1DropDown.x + 140, player1DropDown.y, stages, function(index:Int, label:String)
 		{
 			_song.stage = stages[index];
+			markUnsaved();
 			StageData.loadDirectory(_song);
 			var sf = StageData.getStageFile(stages[index]);
 			if(sf != null) PlayState.isPixelStage = sf.isPixelStage;
@@ -1247,7 +1250,6 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		tab_group_song.add(noteSkinInputText);
 		tab_group_song.add(noteSplashesInputText);
 		tab_group_song.add(new EditorsText(stepperBPM.x, stepperBPM.y - 15, 0, Language.get("newchartEditor_song_bpm_label", "Song BPM:")));
-		tab_group_song.add(new EditorsText(stepperBPM.x + 100, stepperBPM.y - 15, 0, Language.get("newchartEditor_song_offset_label", "Song Offset:")));
 		tab_group_song.add(new EditorsText(stepperSpeed.x, stepperSpeed.y - 15, 0, Language.get("newchartEditor_song_speed_label", "Song Speed:")));
 		tab_group_song.add(new EditorsText(uiManiaStepper.x, uiManiaStepper.y - 15, 0, Language.get("newchartEditor_song_keys_label", "Keys (1-18):")));
 		tab_group_song.add(new EditorsText(player2DropDown.x, player2DropDown.y - 15, 0, Language.get("newchartEditor_opponent", "Opponent:")));
@@ -1627,7 +1629,9 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 
 		noteTypeDropDown = new PsychUIDropDownMenu(10, 105, displayNameList, function(index:Int, label:String)
 		{
+			pushUndo();
 			currentType = index;
+			markUnsaved();
 			if(curSelectedNote != null && curSelectedNote[1] > -1) {
 				curSelectedNote[3] = noteTypeIntMap.get(currentType);
 				updateGrid();
@@ -1693,6 +1697,8 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		tab_group_event.add(text);
 		eventDropDown = new PsychUIDropDownMenu(20, 50, leEvents, function(index:Int, label:String) {
 			var selectedEvent:Int = index;
+			pushUndo();
+			markUnsaved();
 			descText.text = eventStuff[selectedEvent][1];
 				if (curSelectedNote != null &&  eventStuff != null) {
 				// 多k: 事件改名 (含改为/改掉 Change Mania) 后按工具箱模式重编码受影响 Note
@@ -1807,14 +1813,6 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 			selectedEventText.text = Language.get("newchartEditor_selected_event_none", "Selected Event: None");
 		}
 		updateNoteUI();
-	}
-
-	function setAllLabelsOffset(button:PsychUIButton, x:Float, y:Float) // DEPRECATED_REMOVE
-	{
-		for (point in []) // PsychUIButton doesn't have labelOffsets
-		{
-			point.set(x, y);
-		}
 	}
 
 	var metronome:PsychUICheckBox;
@@ -2076,43 +2074,37 @@ function generateSong() {
     };
 }
 
-	function generateUI():Void
-	{
-		while (bullshitUI.members.length > 0)
-		{
-			bullshitUI.remove(bullshitUI.members[0], true);
-		}
-
-		// general shit
-		var title:EditorsText = new EditorsText(UI_box.x + 20, UI_box.y + 20, 0);
-		bullshitUI.add(title);
-	}
-
 	public function UIEvent(id:String, sender:Dynamic)
 	{
 		if (id == PsychUICheckBox.CLICK_EVENT)
 		{
 			var check:PsychUICheckBox = cast sender;
-			var label = check.label;
-			switch (label)
+			switch (check.name)
 			{
-				case 'Must hit section':
+				case 'check_mustHit':
+					pushUndo();
 					_song.notes[curSec].mustHitSection = check.checked;
+					markUnsaved();
 
 					updateGrid();
 					updateHeads();
 
-				case 'GF section':
+				case 'check_gf':
+					pushUndo();
 					_song.notes[curSec].gfSection = check.checked;
+					markUnsaved();
 
 					updateGrid();
 					updateHeads();
 
-				case 'Change BPM':
+				case 'check_changeBPM':
+					pushUndo();
 					_song.notes[curSec].changeBPM = check.checked;
-					FlxG.log.add('changed bpm shit');
-				case "Alt Animation":
+					markUnsaved();
+				case 'check_altAnim':
+					pushUndo();
 					_song.notes[curSec].altAnim = check.checked;
+					markUnsaved();
 			}
 		}
 		else if (id == PsychUINumericStepper.CHANGE_EVENT && (sender is PsychUINumericStepper))
@@ -2123,11 +2115,13 @@ function generateSong() {
 			if (wname == 'section_beats')
 			{
 				_song.notes[curSec].sectionBeats = nums.value;
+				markUnsaved();
 				reloadGridLayer();
 			}
 			else if (wname == 'song_speed')
 			{
 				_song.speed = nums.value;
+				markUnsaved();
 			}
 			else if (wname == 'mania')
 			{
@@ -2137,6 +2131,7 @@ function generateSong() {
 				var oldMania:Int = (_song.mania != null) ? EKData.clampMania(_song.mania) : Note.defaultMania;
 				convertChartNoteData(oldMania, newMania, (convertModeDropDown != null) ? convertModeDropDown.selectedIndex : 0);
 				_song.mania = newMania;
+				markUnsaved();
 				TraceManager.info('trace.editor.mania', 'Change mania -> {} (stepper={}) membersBefore={}', [newMania, nums.value, members.length]);
 				try
 				{
@@ -2154,17 +2149,20 @@ function generateSong() {
 				tempBpm = nums.value;
 				Conductor.mapBPMChanges(_song);
 				Conductor.changeBPM(nums.value);
+				markUnsaved();
 			}
 			else if (wname == 'note_susLength')
 			{
 				if(curSelectedNote != null && curSelectedNote[2] != null) {
 					curSelectedNote[2] = nums.value;
+					markUnsaved();
 					updateGrid();
 				}
 			}
 			else if (wname == 'section_bpm')
 			{
 				_song.notes[curSec].bpm = nums.value;
+				markUnsaved();
 				updateGrid();
 			}
 			else if (wname == 'inst_volume')
@@ -2183,6 +2181,11 @@ function generateSong() {
 		else if(id == PsychUIInputText.CHANGE_EVENT && (sender is PsychUIInputText)) {
 			if(sender == noteSplashesInputText) {
 				_song.splashSkin = noteSplashesInputText.text;
+				markUnsaved();
+			}
+			else if(sender == noteSkinInputText) {
+				_song.arrowSkin = noteSkinInputText.text;
+				markUnsaved();
 			}
 			else if(curSelectedNote != null)
 			{
@@ -2226,14 +2229,6 @@ function generateSong() {
 					}
 					updateGrid();
 				}
-			}
-		}
-		else if (id == PsychUISlider.CHANGE_EVENT && (sender is PsychUISlider)) // will be removed)
-		{
-			switch (sender)
-			{
-				case 'playbackSpeed':
-					playbackSpeed = Std.int(sliderRate.value);
 			}
 		}
 
@@ -2495,12 +2490,15 @@ function generateSong() {
 			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) ||#end (FlxG.keys.justPressed.Z && FlxG.keys.pressed.CONTROL)) {
 				undo();
 			}
+			if (FlxG.keys.justPressed.Y && FlxG.keys.pressed.CONTROL) {
+				redo();
+			}
 
-			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonZ.justPressed) || #end (FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL)) {
+			if (FlxG.keys.justPressed.Z && curZoom > 0 && !FlxG.keys.pressed.CONTROL) {
 				--curZoom;
 				updateZoom();
 			}
-			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) || #end FlxG.keys.justPressed.X && curZoom < zoomList.length-1) {
+			if ((#if (android || desktop) (virtualPad != null && virtualPad.buttonD.justPressed) || #end FlxG.keys.justPressed.X) && curZoom < zoomList.length-1) {
 				curZoom++;
 				updateZoom();
 			}
@@ -2511,12 +2509,12 @@ function generateSong() {
 				{
 					UI_box.selectedIndex -= 1;
 					if (UI_box.selectedIndex < 0)
-						UI_box.selectedIndex = 2;
+						UI_box.selectedIndex = UI_box.tabs.length - 1;
 				}
 				else
 				{
 					UI_box.selectedIndex += 1;
-					if (UI_box.selectedIndex >= 3)
+					if (UI_box.selectedIndex >= UI_box.tabs.length)
 						UI_box.selectedIndex = 0;
 				}
 			}
@@ -2547,7 +2545,7 @@ function generateSong() {
 				}
 			}
 
-			if (!FlxG.keys.pressed.ALT && FlxG.keys.justPressed.R)
+			if (!FlxG.keys.pressed.ALT && (#if (android || desktop) (virtualPad != null && virtualPad.buttonV.justPressed) || #end FlxG.keys.justPressed.R))
 			{
 				if (FlxG.keys.pressed.SHIFT)
 					resetSection(true);
@@ -2647,7 +2645,7 @@ function generateSong() {
 			//AWW YOU MADE IT SEXY <3333 THX SHADMAR
 
 			if(!blockInput){
-				if(FlxG.keys.justPressed.RIGHT){
+				if(FlxG.keys.justPressed.RIGHT #if (android || desktop) || (virtualPad != null && virtualPad.buttonG.pressed && virtualPad.buttonRight.justPressed) #end){
 					curQuant++;
 					if(curQuant>quantizations.length-1)
 						curQuant = 0;
@@ -2655,7 +2653,7 @@ function generateSong() {
 					quantization = quantizations[curQuant];
 				}
 
-				if(FlxG.keys.justPressed.LEFT){
+				if(FlxG.keys.justPressed.LEFT #if (android || desktop) || (virtualPad != null && virtualPad.buttonG.pressed && virtualPad.buttonLeft.justPressed) #end){
 					curQuant--;
 					if(curQuant<0)
 						curQuant = quantizations.length-1;
@@ -2740,9 +2738,9 @@ function generateSong() {
 			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonY.pressed) || #end FlxG.keys.pressed.SHIFT)
 				shiftThing = 4;
 
-			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed) || #end FlxG.keys.justPressed.D)
+			if ((#if (android || desktop) (virtualPad != null && virtualPad.buttonRight.justPressed && !virtualPad.buttonG.pressed) || #end FlxG.keys.justPressed.D))
 				changeSection(curSec + shiftThing);
-			if (#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed) ||#end FlxG.keys.justPressed.A) {
+			if ((#if (android || desktop) (virtualPad != null && virtualPad.buttonLeft.justPressed && !virtualPad.buttonG.pressed) ||#end FlxG.keys.justPressed.A)) {
 				if(curSec <= 0) {
 					changeSection(_song.notes.length-1);
 				} else {
@@ -3494,7 +3492,8 @@ function generateSong() {
 			if(curSelectedNote[2] != null) {
 				stepperSusLength.value = curSelectedNote[2];
 				if(curSelectedNote[3] != null) {
-					currentType = noteTypeMap.get(curSelectedNote[3]);
+					var typeIndex:Null<Int> = noteTypeMap.get(curSelectedNote[3]);
+					currentType = (typeIndex != null) ? typeIndex : 0;
 					if(currentType <= 0) {
 						noteTypeDropDown.selectedLabel = '';
 					} else {
@@ -3784,6 +3783,7 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 
 	function deleteNote(note:Note):Void
 	{
+		pushUndo();
 		var noteDataToCheck:Int = note.noteData;
 		if(noteDataToCheck > -1 && note.mustPress != _song.notes[curSec].mustHitSection) noteDataToCheck += maniaAmmo();
 
@@ -3845,21 +3845,9 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 			addNote(cs, d, style);
 		}
 	}
-	function clearSong():Void
-	{
-		for (daSection in 0..._song.notes.length)
-		{
-			_song.notes[daSection].sectionNotes = [];
-		}
-
-		updateGrid();
-	}
-
 	private function addNote(strum:Null<Float> = null, data:Null<Int> = null, type:Null<Int> = null):Void
 	{
-		//curUndoIndex++;
-		//var newsong = _song.notes;
-		//	undos.push(newsong);
+		pushUndo();
 		var noteStrum = getStrumTime(dummyArrow.y * (getSectionBeats() / 4), false) + sectionStartTime();
 		var noteData = Math.floor((FlxG.mouse.x - GRID_SIZE) / GRID_SIZE);
 		// 多k: 鼠标放置时按点击时间所属 k 段限制列范围 (4K 段不能点到 9K 列)
@@ -3910,19 +3898,40 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 		updateNoteUI();
 	}
 
-	// will figure this out l8r
+	// Snapshot-based undo/redo (same serialization as autosave).
+	function pushUndo():Void
+	{
+		undos.push(Json.stringify({"song": _song}));
+		redos = [];
+		while (undos.length > 50) undos.shift();
+	}
+
+	function restoreChart(json:String):Void
+	{
+		var parsed:SwagSong = Song.parseJSON(json);
+		if (parsed == null) return;
+		PlayState.SONG = parsed;
+		_song = parsed;
+		Conductor.mapBPMChanges(_song);
+		reloadGridLayer();
+		updateGrid();
+		updateNoteUI();
+		updateSectionUI();
+		updateWaveform();
+	}
+
 	function redo()
 	{
-		//_song = redos[curRedoIndex];
+		if (redos.length < 1) return;
+		undos.push(Json.stringify({"song": _song}));
+		restoreChart(redos.pop());
 	}
 
 	function undo()
 	{
-		//redos.push(_song);
-		undos.pop();
-		//_song.notes = undos[undos.length - 1];
-		///trace(_song.notes);
-		//updateGrid();
+		if (undos.length < 1) return;
+		redos.push(Json.stringify({"song": _song}));
+		restoreChart(undos.pop());
 	}
 
 	function getStrumTime(yPos:Float, doZoomCalc:Bool = true):Float
@@ -4302,6 +4311,7 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 	}
 
 	function clearEvents() {
+		pushUndo();
 		_song.events = [];
 		updateGrid();
 		markUnsaved();

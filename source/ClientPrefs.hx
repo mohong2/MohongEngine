@@ -6,9 +6,7 @@ import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
-import mohong.MemoryMonitor;
 import mohong.GPUTextureManager;
-import mohong.RenderOptimizer;
 #if sys
 import sys.io.Process;
 #end
@@ -115,8 +113,8 @@ import sys.io.Process;
 	public var guitarHeroSustains:Bool = false; 
 	public var smoothhpbar:Bool = false; 
 	public var unnotec:Bool = false;
-	// cacheOnGPU / preloadAssets were dead flags and got dropped from the
-	// struct. Old save keys stay; the static accessors read them via Reflect.
+	public var cacheOnGPU:Bool = true;
+	public var preloadAssets:Bool = false;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
@@ -180,12 +178,8 @@ import sys.io.Process;
 	public var storageType:String = "";
 
 	// FNF-SeiunEngine — Memory optimization flags
-	/** Whether automatic memory management is enabled (periodic GC, cache cleanup, pressure detection). */
-	public var memoryOptimization:Bool = true;
 	/** Whether GPU texture pooling is enabled (reduces VRAM fragmentation). */
 	public var texturePooling:Bool = true;
-	/** Render quality level: 0 = Low, 1 = Medium, 2 = High. */
-	public var renderQualityLevel:String = "High";
 
 	// Lua / HScript error loop protection: ignore a script file after too many consecutive errors.
 	public var ignoreErrorLoopScripts:Bool = true;
@@ -261,7 +255,6 @@ class ClientPrefs {
 	public static var guitarHeroSustains(get, never):Bool;
 	public static var smoothhpbar(get, never):Bool;
 	public static var unnotec(get, never):Bool;
-	// 兼容访问器：字段已从数据类移除，但保留静态读取（老存档同名键 / mod 引用）
 	public static var cacheOnGPU(get, never):Bool;
 	public static var preloadAssets(get, never):Bool;
 	public static var splashAlpha(get, never):Float;
@@ -285,9 +278,9 @@ class ClientPrefs {
 	public static var osuTailJudgement(get, never):Bool;
 	public static var touchSwipeEnabled(get, never):Bool;
 	public static var separateUpdateDraw(get, never):Bool;
-	public static var memoryOptimization(get, never):Bool;
+
 	public static var texturePooling(get, never):Bool;
-	public static var renderQualityLevel(get, never):String;
+
 	public static var ignoreErrorLoopScripts(get, never):Bool;
 	public static var scriptErrorLimit(get, never):Int;
 	static inline function get_arrowRGB() return data.arrowRGB;
@@ -311,6 +304,17 @@ class ClientPrefs {
 	static inline function get_hitboxPressAlpha() return data.hitboxPressAlpha;
 	static inline function get_hitboxBorder() return data.hitboxBorder;
 	static inline function get_touchControls() return data.touchControls;
+
+	/** 是否使用触屏 UI（安卓/iOS 恒为 true；桌面端跟随“触屏支持”开关）。 */
+	public static function touchUIEnabled():Bool
+	{
+		#if TOUCH_CONTROLS
+		return true;
+		#else
+		return data.touchControls;
+		#end
+	}
+
 	static inline function get_downScroll() return data.downScroll;
 	static inline function get_middleScroll() return data.middleScroll;
 	static inline function get_opponentStrums() return data.opponentStrums;
@@ -356,8 +360,8 @@ class ClientPrefs {
 	static inline function get_guitarHeroSustains() return data.guitarHeroSustains;
 	static inline function get_smoothhpbar() return data.smoothhpbar;
 	static inline function get_unnotec() return data.unnotec;
-	static inline function get_cacheOnGPU() return Reflect.hasField(FlxG.save.data, 'cacheOnGPU') && Reflect.field(FlxG.save.data, 'cacheOnGPU') == true;
-	static inline function get_preloadAssets() return Reflect.hasField(FlxG.save.data, 'preloadAssets') && Reflect.field(FlxG.save.data, 'preloadAssets') == true;
+		static inline function get_cacheOnGPU() return data.cacheOnGPU;
+	static inline function get_preloadAssets() return data.preloadAssets;
 	static inline function get_splashAlpha() return data.splashAlpha;
 	static inline function get_autoPause() return data.autoPause;
 	static inline function get_runInBackground() return data.runInBackground;
@@ -379,9 +383,9 @@ class ClientPrefs {
 	static inline function get_osuTailJudgement() return data.osuTailJudgement;
 	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
 	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
-	static inline function get_memoryOptimization() return data.memoryOptimization;
+
 	static inline function get_texturePooling() return data.texturePooling;
-	static inline function get_renderQualityLevel() return data.renderQualityLevel;
+
 	static inline function get_ignoreErrorLoopScripts() return data.ignoreErrorLoopScripts;
 	static inline function get_scriptErrorLimit() return data.scriptErrorLimit;
 
@@ -779,19 +783,8 @@ class ClientPrefs {
 			FlxG.game.drawWrapper = null;
 
 		// Apply FNF-SeiunEngine optimization flags
-		MemoryMonitor.monitoringEnabled = data.memoryOptimization;
 		GPUTextureManager.managementEnabled = data.texturePooling;
-		RenderOptimizer.optimizationEnabled = data.memoryOptimization;
-		var qualityStr:String = data.renderQualityLevel;
-		RenderOptimizer.renderQualityLevel = switch (qualityStr.toLowerCase())
-		{
-			case "low":    0;
-			case "medium": 1;
-			case "high":   2;
-			default:       2;
-		};
 
-		// This fork has no FlxSprite.defaultAntialiasing, so renderQualityLevel
 		// only tunes observation intensity; visuals stay with lowQuality.
 
 		if (FlxG.save.data.gameplaySettings != null) {

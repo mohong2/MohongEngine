@@ -33,6 +33,8 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 	var _bgOuter:FlxSprite;       // outer background (rounded)
 	var _labelText:FlxText;
 	var _panel:FlxSpriteGroup;
+	/** Non-null while the open panel is temporarily attached to FlxG.state (topmost state/substate). */
+	var _panelHost:flixel.FlxState = null;
 	var _isOpen:Bool = false;
 	var _items:Array<DropItem> = [];
 
@@ -133,6 +135,7 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 		_resetDragState();
 		_panel.visible = true;
 		_layoutItems();
+		_bringPanelToFront();
 
 		// Start reveal animation
 		_animTimer = 0;
@@ -150,11 +153,55 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 		_panel.visible = false;
 		for (item in _items) { item.active = false; item.visible = false; }
 		_resetDragState();
+		_returnPanelHome();
 	}
 
 	public function toggle():Void
 	{
 		if (_isOpen) close() else open();
+	}
+
+	// ── Z-order management ──────────────────────────────────────
+	// While open, the panel is detached from this group and attached to the
+	// currently-active state/substate (FlxG.state), so it always renders above
+	// sibling controls - otherwise later-added UI would cover the option list.
+	function _bringPanelToFront():Void
+	{
+		if (_panelHost != null || FlxG.state == null) return;
+
+		// Attach to the TOPMOST state/substate: FlxG.state does not switch while a
+		// substate (Prompt etc.) is open, so walk the subState chain - same as
+		// PsychUIEventHandler.event(). Otherwise the panel lands on the parent state
+		// and renders underneath the prompt (wrong layer).
+		var host:flixel.FlxState = FlxG.state;
+		while (host != null && host.subState != null) host = host.subState;
+		if (host == null) return;
+
+		var cam:FlxCamera = camera;
+		var screenPos:FlxPoint = _panel.getScreenPosition(null, cam);
+		var worldX:Float = screenPos.x + cam.scroll.x;
+		var worldY:Float = screenPos.y + cam.scroll.y;
+
+		remove(_panel); // FlxSpriteGroup.remove undoes preAdd (shifts pos, clears cameras)
+		_panelHost = host;
+		_panelHost.add(_panel);
+		_panel.setPosition(worldX, worldY);
+		_panel.cameras = cameras;
+	}
+
+	function _returnPanelHome():Void
+	{
+		if (_panelHost == null) return;
+		_panelHost.remove(_panel);
+		_panelHost = null;
+
+		// Restore as dropdown child: FlxSpriteGroup.add's preAdd re-applies the
+		// group's accumulated position offset, so reset to (0,0) and let add()
+		// shift it back. (Setting (-x,-y) would zero out the whole parent chain
+		// offset and make the next open() compute a top-left screen position.)
+		_panel.alpha = 1;
+		_panel.setPosition(0, 0);
+		add(_panel);
 	}
 
 	function _resetDragState():Void
@@ -418,7 +465,7 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 		// already be null (or the panel already gone) on the second pass.
 		if (_items != null)
 		{
-			if (_panel != null)
+			if (_panelHost == null && _panel != null)
 			{
 				for (item in _items) _panel.remove(item);
 			}
@@ -429,6 +476,8 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 			_items = null;
 			_itemPool = null;
 		}
+		// If the panel is still attached to FlxG.state, that state owns it now.
+		_panelHost = null;
 		super.destroy();
 	}
 }

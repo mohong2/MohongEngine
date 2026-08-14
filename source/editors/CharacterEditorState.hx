@@ -422,9 +422,8 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 		tab_group.add(new EditorsText(charDropDown.x, charDropDown.y - 18, 0, Language.get('characterEditor_character_label', 'Character:')));
 		tab_group.add(check_player);
 		tab_group.add(reloadCharacter);
-		tab_group.add(charDropDown);
-		tab_group.add(reloadCharacter);
 		tab_group.add(templateCharacter);
+		tab_group.add(charDropDown);
 	}
 
 	var imageInputText:PsychUIInputText;
@@ -621,6 +620,7 @@ class CharacterEditorState extends MusicBeatState implements PsychUIEventHandler
 
 		animationDropDown = new PsychUIDropDownMenu(15, animationInputText.y - 55, [''], function(index:Int, label:String) {
 			var anim:AnimArray = char.animationsArray[index];
+			if(anim == null) return;
 			animationInputText.text = anim.anim;
 			animationNameInputText.text = anim.name;
 			animationLoopCheckBox.checked = anim.loop;

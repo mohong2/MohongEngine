@@ -5,6 +5,7 @@ import flixel.input.FlxInput;
 import flixel.FlxBasic;
 import flixel.FlxG;
 import haxe.Json;
+import StringTools;
 import states.PlayState;
 import Conductor;
 import CoolUtil;
@@ -188,14 +189,14 @@ class Replay extends FlxBasic
 	public function loadFromData(frames:Array<FrameSave>, ?stateRecord:StateRecord):Void
 	{
 		isRecording = false;
-		frameData = frames != null ? frames.copy() : [];
+		frameData = normalizeFrames(frames);
 		resetSimState();
 		buildJudgmentMap();
 		if (stateRecord != null) restoreState(stateRecord);
 		ensureLaneMap();
 	}
 
-	/** 从文件加载回放 */
+	/** 从文件加载回放 (宽容解析: 兼容 BOM/前后垃圾字节/多种帧字段名/缺字段帧) */
 	public function loadFromFile(path:String):Void
 	{
 		#if sys
@@ -211,9 +212,15 @@ class Replay extends FlxBasic
 		}
 		try
 		{
-			var content:String = File.getContent(path);
-			var json:Dynamic = Json.parse(content);
-			frameData = (json.frameRecord != null) ? json.frameRecord : [];
+			var json:Dynamic = parseReplayJson(File.getContent(path));
+			if (json == null)
+			{
+				Replay.dbgLog('[DEBUG-rpl] loadFromFile: JSON unparseable');
+				CoolUtil.traceMsg('trace.errReplayLoad', 'Failed to load replay: {}', ['invalid JSON']);
+				frameData = [];
+				return;
+			}
+			frameData = extractFrames(json);
 			Replay.dbgLog('[DEBUG-rpl] loadFromFile parsed, frameData=' + frameData.length);
 			if (json.stateRecord != null) restoreState(json.stateRecord);
 			buildJudgmentMap();
@@ -280,7 +287,7 @@ class Replay extends FlxBasic
 		hasJudgments = false;
 		for (frame in frameData)
 		{
-			if (frame.noteJudgments == null) continue;
+			if (frame == null || frame.noteJudgments == null) continue;
 			for (j in frame.noteJudgments)
 			{
 				var key:String = '${j.strumTime}_${j.noteData}';
@@ -312,44 +319,56 @@ class Replay extends FlxBasic
 		var prevRatingOffset:Int = ClientPrefs.data.ratingOffset;
 		var prevGuitarHero:Bool = ClientPrefs.data.guitarHeroSustains;
 
-		if (stateRecord.songSpeed != null) ps.songSpeed = stateRecord.songSpeed;
-		if (stateRecord.playbackRate != null) ps.playbackRate = stateRecord.playbackRate;
-		if (stateRecord.healthGain != null) ps.healthGain = stateRecord.healthGain;
-		if (stateRecord.healthLoss != null) ps.healthLoss = stateRecord.healthLoss;
-		if (stateRecord.instakillOnMiss != null) ps.instakillOnMiss = stateRecord.instakillOnMiss;
-		if (stateRecord.cpuControlled != null) ps.cpuControlled = stateRecord.cpuControlled;
-		if (stateRecord.practiceMode != null) ps.practiceMode = stateRecord.practiceMode;
-		if (stateRecord.songSpeedType != null) ps.songSpeedType = stateRecord.songSpeedType;
-		if (stateRecord.sickWindow != null) ClientPrefs.data.sickWindow = stateRecord.sickWindow;
-		if (stateRecord.goodWindow != null) ClientPrefs.data.goodWindow = stateRecord.goodWindow;
-		if (stateRecord.badWindow != null) ClientPrefs.data.badWindow = stateRecord.badWindow;
-		if (stateRecord.safeFrames != null) ClientPrefs.data.safeFrames = stateRecord.safeFrames;
+		// 数值/布尔字段统一经容错转换 (兼容字符串/缺失/类型异常, 不同版本录的回放都能进)
+		if (stateRecord.songSpeed != null) ps.songSpeed = toFloat(stateRecord.songSpeed, ps.songSpeed);
+		if (stateRecord.playbackRate != null) ps.playbackRate = toFloat(stateRecord.playbackRate, ps.playbackRate);
+		if (stateRecord.healthGain != null) ps.healthGain = toFloat(stateRecord.healthGain, ps.healthGain);
+		if (stateRecord.healthLoss != null) ps.healthLoss = toFloat(stateRecord.healthLoss, ps.healthLoss);
+		if (stateRecord.instakillOnMiss != null) ps.instakillOnMiss = toBool(stateRecord.instakillOnMiss);
+		if (stateRecord.cpuControlled != null) ps.cpuControlled = toBool(stateRecord.cpuControlled);
+		if (stateRecord.practiceMode != null) ps.practiceMode = toBool(stateRecord.practiceMode);
+		if (stateRecord.songSpeedType != null) ps.songSpeedType = Std.string(stateRecord.songSpeedType);
+		if (stateRecord.sickWindow != null) ClientPrefs.data.sickWindow = Std.int(toFloat(stateRecord.sickWindow, ClientPrefs.data.sickWindow));
+		if (stateRecord.goodWindow != null) ClientPrefs.data.goodWindow = Std.int(toFloat(stateRecord.goodWindow, ClientPrefs.data.goodWindow));
+		if (stateRecord.badWindow != null) ClientPrefs.data.badWindow = Std.int(toFloat(stateRecord.badWindow, ClientPrefs.data.badWindow));
+		if (stateRecord.safeFrames != null) ClientPrefs.data.safeFrames = toFloat(stateRecord.safeFrames, ClientPrefs.data.safeFrames);
 		// LeatherEngine 移植: 回放时恢复录制时的判定手感, 保证评分/评级完全一致
-		if (stateRecord.judgementTimings != null)
+		// 清洗: 只接受合法数字数组, 长度不足/类型异常一律忽略, 不覆盖玩家当前设置
+		if (stateRecord.judgementTimings != null && Std.isOfType(stateRecord.judgementTimings, Array))
 		{
-			ClientPrefs.data.judgementTimings = stateRecord.judgementTimings.copy();
-			backend.Ratings.syncWindows();
+			var rawTimings:Array<Dynamic> = cast stateRecord.judgementTimings;
+			var timings:Array<Int> = [];
+			for (v in rawTimings)
+			{
+				var t:Float = toFloat(v, -1);
+				if (t >= 0) timings.push(Std.int(t));
+			}
+			if (timings.length >= 4)
+			{
+				ClientPrefs.data.judgementTimings = timings;
+				backend.Ratings.syncWindows();
+			}
 		}
-		if (stateRecord.judgementPreset != null && stateRecord.judgementPreset.length > 0)
-			ClientPrefs.data.judgementPreset = stateRecord.judgementPreset;
-		else if (stateRecord.judgementTimings != null)
+		if (stateRecord.judgementPreset != null && Std.string(stateRecord.judgementPreset).length > 0)
+			ClientPrefs.data.judgementPreset = Std.string(stateRecord.judgementPreset);
+		else if (stateRecord.judgementTimings != null && Std.isOfType(stateRecord.judgementTimings, Array))
 			ClientPrefs.data.judgementPreset = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
-		if (stateRecord.marvelousRatings != null) ClientPrefs.data.marvelousRatings = stateRecord.marvelousRatings;
-		if (stateRecord.marvelousWindow != null) ClientPrefs.data.marvelousWindow = stateRecord.marvelousWindow;
+		if (stateRecord.marvelousRatings != null) ClientPrefs.data.marvelousRatings = toBool(stateRecord.marvelousRatings);
+		if (stateRecord.marvelousWindow != null) ClientPrefs.data.marvelousWindow = Std.int(toFloat(stateRecord.marvelousWindow, ClientPrefs.data.marvelousWindow));
 		// osu! 尾判: 强制还原录制时的尾判开关与窗口, 保证尾判成绩可复现
 		if (stateRecord.osuTailJudgement != null)
-			ClientPrefs.data.osuTailJudgement = stateRecord.osuTailJudgement;
+			ClientPrefs.data.osuTailJudgement = toBool(stateRecord.osuTailJudgement);
 		else
 			// 老版本回放没有尾判字段: 按关闭处理, 与录制时 (无尾判) 的行为一致
 			ClientPrefs.data.osuTailJudgement = false;
 		// 判定相关手感补全: 评级偏移 / 长条单音符判定 (此前未强制还原)
-		if (stateRecord.ratingOffset != null) ClientPrefs.data.ratingOffset = stateRecord.ratingOffset;
+		if (stateRecord.ratingOffset != null) ClientPrefs.data.ratingOffset = Std.int(toFloat(stateRecord.ratingOffset, ClientPrefs.data.ratingOffset));
 		if (stateRecord.guitarHeroSustains != null)
 		{
-			ClientPrefs.data.guitarHeroSustains = stateRecord.guitarHeroSustains;
-			if (ps != null) ps.guitarHeroSustains = stateRecord.guitarHeroSustains;
+			ClientPrefs.data.guitarHeroSustains = toBool(stateRecord.guitarHeroSustains);
+			if (ps != null) ps.guitarHeroSustains = ClientPrefs.data.guitarHeroSustains;
 		}
-		if (stateRecord.replayVersion != null) replayVersion = stateRecord.replayVersion;
+		if (stateRecord.replayVersion != null) replayVersion = Std.int(toFloat(stateRecord.replayVersion, 1));
 
 		// 判定手感变化检测: 只有在回放判定与当前设置不同时才提示
 		judgementRestoredDifferent =
@@ -365,9 +384,14 @@ class Replay extends FlxBasic
 		if (judgementRestoredDifferent)
 		{
 			var t:Array<Int> = ClientPrefs.data.judgementTimings;
-			judgementRestoreInfo =
-				ClientPrefs.data.judgementPreset + " (" + Std.string(t[0]) + "/" + Std.string(t[1]) + "/" + Std.string(t[2]) + "/" + Std.string(t[3]) + ")"
-				+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
+			if (t != null && t.length >= 4)
+				judgementRestoreInfo =
+					ClientPrefs.data.judgementPreset + " (" + Std.string(t[0]) + "/" + Std.string(t[1]) + "/" + Std.string(t[2]) + "/" + Std.string(t[3]) + ")"
+					+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
+			else
+				// 窗口数据缺失/异常: 只提示预设名, 避免数组越界
+				judgementRestoreInfo = ClientPrefs.data.judgementPreset + " (unknown windows)"
+					+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
 			// osu! 尾判 / 评级偏移 / 长条单音符判定 的还原信息 (仅列出入)
 			var extra:Array<String> = [];
 			if (prevTailOn != ClientPrefs.data.osuTailJudgement)
@@ -384,8 +408,12 @@ class Replay extends FlxBasic
 		else
 			judgementRestoreInfo = '';
 		// 多k: 回放键数与当前谱面不一致时警告 (轨道映射会错位)
-		if (stateRecord.mania != null && stateRecord.mania != PlayState.mania)
-			FlxG.log.warn('Replay was recorded on ${stateRecord.mania + 1}K but current chart is ${PlayState.mania + 1}K');
+		if (stateRecord.mania != null)
+		{
+			var replayMania:Int = Std.int(toFloat(stateRecord.mania, -1));
+			if (replayMania >= 0 && replayMania != PlayState.mania)
+				FlxG.log.warn('Replay was recorded on ${replayMania + 1}K but current chart is ${PlayState.mania + 1}K');
+		}
 
 		lastSongSpeed = ps.songSpeed;
 		lastPlaybackRate = ps.playbackRate;
@@ -738,16 +766,16 @@ class Replay extends FlxBasic
 		#end
 	}
 
-	/** 从文件加载回放 */
+	/** 从文件加载回放 (宽容解析, 与 loadFromFile 同一套容错) */
 	public static function loadFromFileStatic(path:String):{frames:Array<FrameSave>, state:StateRecord}
 	{
 		#if sys
 		try
 		{
-			var content:String = File.getContent(path);
-			var json:Dynamic = Json.parse(content);
+			var json:Dynamic = parseReplayJson(File.getContent(path));
+			if (json == null) return {frames: [], state: null};
 			return {
-				frames: json.frameRecord != null ? json.frameRecord : [],
+				frames: extractFrames(json),
 				state: json.stateRecord
 			};
 		}
@@ -758,6 +786,148 @@ class Replay extends FlxBasic
 		#else
 		return {frames: [], state: null};
 		#end
+	}
+
+	// ======================== 容错解析 / 归一化 (兼容不同版本、不同来源的回放文件) ========================
+
+	/** 宽容解析回放 JSON: 去 BOM、容忍前后垃圾字节/注释, 返回 null 表示无法解析 */
+	private static function parseReplayJson(content:String):Dynamic
+	{
+		if (content == null) return null;
+		if (content.length > 0 && content.charCodeAt(0) == 0xFEFF) content = content.substr(1);
+		content = StringTools.trim(content);
+		if (content.length == 0) return null;
+
+		var json:Dynamic = null;
+		try { json = Json.parse(content); } catch (e:Dynamic) { json = null; }
+		if (json == null)
+		{
+			// 截取第一个 { 到最后一个 } 再试一次 (容忍前后垃圾内容)
+			var start:Int = content.indexOf('{');
+			var end:Int = content.lastIndexOf('}');
+			if (start >= 0 && end > start)
+			{
+				try { json = Json.parse(content.substring(start, end + 1)); } catch (e:Dynamic) { json = null; }
+			}
+		}
+		return json;
+	}
+
+	/** 从解析结果中取出帧数组 (兼容 frameRecord / frames / frameData / 顶层就是数组) */
+	private static function extractFrames(json:Dynamic):Array<FrameSave>
+	{
+		var raw:Dynamic = null;
+		if (json != null)
+		{
+			if (Reflect.hasField(json, 'frameRecord')) raw = json.frameRecord;
+			else if (Reflect.hasField(json, 'frames')) raw = json.frames;
+			else if (Reflect.hasField(json, 'frameData')) raw = json.frameData;
+			else if (Std.isOfType(json, Array)) raw = json;
+		}
+		return normalizeFrames(raw);
+	}
+
+	/**
+	 * 把任意来源的帧数据归一化为结构完整的 FrameSave 数组。
+	 * 缺字段/字段类型不对的帧不会被丢弃, 而是补默认值, 尽量让回放能进得来、能播。
+	 */
+	private static function normalizeFrames(raw:Dynamic):Array<FrameSave>
+	{
+		var out:Array<FrameSave> = [];
+		if (raw == null) return out;
+		if (Std.isOfType(raw, Array))
+		{
+			var arr:Array<Dynamic> = cast raw;
+			for (d in arr) normalizeFrame(d, out);
+		}
+		else if (Type.typeof(raw) == TObject)
+		{
+			// 整个对象可能是 {frames:[...]} / {frameRecord:[...]} 的包装
+			var inner:Dynamic = null;
+			if (Reflect.hasField(raw, 'frames')) inner = raw.frames;
+			else if (Reflect.hasField(raw, 'frameRecord')) inner = raw.frameRecord;
+			else if (Reflect.hasField(raw, 'frameData')) inner = raw.frameData;
+			if (Std.isOfType(inner, Array))
+			{
+				var innerArr:Array<Dynamic> = cast inner;
+				for (d in innerArr) normalizeFrame(d, out);
+			}
+			else
+				normalizeFrame(inner, out);
+		}
+		return out;
+	}
+
+	/** 归一化单个帧 (非对象/损坏帧直接跳过) */
+	private static function normalizeFrame(d:Dynamic, out:Array<FrameSave>):Void
+	{
+		if (d == null || Type.typeof(d) != TObject) return;
+
+		var time:Float = toFloat(d.time, 0);
+		// 没有时间戳的帧按上一帧顺序续排, 保证事件顺序不塌缩到 0ms
+		if (time <= 0 && out.length > 0) time = out[out.length - 1].time + 1;
+		var songSpeed:Float = toFloat(d.songSpeed, 1); if (songSpeed <= 0) songSpeed = 1;
+		var playbackRate:Float = toFloat(d.playbackRate, 1); if (playbackRate <= 0) playbackRate = 1;
+
+		out.push({
+			time: time,
+			songSpeed: songSpeed,
+			playbackRate: playbackRate,
+			pressKey: toKeyArray(d.pressKey),
+			releaseKey: toKeyArray(d.releaseKey),
+			noteJudgments: toJudgments(d.noteJudgments)
+		});
+	}
+
+	/** 数值容错: 数字/数字字符串/布尔都接受, 解析失败返回默认值 */
+	private static function toFloat(v:Dynamic, def:Float):Float
+	{
+		if (v == null) return def;
+		var f:Float = Std.parseFloat(Std.string(v));
+		return Math.isNaN(f) ? def : f;
+	}
+
+	/** 布尔容错: true/1/"true"/"1" 都算 true */
+	private static function toBool(v:Dynamic):Bool
+	{
+		if (v == null) return false;
+		if (v == true) return true;
+		if (Std.isOfType(v, Int) || Std.isOfType(v, Float)) return (v != 0);
+		return (Std.string(v).toLowerCase() == 'true' || Std.string(v).toLowerCase() == '1');
+	}
+
+	/** 按键数组容错: 数组原样保留, 单个键名/键码也接受 */
+	private static function toKeyArray(v:Dynamic):Array<String>
+	{
+		if (v == null) return [];
+		if (Std.isOfType(v, Array))
+		{
+			var out:Array<String> = [];
+			var arr:Array<Dynamic> = cast v;
+			for (k in arr) if (k != null) out.push(Std.string(k));
+			return out;
+		}
+		return [Std.string(v)];
+	}
+
+	/** 判定数据容错: 只保留结构完整的判定, 其余忽略 */
+	private static function toJudgments(v:Dynamic):Array<NoteJudgment>
+	{
+		if (v == null || !Std.isOfType(v, Array)) return null;
+		var out:Array<NoteJudgment> = [];
+		var arr:Array<Dynamic> = cast v;
+		for (j in arr)
+		{
+			if (j == null || Type.typeof(j) != TObject) continue;
+			out.push({
+				strumTime: toFloat(j.strumTime, 0),
+				noteData: Std.int(toFloat(j.noteData, 0)),
+				hitDiff: toFloat(j.hitDiff, 0),
+				rating: j.rating != null ? Std.string(j.rating) : 'sick',
+				isSustain: toBool(j.isSustain)
+			});
+		}
+		return out.length > 0 ? out : null;
 	}
 
 	/** 生成回放文件名 */
@@ -787,22 +957,9 @@ class Replay extends FlxBasic
 		return result;
 	}
 
-	/** 将 Dynamic 数组转回 FrameSave (从 Allscore 反序列化) */
+	/** 将 Dynamic 数组转回 FrameSave (从 Allscore 反序列化, 容错归一化) */
 	public static function dynamicToFrames(data:Array<Dynamic>):Array<FrameSave>
 	{
-		var result:Array<FrameSave> = [];
-		if (data == null) return result;
-		for (d in data)
-		{
-			result.push({
-				time: d.time,
-				songSpeed: d.songSpeed,
-				playbackRate: d.playbackRate,
-				pressKey: d.pressKey,
-				releaseKey: d.releaseKey,
-				noteJudgments: d.noteJudgments
-			});
-		}
-		return result;
+		return normalizeFrames(data);
 	}
 }

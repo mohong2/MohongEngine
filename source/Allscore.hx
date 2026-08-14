@@ -343,33 +343,86 @@ class Allscore
 	{
 		#if sys
 		var encBytes:Bytes = File.getBytes(filePath);
-		var decBytes:Bytes = xorBytes(encBytes);
-		var content:String = decBytes.getString(0, decBytes.length, UTF8);
-		var data:Dynamic = Json.parse(content);
+		var content:String = null;
+
+		// 先按 XOR 加密格式解; 失败再按明文 JSON 兜底 (兼容其他工具/旧版本导出的成绩文件)
+		try
+		{
+			var decBytes:Bytes = xorBytes(encBytes);
+			content = decBytes.getString(0, decBytes.length, UTF8);
+		}
+		catch (e:Dynamic) { content = null; }
+
+		var data:Dynamic = null;
+		if (content != null)
+		{
+			if (content.length > 0 && content.charCodeAt(0) == 0xFEFF) content = content.substr(1);
+			try { data = Json.parse(content); } catch (e:Dynamic) { data = null; }
+		}
+		if (data == null)
+		{
+			// 明文兜底 (去 BOM)
+			try
+			{
+				content = encBytes.getString(0, encBytes.length, UTF8);
+				if (content != null && content.length > 0 && content.charCodeAt(0) == 0xFEFF) content = content.substr(1);
+				data = Json.parse(content);
+			}
+			catch (e:Dynamic) { data = null; }
+		}
+		if (data == null) return null;
+
+		// 字段容错: 类型/缺失一律兜底, 单个坏文件不阻塞整个成绩列表
+		var difficulty:Int = 1; // Normal
+		if (data.difficulty != null)
+		{
+			var d:Float = Std.parseFloat(Std.string(data.difficulty));
+			if (!Math.isNaN(d)) difficulty = Std.int(d);
+		}
+		var ratingPercent:Float = 0;
+		if (data.ratingPercent != null)
+		{
+			ratingPercent = Std.parseFloat(Std.string(data.ratingPercent));
+			if (Math.isNaN(ratingPercent)) ratingPercent = 0;
+		}
+		var songSpeed:Float = 1;
+		if (data.songSpeed != null)
+		{
+			songSpeed = Std.parseFloat(Std.string(data.songSpeed));
+			if (Math.isNaN(songSpeed) || songSpeed <= 0) songSpeed = 1;
+		}
+		var playbackRate:Float = 1;
+		if (data.playbackRate != null)
+		{
+			playbackRate = Std.parseFloat(Std.string(data.playbackRate));
+			if (Math.isNaN(playbackRate) || playbackRate <= 0) playbackRate = 1;
+		}
 
 		var entry:ScoreEntry = {
-			songName: data.songName,
-			difficulty: data.difficulty,
-			difficultyName: data.difficultyName,
-			date: data.date,
-			ratingPercent: data.ratingPercent,
-			ratingFC: data.ratingFC,
-			ratingName: data.ratingName,
-			score: data.score,
-			marvelouses: data.marvelouses,
-			sicks: data.sicks,
-			goods: data.goods,
-			bads: data.bads,
-			shits: data.shits,
-			misses: data.misses,
-			maxCombo: data.maxCombo,
+			songName: data.songName != null ? Std.string(data.songName) : null,
+			difficulty: difficulty,
+			difficultyName: data.difficultyName != null ? Std.string(data.difficultyName) : null,
+			date: data.date != null ? Std.string(data.date) : '',
+			ratingPercent: ratingPercent,
+			ratingFC: data.ratingFC != null ? Std.string(data.ratingFC) : '',
+			ratingName: data.ratingName != null ? Std.string(data.ratingName) : '',
+			score: data.score != null ? Std.parseInt(Std.string(data.score)) : 0,
+			marvelouses: data.marvelouses != null ? Std.parseInt(Std.string(data.marvelouses)) : null,
+			sicks: data.sicks != null ? Std.parseInt(Std.string(data.sicks)) : 0,
+			goods: data.goods != null ? Std.parseInt(Std.string(data.goods)) : 0,
+			bads: data.bads != null ? Std.parseInt(Std.string(data.bads)) : 0,
+			shits: data.shits != null ? Std.parseInt(Std.string(data.shits)) : 0,
+			misses: data.misses != null ? Std.parseInt(Std.string(data.misses)) : 0,
+			maxCombo: data.maxCombo != null ? Std.parseInt(Std.string(data.maxCombo)) : 0,
 			replayData: data.replayData,
 			details: data.details,
-			songSpeed: data.songSpeed,
-			playbackRate: data.playbackRate,
-			songSpeedType: data.songSpeedType,
+			songSpeed: songSpeed,
+			playbackRate: playbackRate,
+			songSpeedType: data.songSpeedType != null ? Std.string(data.songSpeedType) : 'multiplicative',
 			filePath: filePath
 		};
+		// 没有歌名无法路由/展示, 直接跳过该文件 (不阻塞列表)
+		if (entry.songName == null || entry.songName.length == 0) return null;
 
 		return entry;
 		#else
@@ -378,24 +431,16 @@ class Allscore
 	}
 
 	/**
-	 * 检查 ScoreEntry 是否包含实际的 replay 数据。
-	 * 新格式: replayData 为 FrameSave 数组 (Array<Dynamic>)，检查是否有非空帧。
+	 * 检查 ScoreEntry 是否包含 replay 数据。
+	 * 最大限度的宽松: 只要 replayData 非空 (数组有元素, 或对象包装) 就算有回放,
+	 * 完全不校验帧结构 —— 拿到数据就允许进回放, 帧内容统一由 Replay.normalizeFrames 兜底。
 	 */
 	public static function hasReplayData(entry:ScoreEntry):Bool
 	{
 		if (entry.replayData == null) return false;
-		if (entry.replayData.length == 0) return false;
-
-		for (frame in entry.replayData)
-		{
-			if (frame == null) continue;
-			// 检查是否有按键事件 (pressKey 或 releaseKey 非空)
-			var pressKey:Array<Dynamic> = frame.pressKey;
-			var releaseKey:Array<Dynamic> = frame.releaseKey;
-			if ((pressKey != null && pressKey.length > 0) || (releaseKey != null && releaseKey.length > 0))
-				return true;
-		}
-		return false;
+		if (Std.isOfType(entry.replayData, Array))
+			return ((cast entry.replayData:Array<Dynamic>).length > 0);
+		return (Type.typeof(entry.replayData) == TObject);
 	}
 }
 

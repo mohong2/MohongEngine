@@ -1,4 +1,4 @@
-﻿package states;
+package states;
 
 import backend.Dialog;
 import backend.seiun.ui.*;
@@ -164,10 +164,12 @@ class MainMenuState extends SeiunMenuState
 			add(auroraGlowB);
 		}
 
-		menuItems = new FlxTypedGroup<FlxSprite>();
-		add(menuItems);
+		// Selection halos must render *behind* the menu items they highlight;
+		// adding them first keeps the item art crisp instead of washed out.
 		itemGlows = new FlxTypedGroup<FlxSprite>();
 		add(itemGlows);
+		menuItems = new FlxTypedGroup<FlxSprite>();
+		add(menuItems);
 
 		var scale:Float = 1;
 		/*if(optionShit.length > 6) {
@@ -220,27 +222,21 @@ class MainMenuState extends SeiunMenuState
 
 		FlxG.camera.follow(camFollowPos, null, 1);
 		var versionShitx = 1000;
-		
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 64, 0, "Seiun Engine v" + seiunengineVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 44, 0, "Psych Engine v" + psychEngineVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 24, 0, "Friday Night Funkin' v" + fnfGameVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 84, 0, "ExtraKeys v" + extrakeysVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
-		var versionShit:FlxText = new FlxText(versionShitx, FlxG.height - 104, 0, "Seiun Online v" + seiunOnlineVersion, 12);
-		versionShit.scrollFactor.set();
-		versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		add(versionShit);
+		// (y, label) pairs, listed top-to-bottom as they appear on screen
+		var versionLabels:Array<Array<Dynamic>> = [
+			[FlxG.height - 104, "Seiun Online v" + seiunOnlineVersion],
+			[FlxG.height - 84,  "ExtraKeys v" + extrakeysVersion],
+			[FlxG.height - 64,  "Seiun Engine v" + seiunengineVersion],
+			[FlxG.height - 44,  "Psych Engine v" + psychEngineVersion],
+			[FlxG.height - 24,  "Friday Night Funkin' v" + fnfGameVersion]
+		];
+		for (label in versionLabels)
+		{
+			var versionShit:FlxText = new FlxText(versionShitx, Std.int(label[0]), 0, Std.string(label[1]), 12);
+			versionShit.scrollFactor.set();
+			versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			add(versionShit);
+		}
 
 		#if HSCRIPT_ALLOWED
 		var hscriptversionShit:FlxText = new FlxText(versionShitx + 20, FlxG.height - 704, 0, "Hscript version: " + HScript.hscriptVersion, 12);
@@ -278,16 +274,15 @@ class MainMenuState extends SeiunMenuState
 
 		changeItem();
 
-		// ── Entry animation: items slide in with a stagger ──
+		// ── Entry animation: items fade in with a stagger. No x/angle motion,
+		//    so their on-screen position is always the fixed `leftMargin`. ──
 		for (i in 0...menuItems.length)
 		{
 			var item:FlxSprite = menuItems.members[i];
-			var targetX:Float = item.x;
-			var delay:Float = Math.min(Math.abs(i - curSelected) * 0.06, 0.45);
-			item.x -= 140;
+			var delay:Float = Math.min(Math.abs(i - curSelected) * 0.05, 0.35);
+			FlxTween.cancelTweensOf(item, ['alpha']);
 			item.alpha = 0;
-			item.angle = -6;
-			FlxTween.tween(item, {x: targetX, alpha: 1, angle: 0}, 0.5, {startDelay: delay, ease: FlxEase.backOut});
+			FlxTween.tween(item, {alpha: itemAlphaFor(i)}, 0.35, {startDelay: delay, ease: FlxEase.sineOut});
 		}
 		#if ACHIEVEMENTS_ALLOWED
 		Achievements.loadAchievements();
@@ -359,35 +354,31 @@ class MainMenuState extends SeiunMenuState
 		if (auroraGlowA != null)
 		{
 			var t:Float = MenuFX.time;
-			auroraGlowA.x = FlxG.width * 0.5 + Math.sin(t * 0.35) * 140 - auroraGlowA.width * 0.5;
-			auroraGlowA.y = FlxG.height * 0.36 + Math.cos(t * 0.28) * 70 - auroraGlowA.height * 0.5;
-			auroraGlowA.alpha = 0.28 + Math.sin(t * 0.5) * 0.09;
-			auroraGlowA.color = MenuFX.cycleHue(0xFFFD719B, 0.055);
-
-			auroraGlowB.x = FlxG.width * 0.78 + Math.sin(t * 0.23 + 2.1) * 120 - auroraGlowB.width * 0.5;
-			auroraGlowB.y = FlxG.height * 0.66 + Math.cos(t * 0.31 + 1.2) * 65 - auroraGlowB.height * 0.5;
-			auroraGlowB.alpha = 0.22 + Math.sin(t * 0.42 + 1.0) * 0.08;
-			auroraGlowB.color = MenuFX.cycleHue(0xFF8A5CFF, 0.045);
+			MenuFX.driftGlow(auroraGlowA, t, FlxG.width * 0.5, FlxG.height * 0.36, 140, 70, 0.35, 0.28, 0, 0, 0.28, 0.09, 0.5, 0, 0xFFFD719B, 0.055);
+			MenuFX.driftGlow(auroraGlowB, t, FlxG.width * 0.78, FlxG.height * 0.66, 120, 65, 0.23, 0.31, 2.1, 1.2, 0.22, 0.08, 0.42, 1.0, 0xFF8A5CFF, 0.045);
 		}
 
-		for (i in 0...menuItems.length)
+		if (!selectedSomethin)
 		{
-			var item:FlxSprite = menuItems.members[i];
-			if (i < itemBaseY.length)
-				item.y = itemBaseY[i] + MenuFX.bob(7, 1.7 + (i % 3) * 0.25, i * 0.95);
-
-			var glow:FlxSprite = (i < itemGlows.length) ? itemGlows.members[i] : null;
-			if (glow != null)
+			for (i in 0...menuItems.length)
 			{
-				glow.visible = (i == curSelected);
-				if (glow.visible)
+				var item:FlxSprite = menuItems.members[i];
+				if (i < itemBaseY.length)
+					item.y = itemBaseY[i] + MenuFX.bob(7, 1.7 + (i % 3) * 0.25, i * 0.95);
+
+				var glow:FlxSprite = (i < itemGlows.length) ? itemGlows.members[i] : null;
+				if (glow != null)
 				{
-					// Use the base frame size so the glow stays locked to the item
-					// even while the idle/selected animation frames change size.
-					var baseW:Float = (i < itemBaseWidth.length) ? itemBaseWidth[i] : item.width;
-					var baseH:Float = (i < itemBaseHeight.length) ? itemBaseHeight[i] : item.height;
-					glow.x = item.x + baseW * 0.5 - glow.width * glow.scale.x * 0.5;
-					glow.y = item.y + baseH * 0.5 - glow.height * glow.scale.y * 0.5;
+					glow.visible = (i == curSelected);
+					if (glow.visible)
+					{
+						// Use the base frame size so the glow stays locked to the item
+						// even while the idle/selected animation frames change size.
+						var baseW:Float = (i < itemBaseWidth.length) ? itemBaseWidth[i] : item.width;
+						var baseH:Float = (i < itemBaseHeight.length) ? itemBaseHeight[i] : item.height;
+						glow.x = item.x + baseW * 0.5 - glow.width * glow.scale.x * 0.5;
+						glow.y = item.y + baseH * 0.5 - glow.height * glow.scale.y * 0.5;
+					}
 				}
 			}
 		}
@@ -408,36 +399,29 @@ class MainMenuState extends SeiunMenuState
 		camFollowPos.setPosition(FlxMath.lerp(camFollowPos.x, camFollow.x, lerpVal), FlxMath.lerp(camFollowPos.y, camFollow.y, lerpVal));
 		// 防穿透: 鼠标在虚拟按键上时, 下层菜单不做悬停/点击判定
 		var overControls:Bool = (virtualPad != null && virtualPad.isMouseOverAnyButton());
-		if (!overControls)
+		if (!overControls && !selectedSomethin)
 		{
-		var newMouseOverlapIndex = -1;
-		for (item in menuItems) {
-			if (FlxG.mouse.overlaps(item)) {
-				newMouseOverlapIndex = item.ID;
-				break;
+			var newMouseOverlapIndex = -1;
+			for (item in menuItems) {
+				if (FlxG.mouse.overlaps(item)) {
+					newMouseOverlapIndex = item.ID;
+					break;
+				}
 			}
-		}
-		if (FlxG.mouse.wheel != 0 && !selectedSomethin) {
-        FlxG.sound.play(Paths.sound('scrollMenu'));
-        changeItem(-FlxG.mouse.wheel);
-    	}
+			if (FlxG.mouse.wheel != 0) {
+				FlxG.sound.play(Paths.sound('scrollMenu'));
+				changeItem(-FlxG.mouse.wheel);
+			}
 
-		if (mouseOverlapIndex != newMouseOverlapIndex) {
-			if (mouseOverlapIndex >= 0 && mouseOverlapIndex != curSelected) {
-				menuItems.members[mouseOverlapIndex].animation.play('idle');
+			if (mouseOverlapIndex != newMouseOverlapIndex) {
+				mouseOverlapIndex = newMouseOverlapIndex;
+				refreshItemAlphas();
 			}
-			
-			if (newMouseOverlapIndex >= 0 && newMouseOverlapIndex != curSelected) {
-				menuItems.members[newMouseOverlapIndex].animation.play('selected');
+			if (FlxG.mouse.justPressed && mouseOverlapIndex >= 0 && mouseOverlapIndex != curSelected) {
+				curSelected = mouseOverlapIndex;
+				changeItem(0);
+				FlxG.sound.play(Paths.sound('scrollMenu'));
 			}
-			
-			mouseOverlapIndex = newMouseOverlapIndex;
-		}
-		if (FlxG.mouse.justPressed && mouseOverlapIndex >= 0 && mouseOverlapIndex != curSelected) {
-			curSelected = mouseOverlapIndex;
-			changeItem(0);
-			FlxG.sound.play(Paths.sound('scrollMenu'));
-		}
 		}
 		if (!selectedSomethin)
 		{
@@ -542,6 +526,19 @@ class MainMenuState extends SeiunMenuState
 		#end
 	}
 
+	/** Alpha used for a menu item: selected and hovered stay bright, the rest dim slightly. */
+	function itemAlphaFor(i:Int):Float
+	{
+		return (i == curSelected || i == mouseOverlapIndex) ? 1 : 0.8;
+	}
+
+	/** Smoothly re-apply item alpha from the current selection + hover state. */
+	function refreshItemAlphas():Void
+	{
+		for (i in 0...menuItems.length)
+			MenuFX.fadeAlpha(menuItems.members[i], itemAlphaFor(i), 0.18);
+	}
+
 	function changeItem(huh:Int = 0)
 	{
 		curSelected += huh;
@@ -553,6 +550,9 @@ class MainMenuState extends SeiunMenuState
 
 		menuItems.forEach(function(spr:FlxSprite)
 		{
+			// Snap to the base scale so the hitbox/offset math below never reads
+			// a mid-pulse scale value (which would drift the item's position).
+			spr.scale.set(1, 1);
 			spr.animation.play('idle');
 			spr.updateHitbox();
 
@@ -570,11 +570,12 @@ class MainMenuState extends SeiunMenuState
 				spr.centerOffsets();
 			}
 		});
+		refreshItemAlphas();
 
 		// ── Seiun selection feedback: pop + glow burst + camera kick ──
 		var selItem:FlxSprite = menuItems.members[curSelected];
 		MenuFX.pulse(selItem, 0.14, 0.2);
-		var selGlow:FlxSprite = itemGlows.members[curSelected];
+		var selGlow:FlxSprite = (curSelected < itemGlows.length) ? itemGlows.members[curSelected] : null;
 		if (selGlow != null) MenuFX.pulse(selGlow, 0.35, 0.3);
 		MenuFX.punchZoom(0.02);
 		MenuFX.burstParticles(particleGroup, selItem.x + selItem.width * 0.5, selItem.y + selItem.height * 0.5, 0xFFFF9FE8, 10, 190);
@@ -588,13 +589,8 @@ class MainMenuState extends SeiunMenuState
 
 		var spr:FlxSprite = menuItems.members[curSelected];
 		MenuFX.pulse(spr, 0.07, 0.15);
-		var glow:FlxSprite = itemGlows.members[curSelected];
-		if (glow != null)
-		{
-			FlxTween.cancelTweensOf(glow, ['alpha']);
-			glow.alpha = 0.95;
-			FlxTween.tween(glow, {alpha: glowAlphaTarget}, 0.4, {ease: FlxEase.sineOut});
-		}
+		var glow:FlxSprite = (curSelected < itemGlows.length) ? itemGlows.members[curSelected] : null;
+		MenuFX.glowPulse(glow, 0.95, glowAlphaTarget, 0.4);
 		MenuFX.punchZoom(0.013);
 	}
 	// =============== Mod Selection ===============

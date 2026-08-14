@@ -285,7 +285,7 @@ class DialogueEditorState extends MusicBeatState implements PsychUIEventHandler.
 		character.playAnim();
 		characterAnimSpeed();
 
-		if(character.animation.curAnim != null && character.jsonFile.animations != null) {
+		if(character.animation.curAnim != null && character.jsonFile.animations != null && character.jsonFile.animations.length > 0) {
 			animText.text = 'Animation: ' + character.jsonFile.animations[curAnim].anim + ' (' + (curAnim + 1) +' / ' + character.jsonFile.animations.length + ') - Press W or S to scroll';
 		} else {
 			animText.text = 'ERROR! NO ANIMATIONS FOUND';

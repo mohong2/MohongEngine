@@ -1,4 +1,4 @@
-﻿package states;
+package states;
 
 import backend.seiun.ui.*;
 import substates.ResetScoreSubState;
@@ -59,7 +59,6 @@ class StoryMenuState extends SeiunMenuState
 	var auroraGlowA:FlxSprite;
 	var auroraGlowB:FlxSprite;
 	var weekGlows:FlxTypedGroup<FlxSprite>;
-	var charKick:Float = 0;
 	var ambientTimer:Float = 0;
 
 	override function create()
@@ -90,9 +89,6 @@ class StoryMenuState extends SeiunMenuState
 		bgSprite = new FlxSprite(0, 56);
 		bgSprite.antialiasing = ClientPrefs.data.globalAntialiasing;
 
-		grpWeekText = new FlxTypedGroup<MenuItem>();
-		add(grpWeekText);
-
 		if (MenuFX.enabled())
 		{
 			// ── Seiun aurora: warm gold glows behind the week list ──
@@ -108,9 +104,13 @@ class StoryMenuState extends SeiunMenuState
 			auroraGlowB.screenCenter();
 			add(auroraGlowB);
 
+			// Week halos render behind the week text they highlight.
 			weekGlows = new FlxTypedGroup<FlxSprite>();
 			add(weekGlows);
 		}
+
+		grpWeekText = new FlxTypedGroup<MenuItem>();
+		add(grpWeekText);
 
 		var blackBarThingie:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, 56, FlxColor.BLACK);
 		add(blackBarThingie);
@@ -199,15 +199,15 @@ class StoryMenuState extends SeiunMenuState
 		changeDifficulty();
 		updateArrowVisibility();
 
-		// ── Entry animation: week items cascade in ──
+		// ── Entry animation: week items fade in with a stagger. No x motion,
+		//    so their screen-centered position stays fixed. ──
 		for (i in 0...grpWeekText.length)
 		{
 			var it:MenuItem = grpWeekText.members[i];
-			var targetX:Float = it.x;
-			var delay:Float = Math.min(Math.abs(i - curWeek) * 0.04, 0.4);
-			it.x -= 140;
+			var delay:Float = Math.min(Math.abs(i - curWeek) * 0.04, 0.35);
+			FlxTween.cancelTweensOf(it, ['alpha']);
 			it.alpha = 0;
-			FlxTween.tween(it, {x: targetX, alpha: (i == curWeek) ? 1 : 0.6}, 0.4, {startDelay: delay, ease: FlxEase.backOut});
+			FlxTween.tween(it, {alpha: (i == curWeek) ? 1 : 0.6}, 0.35, {startDelay: delay, ease: FlxEase.sineOut});
 		}
 		for (char in grpWeekCharacters.members)
 		{
@@ -265,11 +265,9 @@ class StoryMenuState extends SeiunMenuState
 	{
 		// Small hint for mod switching
 		var hint = new FlxText(FlxG.width - 5, FlxG.height - 30, 0,
-			#if (TOUCH_CONTROLS || desktop)
-			Language.get('Mod.hint.android', '[G] Switch Mod'),
-			#else
-			Language.get('Mod.hint', '[TAB] Switch Mod'),
-			#end
+			ClientPrefs.touchUIEnabled()
+				? Language.get('Mod.hint.android', '[G] Switch Mod')
+				: Language.get('Mod.hint', '[TAB] Switch Mod'),
 			16);
 		hint.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT);
 		hint.alpha = 0.5;
@@ -539,15 +537,8 @@ class StoryMenuState extends SeiunMenuState
 		if (auroraGlowA != null)
 		{
 			var t:Float = MenuFX.time;
-			auroraGlowA.x = FlxG.width * 0.45 + Math.sin(t * 0.32) * 130 - auroraGlowA.width * 0.5;
-			auroraGlowA.y = FlxG.height * 0.4 + Math.cos(t * 0.26) * 60 - auroraGlowA.height * 0.5;
-			auroraGlowA.alpha = 0.24 + Math.sin(t * 0.46) * 0.07;
-			auroraGlowA.color = MenuFX.cycleHue(0xFFF9CF51, 0.05);
-
-			auroraGlowB.x = FlxG.width * 0.75 + Math.sin(t * 0.21 + 1.8) * 115 - auroraGlowB.width * 0.5;
-			auroraGlowB.y = FlxG.height * 0.62 + Math.cos(t * 0.3 + 0.9) * 60 - auroraGlowB.height * 0.5;
-			auroraGlowB.alpha = 0.18 + Math.sin(t * 0.4 + 0.8) * 0.06;
-			auroraGlowB.color = MenuFX.cycleHue(0xFFFF8A5C, 0.04);
+			MenuFX.driftGlow(auroraGlowA, t, FlxG.width * 0.45, FlxG.height * 0.4, 130, 60, 0.32, 0.26, 0, 0, 0.24, 0.07, 0.46, 0, 0xFFF9CF51, 0.05);
+			MenuFX.driftGlow(auroraGlowB, t, FlxG.width * 0.75, FlxG.height * 0.62, 115, 60, 0.21, 0.3, 1.8, 0.9, 0.18, 0.06, 0.4, 0.8, 0xFFFF8A5C, 0.04);
 		}
 
 		// Week item glows follow the (lerped) item positions
@@ -832,12 +823,7 @@ class StoryMenuState extends SeiunMenuState
 		{
 			MenuFX.pulse(grpWeekText.members[curWeek], 0.08, 0.16);
 			if (weekGlows != null && curWeek < weekGlows.length)
-			{
-				var glow:FlxSprite = weekGlows.members[curWeek];
-				FlxTween.cancelTweensOf(glow, ['alpha']);
-				glow.alpha = 0.9;
-				FlxTween.tween(glow, {alpha: 0.45}, 0.4, {ease: FlxEase.sineOut});
-			}
+				MenuFX.glowPulse(weekGlows.members[curWeek], 0.9, 0.45, 0.4);
 		}
 		for (char in grpWeekCharacters.members)
 		{

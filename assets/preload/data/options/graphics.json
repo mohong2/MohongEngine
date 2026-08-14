@@ -108,15 +108,6 @@
 		"platform": "desktop"
 	},
 	{
-		"nameKey": "option.memoryOptimization",
-		"defaultName": "Memory Optimization",
-		"descKey": "option.memoryOptimization.desc",
-		"defaultDesc": "Enables automatic memory management: periodic garbage collection, cache cleanup, and memory pressure detection.\nRecommended for devices with limited RAM.",
-		"variable": "memoryOptimization",
-		"type": "bool",
-		"defaultValue": true
-	},
-	{
 		"nameKey": "option.texturePooling",
 		"defaultName": "GPU Texture Pooling",
 		"descKey": "option.texturePooling.desc",
@@ -124,16 +115,6 @@
 		"variable": "texturePooling",
 		"type": "bool",
 		"defaultValue": true
-	},
-	{
-		"nameKey": "option.renderQualityLevel",
-		"defaultName": "Render Quality",
-		"descKey": "option.renderQualityLevel.desc",
-		"defaultDesc": "Adjusts the balance between rendering quality and performance.\nLow: Reduced particles, no anti-aliasing, higher frame rate.\nMedium: Standard effects and anti-aliasing.\nHigh: Full visual effects and anti-aliasing.",
-		"variable": "renderQualityLevel",
-		"type": "string",
-		"defaultValue": "High",
-		"options": ["Low", "Medium", "High"]
 	},
 	{
 		"nameKey": "option.closeAnimStyle",

@@ -41,8 +41,15 @@ class Prompt extends BasePrompt
             yesFunction();
             close();
         });
-        btn.color = FlxColor.RED;
-        //btn.label.color = FlxColor.WHITE;
+        // PsychUIButton extends FlxSpriteGroup: setting .color on the group does not
+        // tint the 9-slice background, leaving the button in the default gray style.
+        // Style the states directly instead.
+        btn.normalStyle.bgColor = FlxColor.RED;
+        btn.normalStyle.textColor = FlxColor.WHITE;
+        btn.hoverStyle.bgColor = FlxColor.fromRGB(255, 90, 90);
+        btn.hoverStyle.textColor = FlxColor.WHITE;
+        btn.clickStyle.bgColor = FlxColor.fromRGB(180, 0, 0);
+        btn.clickStyle.textColor = FlxColor.WHITE;
         btn.screenCenter(X);
         btn.x -= 100;
         btn.cameras = cameras;

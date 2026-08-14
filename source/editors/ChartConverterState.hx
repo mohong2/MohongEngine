@@ -145,7 +145,7 @@ class ChartConverterState extends MusicBeatState
 			{
 				try
 				{
-					var path:String = fileDialog.path.replace('\\', '/');
+					var path:String = fileDialog.path.split('\\').join('/');
 					if (path == null || path.length == 0) return;
 
 					parseAndConvert(path);

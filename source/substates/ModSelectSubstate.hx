@@ -189,11 +189,9 @@ class ModSelectSubstate extends MusicBeatSubstate
 			modNameRight.visible = false;
 		}
 
-		hintText.text = #if (TOUCH_CONTROLS || desktop)
-			Language.get('Mod.selectHint.android', '← →  Switch Mod    A  Confirm    B  Cancel')
-		#else
-			Language.get('Mod.selectHint', '← →  Switch Mod    ENTER / TAB  Confirm    ESC  Cancel')
-		#end;
+		hintText.text = ClientPrefs.touchUIEnabled()
+			? Language.get('Mod.selectHint.android', '← →  Switch Mod    A  Confirm    B  Cancel')
+			: Language.get('Mod.selectHint', '← →  Switch Mod    ENTER / TAB  Confirm    ESC  Cancel');
 		hintText.screenCenter(X);
 
 		// Update restart warning for the currently selected mod

@@ -995,81 +995,94 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 			if (replay)
 			{
+				var prevStoryMode:Bool = PlayState.isStoryMode;
 				PlayState.replayMode = true;
 				PlayState.isStoryMode = false;
 
-				// Load the most recent history entry so PauseSubState can show replay info
-				var history = Allscore.getHistory(PlayState.SONG.song, PlayState.storyDifficulty);
-				if (history.length > 0)
+				try
 				{
-					PauseSubState.entries = history[0];
-
-					// 准备回放文件: 将存储的 replay 数据转回 FrameSave 并写入临时文件
-					#if sys
-					var entry = history[0];
-					var frames:Array<FrameSave> = [];
-					if (entry.replayData != null)
+					// Load the most recent history entry so PauseSubState can show replay info
+					var history = Allscore.getHistory(PlayState.SONG.song, PlayState.storyDifficulty);
+					if (history.length > 0)
 					{
-						frames = Replay.dynamicToFrames(entry.replayData);
+						PauseSubState.entries = history[0];
+
+						// 准备回放文件: 将存储的 replay 数据转回 FrameSave 并写入临时文件
+						#if sys
+						var entry = history[0];
+						var frames:Array<FrameSave> = [];
+						if (entry.replayData != null)
+						{
+							frames = Replay.dynamicToFrames(entry.replayData);
+						}
+
+						var details:Array<Dynamic> = entry.details;
+						var stateRecord:StateRecord = {
+							songName: Paths.formatToSongPath(entry.songName),
+							difficulty: entry.difficulty,
+							playDate: entry.date,
+							songLength: details != null && details.length > 2 ? details[2] : 0,
+							songSpeed: entry.songSpeed,
+							playbackRate: entry.playbackRate,
+							healthGain: details != null && details.length > 13 ? details[13] : 1,
+							healthLoss: details != null && details.length > 14 ? details[14] : 1,
+							cpuControlled: details != null && details.length > 15 ? details[15] : false,
+							practiceMode: details != null && details.length > 16 ? details[16] : false,
+							instakillOnMiss: details != null && details.length > 17 ? details[17] : false,
+							songScore: entry.score,
+							ratingPercent: entry.ratingPercent,
+							ratingFC: entry.ratingFC,
+							songHits: details != null && details.length > 3 ? details[3] : 0,
+							highestCombo: entry.maxCombo,
+							songMisses: entry.misses,
+							sicks: entry.sicks,
+							goods: entry.goods,
+							bads: entry.bads,
+							shits: entry.shits,
+							noteTime: details != null && details.length > 9 ? details[9] : [],
+							noteMs: details != null && details.length > 10 ? details[10] : [],
+							songSpeedType: entry.songSpeedType,
+							sickWindow: details != null && details.length > 20 ? details[20] : 45,
+							goodWindow: details != null && details.length > 21 ? details[21] : 90,
+							badWindow: details != null && details.length > 22 ? details[22] : 135,
+							safeFrames: details != null && details.length > 23 ? details[23] : 10,
+							// LeatherEngine 移植: 从成绩详情恢复判定手感
+							judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
+							judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
+							marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
+							marvelousWindow: details != null && details.length > 30 && details[30] != null ? details[30] : null,
+							// osu! 尾判 / 判定相关手感: 从成绩详情强制还原
+							osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
+							ratingOffset: details != null && details.length > 28 && details[28] != null ? details[28] : null,
+							guitarHeroSustains: details != null && details.length > 29 && details[29] != null ? details[29] : null,
+							replayVersion: 2
+						};
+
+						var tempDir:String = CoolUtil.getReplayTempDir();
+						SUtil.mkDirs(tempDir);
+						var tempPath:String = tempDir + 'replay_temp.rsd';
+						Replay.saveToFile(frames, stateRecord, tempPath);
+						Replay.preparedPath = tempPath;
+						#end
 					}
 
-					var details:Array<Dynamic> = entry.details;
-					var stateRecord:StateRecord = {
-						songName: Paths.formatToSongPath(entry.songName),
-						difficulty: entry.difficulty,
-						playDate: entry.date,
-						songLength: details != null && details.length > 2 ? details[2] : 0,
-						songSpeed: entry.songSpeed,
-						playbackRate: entry.playbackRate,
-						healthGain: details != null && details.length > 13 ? details[13] : 1,
-						healthLoss: details != null && details.length > 14 ? details[14] : 1,
-						cpuControlled: details != null && details.length > 15 ? details[15] : false,
-						practiceMode: details != null && details.length > 16 ? details[16] : false,
-						instakillOnMiss: details != null && details.length > 17 ? details[17] : false,
-						songScore: entry.score,
-						ratingPercent: entry.ratingPercent,
-						ratingFC: entry.ratingFC,
-						songHits: details != null && details.length > 3 ? details[3] : 0,
-						highestCombo: entry.maxCombo,
-						songMisses: entry.misses,
-						sicks: entry.sicks,
-						goods: entry.goods,
-						bads: entry.bads,
-						shits: entry.shits,
-						noteTime: details != null && details.length > 9 ? details[9] : [],
-						noteMs: details != null && details.length > 10 ? details[10] : [],
-						songSpeedType: entry.songSpeedType,
-						sickWindow: details != null && details.length > 20 ? details[20] : 45,
-						goodWindow: details != null && details.length > 21 ? details[21] : 90,
-						badWindow: details != null && details.length > 22 ? details[22] : 135,
-						safeFrames: details != null && details.length > 23 ? details[23] : 10,
-						// LeatherEngine 移植: 从成绩详情恢复判定手感
-						judgementTimings: details != null && details.length > 24 && details[24] != null ? details[24] : null,
-						judgementPreset: details != null && details.length > 26 && details[26] != null ? details[26] : null,
-						marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
-						marvelousWindow: details != null && details.length > 30 && details[30] != null ? details[30] : null,
-						// osu! 尾判 / 判定相关手感: 从成绩详情强制还原
-						osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
-						ratingOffset: details != null && details.length > 28 && details[28] != null ? details[28] : null,
-						guitarHeroSustains: details != null && details.length > 29 && details[29] != null ? details[29] : null,
-						replayVersion: 2
-					};
-
-					var tempDir:String = CoolUtil.getReplayTempDir();
-					SUtil.mkDirs(tempDir);
-					var tempPath:String = tempDir + 'replay_temp.rsd';
-					Replay.saveToFile(frames, stateRecord, tempPath);
-					Replay.preparedPath = tempPath;
-					#end
+					var songLowercase:String = Paths.formatToSongPath(PlayState.SONG.song);
+					var poop:String = Highscore.formatSong(songLowercase, PlayState.storyDifficulty);
+					PlayState.SONG = Song.loadFromJson(poop, songLowercase);
+					PlayState.changedDifficulty = false;
+					close();
+					LoadingState.loadAndSwitchState(new PlayState());
+					return;
 				}
-
-				var songLowercase:String = Paths.formatToSongPath(PlayState.SONG.song);
-				var poop:String = Highscore.formatSong(songLowercase, PlayState.storyDifficulty);
-				PlayState.SONG = Song.loadFromJson(poop, songLowercase);
-				PlayState.changedDifficulty = false;
-				close();
-				LoadingState.loadAndSwitchState(new PlayState());
-				return;
+				catch (e:Dynamic)
+				{
+					// 回放准备失败 (成绩/回放数据损坏、谱面缺失等): 不崩溃, 回到原界面
+					PlayState.replayMode = false;
+					PlayState.isStoryMode = prevStoryMode;
+					CoolUtil.traceMsg('trace.scoreHistory.playReplay', 'Failed to play replay: {}', [e]);
+					Replay.dbgLog('[DEBUG-rpl] ResultsScreen replay EXCEPTION: ' + Std.string(e));
+					return;
+				}
 			}
 
 			if (PlayState.isStoryMode)

@@ -841,7 +841,18 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			PauseSubState.entries = entry;
 			var songLowercase:String = Paths.formatToSongPath(entry.songName);
 			var poop:String = Highscore.formatSong(songLowercase, entry.difficulty);
-			PlayState.SONG = Song.loadFromJson(poop, songLowercase);
+			try
+			{
+				PlayState.SONG = Song.loadFromJson(poop, songLowercase);
+			}
+			catch (e:Dynamic)
+			{
+				// 谱面缺失/损坏: 明确提示而不是笼统失败 (回放必须依赖本地谱面才能生成音符)
+				PlayState.replayMode = false;
+				Replay.dbgLog('[DEBUG-rpl] playReplay chart missing/corrupt: ' + Std.string(e));
+				CoolUtil.traceMsg('trace.scoreHistory.playReplay', 'Cannot play replay: chart file not found or corrupted ({}).', [poop]);
+				return;
+			}
 			Replay.dbgLog('[DEBUG-rpl] playReplay loaded song=' + (PlayState.SONG != null ? PlayState.SONG.song : 'NULL'));
 			PlayState.changedDifficulty = false;
 			close();
