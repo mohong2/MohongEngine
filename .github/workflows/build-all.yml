@@ -13,7 +13,7 @@ on:
           - alpha
           - release
       release_notes:
-        description: '更新公告 / Release Notes'
+        description: '更新公告 / Release Notes（多行请用 \n 分隔）'
         required: false
         default: ''
         type: string
@@ -63,19 +63,29 @@ jobs:
             fi
           done
           ls -la
+      - name: Prepare release body
+        shell: bash
+        env:
+          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
+        run: |
+          printf '%s' "$RELEASE_NOTES" > release_body.md
+          sed -i 's/\\n/\n/g' release_body.md
+          if [ -s release_body.md ]; then
+            printf '\n\n' >> release_body.md
+          fi
+          cat >> release_body.md <<'EOF'
+          构建产物：
+          - Linux x64
+          - Windows x64
+          - macOS x64
+          - macOS arm64
+          - Android
+          - iOS Device
+          EOF
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
-          body: |
-            ${{ github.event.inputs.release_notes }}
-
-            构建产物：
-            - Linux x64
-            - Windows x64
-            - macOS x64
-            - macOS arm64
-            - Android
-            - iOS Device
+          body_path: release_body.md
           files: release/*.zip
