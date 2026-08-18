@@ -312,7 +312,7 @@ public class SeiunOverlay extends Extension
 			// This is the exact same path the game uses internally, so the soft
 			// keyboard reliably appears on every device - hand-rolled EditText
 			// probes were flaky on Android 15.
-			org.libsdl.app.SDLActivity.showTextInput(0, 0, 1, 1);
+			org.libsdl.app.SDLActivity.showTextInput(0, 0, 0, 1, 1);
 			keyboardShowing = true;
 		}
 		catch (Exception e)
