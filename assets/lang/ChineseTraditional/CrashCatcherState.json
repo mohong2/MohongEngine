@@ -28,5 +28,7 @@
     "CrashCatcher.dialog.title": "遊戲崩潰了！",
     "CrashCatcher.dialog.message": "遊戲遇到了一個意外錯誤，正在嘗試恢復。\n\n錯誤資訊：{error}\n\n崩潰轉儲已儲存至：{path}\n\n請將此問題回報給 GitHub：\n{url}\n\n點擊確定進入復原介面。",
     "CrashCatcher.dialog.fallbackTitle": "致命錯誤",
-    "CrashCatcher.dialog.fallbackMessage": "無法進入復原模式。\n遊戲即將關閉。"
+    "CrashCatcher.dialog.fallbackMessage": "無法進入復原模式。\n遊戲即將關閉。",
+    "CrashCatcher.onlineSent": "聯機對局中崩潰，已嘗試通知房主",
+    "CrashCatcher.onlinePending": "未能發送通知，將在下次啟動時補報"
 }

@@ -28,5 +28,7 @@
     "CrashCatcher.dialog.title": "游戏崩溃了！",
     "CrashCatcher.dialog.message": "游戏遇到了一个意外错误，正在尝试恢复。\n\n错误信息：{error}\n\n崩溃转储已保存至：{path}\n\n请将此问题报告给 GitHub：\n{url}\n\n点击确定进入恢复界面。",
     "CrashCatcher.dialog.fallbackTitle": "致命错误",
-    "CrashCatcher.dialog.fallbackMessage": "无法进入恢复模式。\n游戏即将关闭。"
+    "CrashCatcher.dialog.fallbackMessage": "无法进入恢复模式。\n游戏即将关闭。",
+    "CrashCatcher.onlineSent": "联机对局中崩溃，已尝试通知房主",
+    "CrashCatcher.onlinePending": "未能发送通知，将在下次启动时补报"
 }

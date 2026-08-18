@@ -20,6 +20,8 @@
     "option.marvelousWindow.desc": "修改「Marvelous」判定所需的時間 (毫秒)。\n(手動修改會將判定預設變為自訂)",
     "option.osuTailJudgement": "osu! 尾判",
     "option.osuTailJudgement.desc": "長條鬆鍵按尾端時機判定（osu!mania 風格）。影響回放成績。",
+    "option.tailWindowMult": "尾判視窗倍率",
+    "option.tailWindowMult.desc": "尾判視窗 = 普通判定視窗 × 該倍率。\n越大鬆鍵越寬容 (0.5x - 5x)。",
 
     "option.language.desc": "選擇遊戲顯示語言。",
     "option.luattf.desc": "改變Lua腳本的字體（如果Lua沒有設定）。",

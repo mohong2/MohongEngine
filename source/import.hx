@@ -1,9 +1,12 @@
-import Paths;
-
 #if sys
 import sys.FileSystem;
 import sys.io.File;
 #end
+
+using StringTools;
+
+#if !server_build
+import Paths;
 
 import flixel.system.FlxSound;
 import flixel.FlxG;
@@ -24,7 +27,7 @@ import states.PlayState;
 import states.LoadingState;
 import states.TitleState;
 import backend.MusicBeatSubstate;
-using StringTools;
 #if HSCRIPT_ALLOWED
 import script.hscript.*;
+#end
 #end

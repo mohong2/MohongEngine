@@ -2724,7 +2724,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			{
 				Assets.cache.clear(key);
 				Paths.currentTrackedSounds.remove(key);
-				Paths.localTrackedAssets.remove(key);
+				Paths.untrackLocalAsset(key);
 			}
 		}
 

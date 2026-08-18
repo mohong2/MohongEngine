@@ -76,6 +76,14 @@ import openfl.filters.ShaderFilter;
 import sys.FileSystem;
 import sys.io.File;
 #end
+#if ONLINE_ALLOWED
+import online.client.GameClient;
+import online.client.OnlineSession;
+import online.client.ProfileStore;
+import online.shared.OnlineTypes;
+import online.shared.SeiunProtocol;
+#end
+
 
 #if VIDEOS_ALLOWED
 // hxvlc-backed hxCodec compatibility layer (see source/objects/hxcodec)
@@ -177,6 +185,19 @@ class PlayState extends MusicBeatState
 	public static var storyWeek:Int = 0;
 	public static var storyPlaylist:Array<String> = [];
 	public static var storyDifficulty:Int = 1;
+	/** SeiunEngine 联机对局标记 (离线路径永远为 false)。 */
+	public static var seiunOnline:Bool = false;
+	/** 联机服务器已发 GAME_START：跳过本地 ready/set/go，按服务器 3-2-1 开局。 */
+	public static var seiunSkipLocalCountdown:Bool = false;
+	#if ONLINE_ALLOWED
+	static var prevOnlineJudgement:Array<Int> = null;
+	static var prevOnlineJudgementPreset:String = "Leather Engine";
+	static var prevOnlineMarvelous:Bool = true;
+	static var prevOnlineTailOn:Bool = false;
+	static var prevOnlineTailMult:Float = 2.0;
+	static var prevOnlineCompat:Bool = false;
+	static var prevOnlineCompatEngine:String = "Auto";
+	#end
 
 	/** Difficulty text for HUD/pause: prefers the chart's own difficulty
 	 *  name (imported osu!/Malody charts), falls back to the current
@@ -202,10 +223,14 @@ class PlayState extends MusicBeatState
 
 	public var notes:FlxTypedGroup<Note>;
 	public var sustainNotes:FlxTypedGroup<Note>; // Kept for Lua compatibility (empty)
-	public var unspawnNotes:Array<Note> = [];
+	public var unspawnNotes:Array<PreloadedChartNote> = [];
 	public var eventNotes:Array<EventNote> = [];
 
 	public var notesAddedCount:Int = 0;
+	/** Last materialized Note per lane/side, used to rebuild prevNote/nextNote chains on lazy spawn. */
+	private var lastSpawnedNote:Map<Int, Note> = new Map<Int, Note>();
+	/** Per-state recycled Note pool. Dead notes stay in notes.members and are revived in place. */
+	private var notePool:Array<Note> = [];
 	public var limitNC:Int = 0;
 	public var noteLimit:Int = 1000;
 	/** True once the music file reached its end but chart notes remain. */
@@ -301,6 +326,15 @@ class PlayState extends MusicBeatState
 	public var botplayTxt:FlxText;
 	public var replaySine:Float = 0;
 	public var replayTxt:FlxText;
+	#if ONLINE_ALLOWED
+	public var onlineBadgeTxt:FlxText;
+	var onlineWaitSyncTxt:FlxText = null;
+	/** 对手实时分数 HUD (PsychOnline 式: 右上显示远端玩家分数)。 */
+	public var remoteScoreTxt:FlxText;
+	public var remoteScores:Map<String, Dynamic> = new Map<String, Dynamic>();
+	var remoteScoreSig:String = "";
+	#end
+
 	/** LeatherEngine 移植: 回放判定手感还原提示 */
 	public var judgeRestoreTxt:FlxText;
 	/** osu! 尾判: HUD 开启标识 (一眼确认开关与构建生效) */
@@ -320,8 +354,61 @@ class PlayState extends MusicBeatState
 	private var activeTailEnd:Array<Float> = [];
 	/** 每轨活动长条的头部 Note (取 hitHealth/missHealth 用) */
 	private var activeHoldNote:Array<Note> = [];
-	/** 尾判判定窗口 = 普通判定窗口 × 2 (FNF 长条与 osu LN 机制不同, 松键宽容一点) */
+	/** 尾判判定窗口 = 普通判定窗口 × 倍率 (ClientPrefs.tailWindowMult, 默认 2.0; 兜底常量仅防异常值) */
 	private static final TAIL_WINDOW_MULT:Float = 2.0;
+
+	/** 读取当前生效的尾判窗口倍率 (设置异常时回退默认 2.0)。 */
+	static inline function tailWindowMult():Float
+	{
+		var m:Float = ClientPrefs.data.tailWindowMult;
+		if (Math.isNaN(m) || m <= 0 || m > 8)
+			return TAIL_WINDOW_MULT;
+		return m;
+	}
+
+	#if ONLINE_ALLOWED
+	/** 当前联机对局的暂停策略 (everyone / hostOnly / disabled; 离线/无房间恒为 everyone)。 */
+	public static function onlinePausePolicy():String
+	{
+		if (!OnlineSession.active || OnlineSession.settings == null)
+			return online.shared.OnlineTypes.OnlineConst.PAUSE_EVERYONE;
+		var p:String = OnlineSession.pausePolicy;
+		if (p == null || p.length == 0)
+			return online.shared.OnlineTypes.OnlineConst.PAUSE_EVERYONE;
+		return p;
+	}
+
+	/** 本地玩家是否允许主动暂停 (仅房主/禁止暂停时, 非房主不允许)。 */
+	public static function onlineCanPauseLocally():Bool
+	{
+		if (!seiunOnline || !OnlineSession.active)
+			return true;
+		var p:String = onlinePausePolicy();
+		if (p == online.shared.OnlineTypes.OnlineConst.PAUSE_DISABLED)
+			return false;
+		if (p == online.shared.OnlineTypes.OnlineConst.PAUSE_HOST_ONLY && !OnlineSession.isHost)
+			return false;
+		return true;
+	}
+
+	/** 暂停被策略拦截时的短暂提示 (HUD 顶部, 1.8 秒后淡出)。 */
+	var onlinePauseNoticeTxt:FlxText = null;
+	var onlinePauseNoticeTimer:Float = 0;
+	function showOnlinePauseNotice(text:String):Void
+	{
+		if (onlinePauseNoticeTxt == null)
+		{
+			onlinePauseNoticeTxt = new FlxText(0, 68, FlxG.width, "", 16);
+			onlinePauseNoticeTxt.setFormat(Paths.languageFont(), 16, FlxColor.fromRGB(255, 200, 120), CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			onlinePauseNoticeTxt.scrollFactor.set();
+			onlinePauseNoticeTxt.cameras = [camHUD];
+			add(onlinePauseNoticeTxt);
+		}
+		onlinePauseNoticeTxt.text = text;
+		onlinePauseNoticeTxt.alpha = 1;
+		onlinePauseNoticeTimer = 1.8;
+	}
+	#end
 
 
 	public var iconP1:HealthIcon;
@@ -462,6 +549,8 @@ class PlayState extends MusicBeatState
 	/** 评级弹窗对象池 */
 	var ratingPopup:RatingPopup;
 
+	/** 错键时间点 (用于联机结算展示)。 */
+	public var wrongLaneTimes:Array<Float> = [];
 	public var NoteMs:Array<Float> = [];
 	public var NoteTime:Array<Float> = [];
 
@@ -504,9 +593,23 @@ class PlayState extends MusicBeatState
 		// difficulty displays never come out blank.
 		if (CoolUtil.difficulties.length < 1)
 			CoolUtil.difficulties = CoolUtil.defaultDifficulties.copy();
+		#if ONLINE_ALLOWED
+		// 离线路径必须复位联机标记, 防止上一局联机状态污染单机成绩。
+		if (!online.client.OnlineSession.active)
+			seiunOnline = false;
+		if (seiunSkipLocalCountdown)
+		{
+			seiunSkipLocalCountdown = false;
+			skipCountdown = true;
+		}
+		#end
+
 
 		//trace('Playback Rate: ' + playbackRate);
 		Paths.clearStoredMemory();
+		// 旧 state 已在 switchState 中 destroy，useCount 已归零；
+		// 这里立即清掉上一局残留的 currentTrackedAssets，避免反复重开/换歌后图片缓存只增不减。
+		Paths.clearUnusedMemory();
 		// for lua
 		instance = this;
 		debugKeysChart = ClientPrefs.copyKey(ClientPrefs.keyBinds.get('debug_1'));
@@ -535,6 +638,10 @@ class PlayState extends MusicBeatState
 
 		//Ratings — LeatherEngine 移植: 判定窗口由 judgementTimings 驱动
 		buildRatingsData();
+
+		#if ONLINE_ALLOWED
+		onlineApplyRoomSettings();
+		#end
 
 		// For the "Just the Two of Us" achievement
 		for (i in 0...keysArray.length)
@@ -580,8 +687,14 @@ class PlayState extends MusicBeatState
 			// 回放模式下强制关闭 botplay/practice 防止冲突
 			cpuControlled = false;
 			practiceMode = false;
-                } else if(!playOpponent && ClientPrefs.data.saveReplayData) {
-                        replayExam.startRecording();
+                } else if(!playOpponent) {
+                        #if ONLINE_ALLOWED
+                          // 联机局始终录制回放 (供结算页查看/保存回放, 异步模式随成绩上报)。
+                          if (ClientPrefs.data.saveReplayData || seiunOnline)
+                          #else
+                          if (ClientPrefs.data.saveReplayData)
+                          #end
+                              replayExam.startRecording();
                 }
 
 
@@ -655,6 +768,13 @@ class PlayState extends MusicBeatState
 			}
 		}
 		SONG.stage = curStage;
+		#if ONLINE_ALLOWED
+		// 联机房间舞台覆盖: 房主指定的房间舞台优先于歌曲自带舞台
+		if (online.client.OnlineSession.active
+			&& online.client.OnlineSession.stageName != null
+			&& online.client.OnlineSession.stageName.length > 0)
+			curStage = online.client.OnlineSession.stageName;
+		#end
 
 		var stageData:StageFile = StageData.getStageFile(curStage);
 		if(stageData == null) { //Stage couldn't be found, create a dummy stage for preventing a crash
@@ -902,6 +1022,17 @@ class PlayState extends MusicBeatState
 		startCharacterLua(dad.curCharacter);
 
 		boyfriend = new Boyfriend(0, 0, SONG.player1);
+		#if ONLINE_ALLOWED
+		// 联机皮肤: 玩家自定义角色皮肤替换 BF
+		if (online.client.OnlineSession.active
+			&& online.client.OnlineSession.selfSkin != null
+			&& online.client.OnlineSession.selfSkin.length > 0
+			&& online.client.OnlineSession.selfSkin != SONG.player1)
+		{
+			boyfriend.destroy();
+			boyfriend = new Boyfriend(0, 0, online.client.OnlineSession.selfSkin);
+		}
+		#end
 		startCharacterPos(boyfriend);
 		boyfriendGroup.add(boyfriend);
 		startCharacterLua(boyfriend.curCharacter);
@@ -1069,6 +1200,9 @@ class PlayState extends MusicBeatState
 
 		addAndroidControls();
 		generateSong(SONG.song);
+		#if ONLINE_ALLOWED
+		onlineGameStart();
+		#end
 
 		if (CompatEngine.isModern()) {
 			noteGroup.add(grpNoteSplashes);
@@ -1203,6 +1337,45 @@ class PlayState extends MusicBeatState
 		if(ClientPrefs.data.downScroll) {
 			replayTxt.y = timeBarBG.y - 78;
 		}
+		#if ONLINE_ALLOWED
+		if (seiunOnline)
+		{
+			onlineBadgeTxt = new FlxText(0, 40, FlxG.width,
+				OnlineSession.dedicated
+					? Language.get('online.badgePlayingDedicated', '专用服务器')
+					: Language.get('online.badgePlayingLan', '局域网 · 本机托管'), 18);
+			onlineBadgeTxt.setFormat(Paths.languageFont(), 18, FlxColor.fromRGB(120, 220, 255), CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			onlineBadgeTxt.scrollFactor.set();
+			onlineBadgeTxt.cameras = [camHUD];
+			add(onlineBadgeTxt);
+
+			// 右上: 对手实时分数 (PsychOnline scoreboard 等价物)。
+			// 先按房间玩家列表播种 0 分, 这样开局立刻能看到每一位对手,
+			// 之后每次本地/远端判定广播都会带当前分数并即时刷新。
+			remoteScores = new Map<String, Dynamic>();
+			remoteScoreSig = "";
+			for (p in OnlineSession.players)
+			{
+				if (p == null)
+					continue;
+				var dev:String = Reflect.field(p, "deviceId");
+				if (dev == null || dev == ProfileStore.deviceId)
+					continue;
+				var nick:String = Reflect.field(p, "nickname");
+				if (nick == null || nick.length == 0)
+					nick = dev;
+				var ping:Float = Reflect.field(p, "pingMs") == null ? 0 : Std.parseFloat(Std.string(Reflect.field(p, "pingMs")));
+				remoteScores.set(dev, {name: nick, score: 0, misses: 0, maxCombo: 0, accuracy: 0, ratingName: "", ratingFC: "", ping: ping});
+			}
+			remoteScoreTxt = new FlxText(920, 64, 340, "", 14);
+			remoteScoreTxt.setFormat(Paths.languageFont(), 14, FlxColor.fromRGB(255, 220, 150), RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			remoteScoreTxt.scrollFactor.set();
+			remoteScoreTxt.cameras = [camHUD];
+			remoteScoreTxt.visible = OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME && !ClientPrefs.data.hideHud;
+			add(remoteScoreTxt);
+		}
+		#end
+
 
 		// LeatherEngine 移植: 回放判定手感提示 (仅当与当前设置不同时显示)
 		judgeRestoreTxt = new FlxText(400, replayTxt.y + 45, FlxG.width - 800, "", 20);
@@ -1697,9 +1870,9 @@ class PlayState extends MusicBeatState
 	{
 		if(generatedMusic)
 		{
-			// 直接按新 songSpeed 重算长条 scale.y，避免乘法累积导致的浮点误差和极端值渲染异常
+			// 直接按新 songSpeed 重算长条 scale.y，避免乘法累积导致的浮点误差和极端值渲染异常。
+			// 未物化的 unspawnNotes 只是轻量数据，spawn 时 setupNoteData 会用当前 songSpeed 生成。
 			for (note in notes) if(note != null && note.exists) note.recalcSustainScale(value);
-			for (note in unspawnNotes) if(note != null && note.exists) note.recalcSustainScale(value);
 		}
 		songSpeed = value;
 		noteKillOffset = 350 / songSpeed;
@@ -2329,6 +2502,18 @@ class PlayState extends MusicBeatState
 			return;
 		}
 
+		#if ONLINE_ALLOWED
+		// 实时对战统一起跑: 没收到 MSG_GAME_SYNC 前冻结在等待状态,
+		// 收到后把 startOnTime 换算到所有端共同的服务器时刻。
+		if (seiunOnline && OnlineSession.active
+			&& OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+			&& !tryConsumeRealtimeSync())
+		{
+			showOnlineSyncWait();
+			return;
+		}
+		#end
+
 		inCutscene = false;
 		var ret:Dynamic = callOnScripts('onStartCountdown', [], false);
 		if(ret != FunkinLua.Function_Stop) {
@@ -2547,7 +2732,7 @@ class PlayState extends MusicBeatState
 	{
 		var i:Int = unspawnNotes.length - 1;
 		while (i >= 0) {
-			var daNote:Note = unspawnNotes[i];
+			var daNote:PreloadedChartNote = unspawnNotes[i];
 			if(daNote.strumTime - 350 < time)
 			{
 				daNote.wasHit = true;
@@ -2560,10 +2745,7 @@ class PlayState extends MusicBeatState
 			var daNote:Note = notes.members[i];
 			if(daNote.strumTime - 350 < time)
 			{
-				daNote.active = false;
-				daNote.visible = false;
-				daNote.ignoreNote = true;
-				daNote.kill();
+				recycleNote(daNote);
 			}
 			--i;
 		}
@@ -3081,30 +3263,10 @@ class PlayState extends MusicBeatState
 		if (preloadedNotes.length > 0)
 			lastChartNoteTime = preloadedNotes[preloadedNotes.length - 1].strumTime;
 
-		// Convert to Note objects via setupNoteData + inline prevNote linking
-		unspawnNotes = [];
-		var lastNotePerData:Map<Int, Note> = new Map<Int, Note>();
-		for (pNote in preloadedNotes)
-		{
-			// skipTexture=true：构造函数不预加载纹理/动画，统一由 setupNoteData 一次性完成，
-			// 避免几十万 Note 每枚都重复 reloadNote（构造 + setup 两次）带来的额外开销。
-			// Note pool borrow: same as new Note, reuses last song's instances.
-			var newNote:Note = Note.fromPool(pNote.strumTime, pNote.noteData, null, pNote.isSustainNote, false, true);
-			newNote.setupNoteData(pNote);
-			unspawnNotes.push(newNote);
-
-			// Inline prevNote/nextNote linking (avoids a second pass)
-			// Chain per (lane + player/opponent side) so player and opponent notes
-			// in the same lane never cross-link; the tail cap would otherwise align
-			// to the wrong side's previous piece and detach.
-			var linkKey:Int = newNote.noteData + (newNote.mustPress ? 10000 : 0);
-			var prev:Note = lastNotePerData.get(linkKey);
-			if (prev != null) {
-				newNote.prevNote = prev;
-				prev.nextNote = newNote;
-			}
-			lastNotePerData.set(linkKey, newNote);
-		}
+		// 轻量谱面数据：不再提前物化成 Note 对象。
+		// Note 只在进入生成窗口时由 spawn 循环物化，峰值内存 = 同时存活 Note，而不是整张谱面。
+		unspawnNotes = preloadedNotes;
+		lastSpawnedNote = new Map<Int, Note>();
 
 		if (eventNotes.length > 1)
 			eventNotes.sort(sortByTime);
@@ -3345,8 +3507,7 @@ class PlayState extends MusicBeatState
 		// 多k: 实时重置已生成 Note 的缩放大小, 与新的 strum 大小保持同步
 		// 仅重置属于新 k 段 (mania 快照 == 当前 k) 的 Note, 避免覆盖其他 k 段 Note 的缩放
 		// (>9K 时 strum 显著缩小, 已生成 Note 若保持旧缩放会与 strum 错位)
-		for (note in unspawnNotes)
-			if (note != null && note.noteData > -1 && note.mania == mania) note.resetNoteScaleForMania(mania);
+		// 未物化的 unspawnNotes 是轻量数据，spawn 时 setupNoteData 会用各自的 mania 快照生成，无需在此调整。
 		for (note in notes.members)
 			if (note != null && note.exists && note.noteData > -1 && note.mania == mania) note.resetNoteScaleForMania(mania);
 
@@ -3651,6 +3812,10 @@ class PlayState extends MusicBeatState
 			iconP1.swapOldIcon();
 		}*/
 		callOnScripts('onUpdate', [elapsed]);
+		#if ONLINE_ALLOWED
+		updateOnline(elapsed);
+		#end
+
 		keyboardDisplay.dataUpdate(elapsed);
 		/*
 		lerpSongScore = FlxMath.lerp(lerpSongScore, songScore, CoolUtil.boundTo(elapsed * 10, 0, 1));
@@ -3743,11 +3908,21 @@ class PlayState extends MusicBeatState
 		{
 			var ret:Dynamic = callOnScripts('onPause', [], false);
 			if(ret != FunkinLua.Function_Stop#if VIDEOS_ALLOWED && !videoPlaying #end)  {
+				#if ONLINE_ALLOWED
+				if (seiunOnline && !onlineCanPauseLocally())
+				{
+					// 暂停策略限制 (仅房主可暂停 / 禁止暂停): 拦截并提示, 不弹暂停菜单。
+					FlxG.sound.play(Paths.sound('cancelMenu'));
+					showOnlinePauseNotice(Language.get('online.pauseBlocked' + (onlinePausePolicy() == online.shared.OnlineTypes.OnlineConst.PAUSE_DISABLED ? 'Disabled' : 'HostOnly'),
+						onlinePausePolicy() == online.shared.OnlineTypes.OnlineConst.PAUSE_DISABLED ? '房主禁止了对局暂停' : '只有房主可以暂停对局'));
+				}
+				else
+				#end
 				openPauseMenu();
 			}
 		}
 
-		if (FlxG.keys.anyJustPressed(debugKeysChart) && !endingSong && !inCutscene)
+		if (FlxG.keys.anyJustPressed(debugKeysChart) && !endingSong && !inCutscene && !seiunOnline)
 		{
 			openChartEditor();
 		}
@@ -3875,44 +4050,70 @@ class PlayState extends MusicBeatState
 			if(songSpeed < 1) time /= songSpeed;
 			if(unspawnNotes[notesAddedCount].multSpeed < 1) time /= unspawnNotes[notesAddedCount].multSpeed;
 
-			var targetNote:Note = unspawnNotes[notesAddedCount];
+			var targetData:PreloadedChartNote = unspawnNotes[notesAddedCount];
 			limitNC = notes.countLiving();
 
-			while (limitNC < noteLimit && targetNote != null && targetNote.strumTime - Conductor.songPosition < time)
+			while (limitNC < noteLimit && targetData != null && targetData.strumTime - Conductor.songPosition < time)
 			{
-				if (targetNote.wasHit)
+				if (targetData.wasHit)
 				{
 					notesAddedCount++;
 					if (notesAddedCount < unspawnNotes.length)
-						targetNote = unspawnNotes[notesAddedCount];
+						targetData = unspawnNotes[notesAddedCount];
 					else
 						break;
 					continue;
 				}
 
-				targetNote.spawned = true;
-				notes.add(targetNote);
+				// 延迟物化 + 回池复用：优先复用本 state 内已击杀的 Note 槽位。
+				var newNote:Note;
+				var reusedNote:Bool = notePool.length > 0;
+				if (reusedNote)
+				{
+					newNote = notePool.pop();
+					newNote.pooled = false;
+					newNote.revive();
+				}
+				else
+				{
+					newNote = new Note(targetData.strumTime, targetData.noteData, null, targetData.isSustainNote, false, true);
+				}
+				newNote.sourceIndex = notesAddedCount;
+				newNote.setupNoteData(targetData);
+				newNote.spawned = true;
+
+				// 重建 prevNote/nextNote 链（只链已生成的 Note；未生成的 sustain 尾段由数据扫描兜底）。
+				var linkKey:Int = newNote.noteData + (newNote.mustPress ? 10000 : 0);
+				var prev:Note = lastSpawnedNote.get(linkKey);
+				if (prev != null) {
+					newNote.prevNote = prev;
+					prev.nextNote = newNote;
+				}
+				lastSpawnedNote.set(linkKey, newNote);
+
+				if (!reusedNote)
+					notes.add(newNote);
 				if (CompatEngine.isModern()) {
 					callOnScripts('onSpawnNote', [
-						notes.members.indexOf(targetNote),
-						targetNote.noteData,
-						targetNote.noteType,
-						targetNote.isSustainNote,
-						targetNote.strumTime
+						notes.members.indexOf(newNote),
+						newNote.noteData,
+						newNote.noteType,
+						newNote.isSustainNote,
+						newNote.strumTime
 					]);
 				} else {
 					callOnScripts('onSpawnNote', [
-						notes.members.indexOf(targetNote),
-						targetNote.noteData,
-						targetNote.noteType,
-						targetNote.isSustainNote
+						notes.members.indexOf(newNote),
+						newNote.noteData,
+						newNote.noteType,
+						newNote.isSustainNote
 					]);
 				}
 
 				notesAddedCount++;
 				limitNC++;
 				if (notesAddedCount < unspawnNotes.length)
-					targetNote = unspawnNotes[notesAddedCount];
+					targetData = unspawnNotes[notesAddedCount];
 				else
 					break;
 			}
@@ -3975,13 +4176,13 @@ class PlayState extends MusicBeatState
 					else
 						daNote.distance = (-0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
 
-					var angleDir:Float = strumDirection * Math.PI / 180;
+						var angleDir:Float = strumDirection * Math.PI / 180;
 
-					if (daNote.copyAngle)
-						daNote.angle = strumDirection - 90 + strumAngle;
+						if (daNote.copyAngle)
+							daNote.angle = strumDirection - 90 + strumAngle;
 
-					if (daNote.copyAlpha)
-						daNote.alpha = strumAlpha;
+						if (daNote.copyAlpha)
+							daNote.alpha = strumAlpha;
 
 					// Sustain body scale stretch — must span pixel gap between pieces.
 					// Pixel gap = 0.45 * stepCrochet * songSpeed.
@@ -4001,47 +4202,47 @@ class PlayState extends MusicBeatState
 					}
 					*/
 
-					if (daNote.copyX)
-						daNote.x = strumX + Math.cos(angleDir) * daNote.distance;
+						if (daNote.copyX)
+							daNote.x = strumX + Math.cos(angleDir) * daNote.distance;
 
-					if (daNote.copyY)
-					{
-						daNote.y = strumY + Math.sin(angleDir) * daNote.distance;
-
-						if (daNote.isSustainNote)
+						if (daNote.copyY)
 						{
-							// 0.6.3 原版定位：长条各段按自身 strumTime 摆放 + 原版常量修正。
-							// 不依赖 prevNote.exists——TAP 命中销毁后长条不会跳位/突出 TAP。
-							// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
-							var maniaScale:Float = Note.getManiaScale(daNote.mania);
-							var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
-							var isEnd:Bool = (daNote.animation.curAnim != null
-								&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
-							if (strumScroll)
+							daNote.y = strumY + Math.sin(angleDir) * daNote.distance;
+
+							if (daNote.isSustainNote)
 							{
-								if (isEnd)
+								// 0.6.3 原版定位：长条各段按自身 strumTime 摆放 + 原版常量修正。
+								// 不依赖 prevNote.exists——TAP 命中销毁后长条不会跳位/突出 TAP。
+								// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
+								var maniaScale:Float = Note.getManiaScale(daNote.mania);
+								var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+								var isEnd:Bool = (daNote.animation.curAnim != null
+									&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
+								if (strumScroll)
 								{
-									daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
-									daNote.y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
-									if (PlayState.isPixelStage)
-										daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
-									else
-										daNote.y -= 19 * maniaScale;
+									if (isEnd)
+									{
+										daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
+										daNote.y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
+										if (PlayState.isPixelStage)
+											daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
+										else
+											daNote.y -= 19 * maniaScale;
+									}
+									daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
+									daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
 								}
-								daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
-								daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
-							}
-							else
-							{
-								if (PlayState.isPixelStage)
-									daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
 								else
-									daNote.y += 55 * maniaScale;
+								{
+									if (PlayState.isPixelStage)
+										daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
+									else
+										daNote.y += 55 * maniaScale;
+								}
 							}
 						}
-					}
 
-					var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
+	var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
 					if (strum.sustainReduce && daNote.isSustainNote
 						&& (!daNote.mustPress || daNote.wasGoodHit || daNote.ignoreNote))
 					{
@@ -4088,19 +4289,18 @@ class PlayState extends MusicBeatState
 
 				notes.forEachAlive(updateDaNote);
 
-				// Batched cleanup: only purge dead notes every N frames to reduce GC pressure
+				// 回池复用后不再批量 remove/destroy；dead Note 保留在 members 中供槽位复用。
+				// 只清理被脚本/外部直接 destroy 的壳（scale == null），避免异常路径堆积。
 				_noteCleanupFrameCounter++;
 				if (_noteCleanupFrameCounter >= NOTE_CLEANUP_INTERVAL)
 				{
 					_noteCleanupFrameCounter = 0;
-					var i:Int = notes.members.length - 1;
-					while (i >= 0) {
-						var note:Note = notes.members[i];
-						if (note != null && !note.exists) {
-							notes.remove(note, true);
-							note.destroy();
-						}
-						i--;
+					var cleanI:Int = notes.members.length - 1;
+					while (cleanI >= 0) {
+						var cleanNote:Note = notes.members[cleanI];
+						if (cleanNote != null && cleanNote.scale == null)
+							notes.remove(cleanNote, true);
+						cleanI--;
 					}
 				}
 
@@ -4124,16 +4324,7 @@ class PlayState extends MusicBeatState
 					daNote.wasGoodHit = false;
 				}
 				notes.forEachAlive(resetNote);
-				// Always clean up dead notes here (no batching needed before countdown starts)
-				var i:Int = notes.members.length - 1;
-				while (i >= 0) {
-					var note:Note = notes.members[i];
-					if (note != null && !note.exists) {
-						notes.remove(note, true);
-						note.destroy();
-					}
-					i--;
-				}
+				// 倒计时前同样不 remove/destroy，dead Note 留在 members 中复用。
 			}
 		}
 		checkEventNote();
@@ -4168,11 +4359,22 @@ class PlayState extends MusicBeatState
 	}
 
 
-	function openPauseMenu()
+	function openPauseMenu(?sendNetworkPause:Bool = true)
 	{
 		persistentUpdate = false;
 		persistentDraw = true;
 		paused = true;
+		#if ONLINE_ALLOWED
+		if (sendNetworkPause)
+		{
+			// 自己主动暂停: 清除"对方暂停"标记 (远程暂停走 openPauseMenu(false) 并单独设置)。
+			OnlineSession.pauseNickname = "";
+			// 暂停策略: 只有允许本地暂停时才广播 (仅房主/禁止暂停时, 非房主不发暂停消息)。
+			if (onlineCanPauseLocally() && seiunOnline && OnlineSession.active && OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME && GameClient.instance != null)
+				GameClient.instance.send(SeiunProtocol.MSG_GAME_PAUSE, SeiunProtocol.CHANNEL_GAME, {at: Date.now().getTime()});
+		}
+		#end
+
 
 		keyboardDisplay.save();
 		for (i in 0...4)
@@ -4194,7 +4396,8 @@ class PlayState extends MusicBeatState
 			vocalsOpponent.pause();
 		}
 		#if HSCRIPT_ALLOWED
-		var usePause = (Main.useOldPause != null) ? Main.useOldPause : ClientPrefs.data.oldPauseMenu;
+		// 联机模式强制使用新版暂停菜单: 旧版没有联机暂停/恢复/退出房间的处理逻辑。
+		var usePause:Bool = seiunOnline ? false : ((Main.useOldPause != null) ? Main.useOldPause : ClientPrefs.data.oldPauseMenu);
 		if (usePause)
 			openSubState(new OldPauseSubState(boyfriend.getScreenPosition().x, boyfriend.getScreenPosition().y));
 		else
@@ -4227,6 +4430,13 @@ class PlayState extends MusicBeatState
 
 	public var isDead:Bool = false; //Don't mess with this on Lua!!!
 	function doDeathCheck(?skipHealthCheck:Bool = false) {
+		#if ONLINE_ALLOWED
+		// PsychOnline 式实时对战: 共享血量归零不单方面判死, 双方都打完整首歌,
+		// 最终由服务器汇总的成绩排名分胜负。
+		if (seiunOnline && OnlineSession.active
+			&& OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+			return false;
+		#end
 		if (((skipHealthCheck && instakillOnMiss) || (playOpponent ? health >= 2 : health <= 0)) && !practiceMode && !isDead && !replayMode)
 		{
 			var ret:Dynamic = callOnScripts('onGameOver', [], false);
@@ -4780,7 +4990,7 @@ class PlayState extends MusicBeatState
 				#if !switch
 				var percent:Float = ratingPercent;
 				if(Math.isNaN(percent)) percent = 0;
-				if (!replayMode && !practiceMode && !cpuControlled && !chartingMode)
+				if (!replayMode && !practiceMode && !cpuControlled && !chartingMode && !seiunOnline)
 				{
 				// 准备回放帧数据 (转为 Dynamic 以存入 Allscore)
 				var replayFrameData:Array<Dynamic> = (replayExam != null && ClientPrefs.data.saveReplayData)
@@ -4839,6 +5049,16 @@ class PlayState extends MusicBeatState
 				openChartEditor();
 				return;
 			}
+			#if ONLINE_ALLOWED
+			if (seiunOnline)
+			{
+				onlineSubmitResult();
+				MusicBeatState.switchState(new online.states.OnlineResultsState(buildOnlineScore()));
+				transitioning = true;
+				return;
+			}
+			#end
+
 
 			prevCamFollow = camFollow;
 			prevCamFollowPos = camFollowPos;
@@ -4866,17 +5086,26 @@ class PlayState extends MusicBeatState
 	#end
 
 	public function KillNotes() {
-		while(notes.length > 0) {
-			var daNote:Note = notes.members[0];
-			daNote.active = false;
-			daNote.visible = false;
-			daNote.kill();
-		}
+			var i:Int = notes.members.length - 1;
+			while (i >= 0) {
+				var daNote:Note = notes.members[i];
+				if (daNote != null) {
+					daNote.active = false;
+					daNote.visible = false;
+					daNote.kill();
+					notes.remove(daNote, true);
+					if (daNote.scale != null)
+						daNote.destroy();
+				}
+				i--;
+			}
+			notePool = [];
 
-		unspawnNotes = [];
-		notesAddedCount = 0;
-		limitNC = 0;
-		eventNotes = [];
+			unspawnNotes = [];
+			notesAddedCount = 0;
+			limitNC = 0;
+			lastSpawnedNote = new Map<Int, Note>();
+			eventNotes = [];
 	}
 
 	public var totalPlayed:Int = 0;
@@ -5098,9 +5327,7 @@ class PlayState extends MusicBeatState
 					{
 						for (doubleNote in pressNotes) {
 							if (Math.abs(doubleNote.strumTime - epicNote.strumTime) < 1) {
-								doubleNote.kill();
-								notes.remove(doubleNote, true);
-								doubleNote.destroy();
+								recycleNote(doubleNote);
 							} else
 								notesStopped = true;
 						}
@@ -5126,6 +5353,14 @@ class PlayState extends MusicBeatState
 				// Shubs, this is for the "Just the Two of Us" achievement lol
 				//									- Shadow Mario
 				keysPressed[key] = true;
+				#if ONLINE_ALLOWED
+				if (seiunOnline)
+					// 上报按键时间用 keyPressed 入口处的帧时钟 (lastTime), 不能用上面同步后的
+					// music.time: 音频时钟相对帧时钟滞后 (声卡缓冲) 且不含 Conductor.offset,
+					// 会把所有按键报早几百毫秒, 被服务器判成 "illegal press outside chart window"。
+					OnlineSession.sendInput(key, true, lastTime);
+				#end
+
 
 				//more accurate hit time for the ratings? part 2 (Now that the calculations are done, go back to the time it was before for not causing a note stutter)
 			Conductor.songPosition = lastTime;
@@ -5195,6 +5430,11 @@ class PlayState extends MusicBeatState
 					callOnScripts('onGhostTap', [key]);
 					if (canMiss) noteMissPress(key);
 					keysPressed[key] = true;
+					#if ONLINE_ALLOWED
+					if (seiunOnline)
+						OnlineSession.sendInput(key, true, Conductor.songPosition);
+					#end
+
 					callOnScripts('onKeyPress', [key]);
 					continue;
 				}
@@ -5209,9 +5449,7 @@ class PlayState extends MusicBeatState
 					{
 						if (Math.abs(doubleNote.strumTime - epicNote.strumTime) < 1)
 						{
-							doubleNote.kill();
-							notes.remove(doubleNote, true);
-							doubleNote.destroy();
+							recycleNote(doubleNote);
 						}
 						else
 							notesStopped = true;
@@ -5225,6 +5463,11 @@ class PlayState extends MusicBeatState
 					}
 				}
 				keysPressed[key] = true;
+				#if ONLINE_ALLOWED
+				if (seiunOnline)
+					OnlineSession.sendInput(key, true, Conductor.songPosition);
+				#end
+
 				callOnScripts('onKeyPress', [key]);
 			}
 		}
@@ -5301,6 +5544,11 @@ class PlayState extends MusicBeatState
 				spr.resetAnim = 0;
 			}
 			callOnScripts('onKeyRelease', [key]);
+			#if ONLINE_ALLOWED
+			if (seiunOnline)
+				OnlineSession.sendInput(key, false, Conductor.songPosition);
+			#end
+
 		}
 
 		// ======================== osu! 尾判 ========================
@@ -5361,17 +5609,23 @@ class PlayState extends MusicBeatState
 		private function computeTailEnd(head:Note):Float
 		{
 			var fallback:Float = head.strumTime + head.sustainLength;
-			if (head.nextNote == null) return fallback;
+			if (head.sourceIndex < 0 || head.sourceIndex >= unspawnNotes.length)
+				return fallback;
 			var headParentST:Float = head.strumTime - ClientPrefs.data.noteOffset;
-			var n:Note = head.nextNote;
-			var endPiece:Note = null;
-			while (n != null && n.isSustainNote && n.parentST == headParentST)
+			var endPieceTime:Float = fallback;
+			var i:Int = head.sourceIndex + 1;
+			while (i < unspawnNotes.length)
 			{
-				// 链中最后一个同头部 sustain 段就是视觉尾段
-				endPiece = n;
-				n = n.nextNote;
+				var d:PreloadedChartNote = unspawnNotes[i];
+				// 只扫描属于同一根长条的 sustain 片段；遇到其它 Note 就停止。
+				if (!d.isSustainNote || d.parentST != headParentST)
+					break;
+				endPieceTime = d.strumTime;
+				if (d.isSustainEnd)
+					break;
+				i++;
 			}
-			return (endPiece != null) ? endPiece.strumTime : fallback;
+			return endPieceTime;
 		}
 
 		/**
@@ -5404,9 +5658,10 @@ class PlayState extends MusicBeatState
 		private function tailRatingFor(diff:Float):String
 		{
 			var absDiff:Float = Math.abs(diff);
-			if (absDiff > Conductor.safeZoneOffset * TAIL_WINDOW_MULT) return 'miss';
-			// 尾判窗口放宽 2 倍
-			return backend.Ratings.getRating(absDiff / TAIL_WINDOW_MULT);
+			var mult:Float = tailWindowMult();
+			if (absDiff > Conductor.safeZoneOffset * mult) return 'miss';
+			// 尾判窗口按倍率放宽 (默认 2 倍)
+			return backend.Ratings.getRating(absDiff / mult);
 		}
 
 		/** osu! 尾判: 松键命中 → 结算长条分数 + 评级分数, 显示延迟与评级图标 */
@@ -5660,7 +5915,7 @@ class PlayState extends MusicBeatState
 			for (i in 0..._hold.length)
 			{
 				if (activeTailEnd[i] > 0 && _hold[i]
-					&& frameTime > activeTailEnd[i] + Conductor.safeZoneOffset * TAIL_WINDOW_MULT)
+					&& frameTime > activeTailEnd[i] + Conductor.safeZoneOffset * tailWindowMult())
 					tailMiss(i, activeTailEnd[i], frameTime);
 			}
 		}
@@ -5684,6 +5939,484 @@ class PlayState extends MusicBeatState
 			}
 			return -1;
 		}
+
+	#if ONLINE_ALLOWED
+	/** 进入联机对局时应用房间统一判定/兼容模式, 离开时恢复。 */
+	function onlineApplyRoomSettings():Void
+	{
+		if (!OnlineSession.active)
+			return;
+		var s = OnlineSession.settings;
+		if (s != null)
+		{
+			if (prevOnlineJudgement == null)
+				prevOnlineJudgement = ClientPrefs.data.judgementTimings.copy();
+			prevOnlineJudgementPreset = ClientPrefs.data.judgementPreset;
+			prevOnlineMarvelous = ClientPrefs.data.marvelousRatings;
+			prevOnlineTailOn = ClientPrefs.data.osuTailJudgement;
+			prevOnlineTailMult = ClientPrefs.data.tailWindowMult;
+			prevOnlineCompat = ClientPrefs.data.compatibility_mode;
+			prevOnlineCompatEngine = ClientPrefs.data.compatEngine;
+			if (s.judgementTimings != null && s.judgementTimings.length >= 4)
+			{
+				ClientPrefs.data.judgementTimings = s.judgementTimings.copy();
+				ClientPrefs.data.judgementPreset = s.judgementPreset == null ? "Custom" : s.judgementPreset;
+				ClientPrefs.data.marvelousRatings = s.marvelousRatings;
+				backend.Ratings.syncWindows();
+			}
+			// 房间统一尾判参数 (osu! 尾判开关 + 窗口倍率)
+			if (Reflect.hasField(s, "osuTailJudgement"))
+				ClientPrefs.data.osuTailJudgement = s.osuTailJudgement == true;
+			if (Reflect.hasField(s, "tailWindowMult") && s.tailWindowMult != null
+				&& !Math.isNaN(s.tailWindowMult) && s.tailWindowMult > 0 && s.tailWindowMult <= 8)
+				ClientPrefs.data.tailWindowMult = s.tailWindowMult;
+			// 房间统一兼容模式 (四值: Auto/0.6.3/0.7.3/1.0.4)
+			var ce:String = OnlineSession.compatEngine;
+			if (ce != null && ce.length > 0 && backend.CompatEngine.VALUES.contains(ce))
+				ClientPrefs.data.compatEngine = ce;
+			else
+				ClientPrefs.data.compatibility_mode = s.compatibilityMode;
+		}
+		buildRatingsData();
+	}
+
+	function onlineRestoreRoomSettings():Void
+	{
+		if (prevOnlineJudgement != null)
+		{
+			ClientPrefs.data.judgementTimings = prevOnlineJudgement;
+			ClientPrefs.data.judgementPreset = prevOnlineJudgementPreset;
+			ClientPrefs.data.marvelousRatings = prevOnlineMarvelous;
+			ClientPrefs.data.osuTailJudgement = prevOnlineTailOn;
+			ClientPrefs.data.tailWindowMult = prevOnlineTailMult;
+			ClientPrefs.data.compatibility_mode = prevOnlineCompat;
+			ClientPrefs.data.compatEngine = prevOnlineCompatEngine;
+			backend.Ratings.syncWindows();
+			prevOnlineJudgement = null;
+		}
+	}
+
+	/** 尝试消费服务器统一起跑信号; 成功则写入 startOnTime 并允许 startCountdown 继续。 */
+	function tryConsumeRealtimeSync():Bool
+	{
+		if (!seiunOnline || !OnlineSession.active || OnlineSession.mode != online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+			return true;
+		var wait:Float = OnlineSession.consumePendingRealtimeSync();
+		if (wait < 0)
+			return false;
+		PlayState.startOnTime = wait;
+		skipCountdown = true;
+		hideOnlineSyncWait();
+		return true;
+	}
+
+	function showOnlineSyncWait():Void
+	{
+		if (onlineWaitSyncTxt == null)
+		{
+			onlineWaitSyncTxt = new FlxText(0, 86, FlxG.width, Language.get('online.waitingSync', '等待其他玩家加载完毕...'), 18);
+			onlineWaitSyncTxt.setFormat(Paths.languageFont(), 18, FlxColor.fromRGB(255, 220, 150), CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			onlineWaitSyncTxt.scrollFactor.set();
+			onlineWaitSyncTxt.cameras = [camHUD];
+			add(onlineWaitSyncTxt);
+		}
+		onlineWaitSyncTxt.visible = true;
+		onlineWaitSyncTxt.alpha = 1;
+	}
+
+	function hideOnlineSyncWait():Void
+	{
+		if (onlineWaitSyncTxt != null)
+			onlineWaitSyncTxt.visible = false;
+	}
+
+	/** 谱面加载完成后把 note 时间轴交给服务器做输入合法性校验。 */
+	function onlineGameStart():Void
+	{
+		if (!seiunOnline || !OnlineSession.active || GameClient.instance == null || GameClient.instance.state != online.client.GameClient.ClientState.Ready)
+			return;
+		if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_ASYNC)
+		{
+			// 异步排名: 各打各的, 只上报"我开始打了", 不参与统一起跑。
+			OnlineSession.sendAsyncStart();
+			return;
+		}
+		var notesPayload:Array<Dynamic> = [];
+		if (unspawnNotes != null)
+		{
+			for (n in unspawnNotes)
+			{
+				if (n == null)
+					continue;
+				// 结构体：头 Note 自带长条总长（长条片段延迟生成，不再逐片段上报）
+				notesPayload.push({timeMs: n.strumTime, lane: Std.int(Math.abs(n.noteData) % Note.ammo[n.mania]), lengthMs: n.sustainLength > 0 ? n.sustainLength : 0});
+			}
+		}
+		// 实时对战: 时间轴同时兼作"我加载完成"信号。服务器收到全部真人玩家的
+		// 时间轴后广播 MSG_GAME_SYNC, 所有端换算到同一个服务器时刻起跑。
+		// chartNotes 可能超过 64 KiB, 走 FILE 通道 (上限 64 MiB), 服务器端同样解析 JSON。
+		GameClient.instance.send(SeiunProtocol.MSG_GAME_START, SeiunProtocol.CHANNEL_FILE, {
+			song: OnlineSession.chart,
+			chartNotes: notesPayload,
+			startedAt: Date.now().getTime()
+		});
+	}
+
+	function updateOnline(elapsed:Float):Void
+	{
+		var client:GameClient = GameClient.instance;
+		if (client == null || !seiunOnline || !OnlineSession.active)
+			return;
+		// 暂停拦截提示的淡出计时。
+		if (onlinePauseNoticeTimer > 0)
+		{
+			onlinePauseNoticeTimer -= elapsed;
+			if (onlinePauseNoticeTimer <= 0 && onlinePauseNoticeTxt != null)
+				onlinePauseNoticeTxt.alpha = 0;
+		}
+		client.update(elapsed);
+		var ev = client.pollEvent();
+		while (ev != null)
+		{
+			switch (ev.type)
+			{
+				case SeiunProtocol.MSG_GAME_SYNC:
+					// 服务器统一起跑: 存锚点后立即尝试开始; 若 PlayState 仍在
+					// create 流程中, startCountdown 的在线闸门稍后也会消费它。
+					if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+						&& ev.data != null && !startedCountdown && !endingSong && !inCutscene)
+					{
+						OnlineSession.setPendingRealtimeSync(
+							Std.parseFloat(Std.string(Reflect.field(ev.data, "serverNow"))),
+							Std.parseFloat(Std.string(Reflect.field(ev.data, "startDelayMs"))));
+						if (tryConsumeRealtimeSync())
+							startCountdown();
+					}
+				case SeiunProtocol.MSG_GAME_INPUT:
+					if (OnlineSession.mode != online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+						break;
+					if (ev.data != null && ev.data.id != OnlineSession.selfId)
+					{
+						var laneValue:Null<Int> = Std.parseInt(Std.string(Reflect.field(ev.data, "lane")));
+						var lane:Int = laneValue == null ? -1 : laneValue;
+						var pressed:Bool = Reflect.field(ev.data, "pressed") == true;
+						if (pressed && opponentStrums != null && lane >= 0 && lane < opponentStrums.members.length)
+						{
+							var strum:StrumNote = opponentStrums.members[lane];
+							if (strum != null)
+							{
+								strum.playAnim('pressed', true);
+								strum.resetAnim = 0;
+							}
+						}
+					}
+				case SeiunProtocol.MSG_GAME_PAUSE:
+					// 联机暂停是全局的: 对方暂停/恢复都同步; 倒计时/结算中不弹暂停。
+					// 暂停策略 disabled 时服务器不会转发, 这里再兜底一次。
+					if (ev.data != null && ev.data.id != OnlineSession.selfId && !paused
+						&& startedCountdown && canPause && !endingSong && !transitioning
+						&& onlinePausePolicy() != online.shared.OnlineTypes.OnlineConst.PAUSE_DISABLED)
+					{
+						OnlineSession.pauseNickname = Reflect.field(ev.data, "nickname") == null
+							? "" : Std.string(Reflect.field(ev.data, "nickname"));
+						openPauseMenu(false);
+					}
+				case SeiunProtocol.MSG_GAME_RESUME:
+					OnlineSession.pauseNickname = "";
+					if (ev.data != null && ev.data.id != OnlineSession.selfId && paused
+						&& subState != null
+						&& (Std.isOfType(subState, substates.PauseSubState) || Std.isOfType(subState, substates.OldPauseSubState)))
+						closeSubState();
+				case SeiunProtocol.MSG_GAME_JUDGE:
+					if (OnlineSession.mode != online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+						break;
+					if (ev.data != null)
+					{
+						#if ONLINE_ALLOWED
+						// 共享血量 (PsychOnline room.state.health 等价物):
+						// 远端判定带来的血量直接同步到本地血条; 实时模式不因血量归零
+						// 单独 Game Over, 双方都打完以成绩排名结算。
+						var remoteHealth:Dynamic = Reflect.field(ev.data, "health");
+						var remoteDev0:String = Reflect.field(ev.data, "deviceId");
+						if (remoteHealth != null && remoteDev0 != null && remoteDev0 != ProfileStore.deviceId)
+						{
+							var hv:Float = Std.parseFloat(Std.string(remoteHealth));
+							// -1 = 旧客户端未携带血量, 忽略而不是把共享血量压到 0。
+							if (!Math.isNaN(hv) && hv >= 0)
+								health = Math.max(0, Math.min(2, hv));
+						}
+						// 对手实时分数 (PsychOnline 式): 本地判定/假人判定广播都带 score 与实时统计。
+						var judgeDev:String = Reflect.field(ev.data, "deviceId");
+						var judgeScore:Dynamic = Reflect.field(ev.data, "score");
+						if (judgeScore != null && judgeDev != null && judgeDev != ProfileStore.deviceId)
+						{
+							var nick:String = judgeDev;
+							for (p in OnlineSession.players)
+								if (p != null && Reflect.field(p, "deviceId") == judgeDev)
+								{
+									nick = Reflect.field(p, "nickname");
+									break;
+								}
+							var oldEntry:Dynamic = remoteScores.get(judgeDev);
+							var ping:Float = oldEntry != null && Reflect.field(oldEntry, "ping") != null ? Std.parseFloat(Std.string(Reflect.field(oldEntry, "ping"))) : 0;
+							remoteScores.set(judgeDev, {
+								name: nick,
+								score: judgeScore,
+								misses: Reflect.field(ev.data, "misses"),
+								maxCombo: Reflect.field(ev.data, "maxCombo"),
+								accuracy: Reflect.field(ev.data, "accuracy"),
+								ratingName: Reflect.field(ev.data, "ratingName"),
+								ratingFC: Reflect.field(ev.data, "ratingFC"),
+								ping: Reflect.field(ev.data, "pingMs") == null ? ping : Reflect.field(ev.data, "pingMs")
+							});
+						}
+						#end
+						OnlineSession.incomingJudges.push(ev.data);
+					}
+				case SeiunProtocol.MSG_GAME_RESULT:
+					// 自己还在打时, 其他玩家可能已经先提交成绩。先缓存到
+					// OnlineSession, 结算页创建时合并, 避免事件在 PlayState 被消费后丢失。
+					if (ev.data != null && OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+					{
+						var resultDev:String = Reflect.field(ev.data, "deviceId");
+						if (resultDev != null && resultDev != OnlineSession.selfId)
+						{
+							OnlineSession.pendingRealtimeResults.set(resultDev, ev.data);
+							#if ONLINE_ALLOWED
+							// 最终成绩也即时反映到右上 HUD。
+							var nick:String = resultDev;
+							for (p in OnlineSession.players)
+								if (p != null && Reflect.field(p, "deviceId") == resultDev)
+								{
+									nick = Reflect.field(p, "nickname");
+									break;
+								}
+							var oldEntry:Dynamic = remoteScores.get(resultDev);
+							var ping:Float = oldEntry != null && Reflect.field(oldEntry, "ping") != null ? Std.parseFloat(Std.string(Reflect.field(oldEntry, "ping"))) : 0;
+							remoteScores.set(resultDev, {
+								name: nick,
+								score: Reflect.field(ev.data, "score"),
+								misses: Reflect.field(ev.data, "misses"),
+								maxCombo: Reflect.field(ev.data, "maxCombo"),
+								accuracy: Reflect.field(ev.data, "accuracy"),
+								ratingName: Reflect.field(ev.data, "ratingName"),
+								ratingFC: Reflect.field(ev.data, "ratingFC"),
+								ping: ping
+							});
+							#end
+						}
+					}
+				case SeiunProtocol.MSG_GAME_END:
+					if (ev.data != null && ev.data.results != null && Std.isOfType(ev.data.results, Array))
+						OnlineSession.pendingRealtimeRanking = cast ev.data.results;
+				case SeiunProtocol.MSG_ROOM_ANNOUNCE:
+					if (ev.data != null)
+					{
+						var noticeText:String = Std.string(Reflect.field(ev.data, "text"));
+						if (noticeText.indexOf("房主退出") >= 0 || noticeText.indexOf("房间已关闭") >= 0 || noticeText.indexOf("房主断开") >= 0)
+						{
+							// 房主退出/房间关闭: 本局作废, 提示后回联机主界面。
+							OnlineSession.recordDisconnect(noticeText);
+							client.disconnect(true);
+							OnlineSession.clear();
+							seiunOnline = false;
+							onlineRestoreRoomSettings();
+							MusicBeatState.switchState(new online.states.OnlineState());
+							return;
+						}
+					}
+				case SeiunProtocol.MSG_ROOM_PLAYER_LEAVE:
+					if (ev.data != null)
+						OnlineSession.recordDisconnect(Std.string(Reflect.field(ev.data, "nickname")));
+				case SeiunProtocol.MSG_ERROR:
+					if (ev.data != null)
+					{
+						OnlineSession.recordDisconnect(Std.string(Reflect.field(ev.data, "message")));
+						var msg:String = ev.data.message == null ? "" : Std.string(ev.data.message);
+						if (msg.indexOf("移出房间") >= 0 || msg.indexOf("请出服务器") >= 0 || msg.indexOf("封禁") >= 0)
+						{
+							client.disconnect(true);
+							OnlineSession.clear();
+							seiunOnline = false;
+							onlineRestoreRoomSettings();
+							MusicBeatState.switchState(new online.states.OnlineState());
+							return;
+						}
+					}
+			}
+			ev = client.pollEvent();
+		}
+		while (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME && OnlineSession.incomingJudges.length > 0)
+		{
+			var judge:Dynamic = OnlineSession.incomingJudges.shift();
+			if (judge == null || judge.deviceId == ProfileStore.deviceId)
+				continue;
+			#if ONLINE_ALLOWED
+			handleRemoteJudgeVisual(judge);
+			#end
+		}
+		if (client.state == online.client.GameClient.ClientState.Failed && !endingSong && !paused)
+		{
+			OnlineSession.recordDisconnect(client.lastError);
+			openPauseMenu();
+		}
+		#if ONLINE_ALLOWED
+		refreshRemoteScoreText();
+		#end
+	}
+
+	#if ONLINE_ALLOWED
+	/** 刷新右上对手分数 HUD (PsychOnline 式: 名字/分数/漏键/准确率/评级, 按分数降序, 最多 6 人)。 */
+	function refreshRemoteScoreText():Void
+	{
+		if (remoteScoreTxt == null)
+			return;
+		remoteScoreTxt.visible = OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME && !ClientPrefs.data.hideHud;
+		if (!remoteScoreTxt.visible)
+			return;
+		var list:Array<Dynamic> = [];
+		for (k in remoteScores.keys())
+			list.push(remoteScores.get(k));
+		list.sort(function(a:Dynamic, b:Dynamic):Int
+		{
+			var sa:Float = Std.parseFloat(Std.string(a.score));
+			var sb:Float = Std.parseFloat(Std.string(b.score));
+			return sa == sb ? 0 : (sb > sa ? 1 : -1);
+		});
+		var lines:Array<String> = [];
+		for (i in 0...Std.int(Math.min(list.length, 6)))
+		{
+			var e = list[i];
+			var acc:Float = Std.parseFloat(Std.string(e.accuracy == null ? 0 : e.accuracy));
+			var missParsed:Null<Int> = Std.parseInt(Std.string(e.misses == null ? 0 : e.misses));
+			var miss:Int = missParsed == null ? 0 : missParsed;
+			var comboParsed:Null<Int> = Std.parseInt(Std.string(e.maxCombo == null ? 0 : e.maxCombo));
+			var combo:Int = comboParsed == null ? 0 : comboParsed;
+			var rating:String = Std.string(e.ratingName == null ? "" : e.ratingName);
+			var fc:String = Std.string(e.ratingFC == null ? "" : e.ratingFC);
+			var ping:Float = Std.parseFloat(Std.string(e.ping == null ? 0 : e.ping));
+			lines.push(Std.string(e.name) + "  " + Std.string(e.score)
+				+ "  " + miss + "M " + combo + "C"
+				+ (rating.length > 0 ? " " + rating + (fc.length > 0 ? " [" + fc + "]" : "") : "")
+				+ " " + Highscore.floorDecimal(acc * 100, 2) + "%"
+				+ (ping > 0 ? " " + Std.int(ping) + "ms" : ""));
+		}
+		var sig:String = lines.join("\n");
+		if (sig == remoteScoreSig)
+			return;
+		remoteScoreSig = sig;
+		remoteScoreTxt.text = sig;
+	}
+
+	/** 远端判定可视化: 让对手的实时输入打在本地对手侧音符上 (PsychOnline 的 noteHit/noteMiss 等价物)。 */
+	function handleRemoteJudgeVisual(judge:Dynamic):Void
+	{
+		if (judge == null)
+			return;
+		var laneValue:Null<Int> = Std.parseInt(Std.string(Reflect.field(judge, "lane")));
+		var lane:Int = laneValue == null ? -1 : Std.int(Math.abs(laneValue));
+		var strumTime:Float = Std.parseFloat(Std.string(Reflect.field(judge, "strumTime")));
+		var isSustain:Bool = Reflect.field(judge, "isSustain") == true;
+		var rating:String = Std.string(Reflect.field(judge, "rating"));
+
+		if (lane >= 0 && opponentStrums != null && lane < opponentStrums.members.length)
+		{
+			var strum:StrumNote = opponentStrums.members[lane];
+			if (strum != null)
+			{
+				strum.playAnim(rating == "shit" ? 'static' : 'confirm', true);
+				strum.resetAnim = 0;
+			}
+		}
+
+		var found:Note = null;
+		if (notes != null)
+		{
+			for (note in notes.members)
+			{
+				if (note == null || !note.alive || note.mustPress)
+					continue;
+				if (note.isSustainNote != isSustain)
+					continue;
+				if (Math.abs(note.strumTime - strumTime) > 100)
+					continue;
+				var noteLane:Int = Std.int(Math.abs(note.noteData)) % Note.ammo[mania];
+				if (noteLane != lane % Note.ammo[mania])
+					continue;
+				found = note;
+				break;
+			}
+		}
+		if (found == null)
+			return;
+
+		if (rating == "shit")
+		{
+			// 远端漏键: 只移除音符/表现 miss, 不改本地血量与成绩。
+			recycleNote(found);
+		}
+		else
+		{
+			opponentNoteHit(found);
+		}
+	}
+	#end
+	/** 生成联机成绩对象 (结算页与异步排名共用)。实时模式不带大回放, 避免超过游戏通道消息上限。 */
+	function buildOnlineScore(?includeReplay:Bool = true):Dynamic
+	{
+		ProfileStore.ensureLoaded();
+		var replayJson:String = "";
+		if (includeReplay && replayExam != null && replayExam.getFrameData().length > 0)
+			replayJson = haxe.Json.stringify({frameData: Replay.framesToDynamic(replayExam.getFrameData())});
+		if (replayJson.length > 3 * 1024 * 1024)
+			replayJson = ""; // 超过异步消息上限时放弃回放, 成绩标记为未校验而不是断开连接
+		return {
+			deviceId: ProfileStore.deviceId,
+			nickname: ProfileStore.nickname,
+			avatar: ProfileStore.avatar,
+			score: songScore,
+			accuracy: Math.isNaN(ratingPercent) ? 0 : ratingPercent,
+			maxCombo: maxcombo,
+			misses: songMisses,
+			marvelous: marvelouses,
+			sick: sicks,
+			good: goods,
+			bad: bads,
+			shit: shits,
+			completed: true,
+			nps: songLength > 0 ? totalNotesHit / (songLength / 1000.0) : 0,
+			missTimes: NoteTime.copy(),
+			wrongLaneHits: wrongLaneTimes.copy(),
+			replayJson: replayJson
+		};
+	}
+
+	function onlineSubmitResult():Void
+	{
+		var client:GameClient = GameClient.instance;
+		if (client == null || !OnlineSession.active)
+			return;
+		if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_ASYNC)
+		{
+			OnlineSession.submitAsyncScore(buildOnlineScore(true));
+		}
+		else
+		{
+			var realtimeScore:Dynamic = buildOnlineScore(false);
+			// 先传回放再传成绩: 服务器以成绩消息触发 GAME_END 汇总,
+			// 保证最终排名广播时回放已经挂到该玩家记录上。
+			var replayUpload:Dynamic = buildOnlineScore(true);
+			if (replayUpload != null && replayUpload.replayJson != null && replayUpload.replayJson.length > 0)
+				client.send(SeiunProtocol.MSG_ASYNC_REPLAY_UPLOAD, SeiunProtocol.CHANNEL_ASYNC, {replayJson: replayUpload.replayJson});
+			// 反作弊已移除: 成绩一律由客户端上报, 服务器转发/汇总。
+			client.send(SeiunProtocol.MSG_GAME_RESULT, SeiunProtocol.CHANNEL_GAME, realtimeScore);
+			// 不再由房主单方面发 GAME_END: 服务器会等所有玩家提交成绩后
+			// 自动汇总并广播最终排名 (与 PsychOnline 的 playerEnded 收尾一致)。
+		}
+	}
+
+	#end
+
 
 		// Hold notes
 		public function keysCheck(?keyCount:Int, time:Float = -999999):Void
@@ -5805,7 +6538,7 @@ class PlayState extends MusicBeatState
 				for (i in 0...laneCount)
 				{
 					if (activeTailEnd[i] > 0 && holdArray[i]
-						&& Conductor.songPosition > activeTailEnd[i] + Conductor.safeZoneOffset * TAIL_WINDOW_MULT)
+						&& Conductor.songPosition > activeTailEnd[i] + Conductor.safeZoneOffset * tailWindowMult())
 						tailMiss(i, activeTailEnd[i], Conductor.songPosition);
 				}
 			}
@@ -5883,9 +6616,7 @@ class PlayState extends MusicBeatState
 		NoteTime.push(daNote.strumTime);
 		notes.forEachAlive(function(note:Note) {
 				if (daNote != note && daNote.mustPress && daNote.noteData == note.noteData && daNote.isSustainNote == note.isSustainNote && Math.abs(daNote.strumTime - note.strumTime) < 1) {
-					note.kill();
-					notes.remove(note, true);
-					note.destroy();
+					recycleNote(note);
 				}
 			});
 			combo = 0;
@@ -5915,6 +6646,12 @@ class PlayState extends MusicBeatState
 		songMisses++;
 		if (!replayMode && replayExam != null)
 			replayExam.recordJudgment(daNote.strumTime, daNote.noteData, 0, 'miss', daNote.isSustainNote);
+		#if ONLINE_ALLOWED
+		if (seiunOnline && !cpuControlled)
+			OnlineSession.sendLocalJudge(daNote.strumTime, Std.int(Math.abs(daNote.noteData)), "shit", 0, daNote.isSustainNote,
+				songScore, songMisses, maxcombo, ratingPercent, ratingName, ratingFC, 0, health);
+		#end
+
 		vocals.volume = 0;
 		vocalsPlayer.volume = 0;
 		if(!practiceMode) songScore -= 0;
@@ -5964,6 +6701,10 @@ class PlayState extends MusicBeatState
 				songMisses++;
 			}
 			totalPlayed++;
+			#if ONLINE_ALLOWED
+			if (seiunOnline)
+				wrongLaneTimes.push(Conductor.songPosition);
+			#end
 			RecalculateRating(true);
 
 			FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
@@ -6037,7 +6778,7 @@ class PlayState extends MusicBeatState
 		StrumPlayAnim(true, Std.int(Math.abs(note.noteData)), time);
 		note.hitByOpponent = true;
 
-		if (CompatEngine.isModern()) {
+if (CompatEngine.isModern()) {
 			// 0.7.3+/1.0.4: opponentNoteHitPre / goodNoteHitPre 回调
 			var preName:String = reverseNoteHit ? 'goodNoteHitPre' : 'opponentNoteHitPre';
 			var preResult:Dynamic = callOnLuas(preName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
@@ -6061,11 +6802,7 @@ class PlayState extends MusicBeatState
 		}
 		if(result != FunkinLua.Function_Stop && result != FunkinLua.Function_StopHScript && result != FunkinLua.Function_StopAll) callOnHScript(scriptName, [note]);
 		if (!note.isSustainNote)
-		{
-			note.kill();
-			notes.remove(note, true);
-			note.destroy();
-		}
+			recycleNote(note);
 		if (!ClientPrefs.data.opponentfe) {
 		for (i in 0...Note.ammo[mania]) {
 		setOpponentStrumStatic(i);
@@ -6074,9 +6811,38 @@ class PlayState extends MusicBeatState
 }
 	function invalidateNote(daNote:Note):Void
 	{
+		recycleNote(daNote);
+	}
+
+	/** 击杀 Note 并回收到本 state 的 notePool；不 remove、不 destroy，members 保持有界。 */
+	private function recycleNote(daNote:Note):Void
+	{
+		if (daNote == null || daNote.pooled) return;
+		if (daNote.scale == null) return; // 已 destroy 的壳直接丢弃
+
+		// 长条/长条头涉及 prevNote/nextNote 链，回池复用可能让后续 sustain 链到错误对象；
+		// 为绝对保证长条正确，长条相关 Note 不进入 per-state 池，直接销毁（由 safety cleanup 移除壳）。
+		if (daNote.isSustainNote || daNote.sustainLength > 0)
+		{
+			daNote.active = false;
+			daNote.visible = false;
+			daNote.kill();
+			daNote.destroy();
+			return;
+		}
+
+		var linkKey:Int = daNote.noteData + (daNote.mustPress ? 10000 : 0);
 		daNote.active = false;
 		daNote.visible = false;
 		daNote.kill();
+		if (daNote.resetForReuse())
+		{
+			// 简单 tap 回池后不再作为后续 Note 的 prevNote，避免复用后链到错误对象。
+			if (lastSpawnedNote.get(linkKey) == daNote)
+				lastSpawnedNote.remove(linkKey);
+			daNote.pooled = true;
+			notePool.push(daNote);
+		}
 	}
 
 public function setOpponentStrumStatic(direction:Int) {
@@ -6143,6 +6909,9 @@ function playHitsound():Void
 
 function goodNoteHit(note:Note, ?time:Float = -999999):Void
 {
+#if ONLINE_ALLOWED
+var onlineHitDiff:Float = 0;
+#end
 // osu! 尾判: 长条头部命中 → 注册活动长条; 尾段命中 → 长条完成
 if (!note.isSustainNote)
 	registerActiveHold(note);
@@ -6199,6 +6968,9 @@ if (!cpuControlled) {
 	var songPos:Float = Conductor.songPosition;
 	var rOffset:Float = ClientPrefs.data.ratingOffset;
 	var diff:Float = (recordedJ != null) ? recordedJ.hitDiff : (strumTime - songPos + rOffset);
+#if ONLINE_ALLOWED
+	onlineHitDiff = diff;
+#end
 
 	msTxtKade.text = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
 	msTxtKade.alpha = 1;
@@ -6213,7 +6985,7 @@ if (!cpuControlled) {
 }
 	}
 
-		if (!note.wasGoodHit)
+if (!note.wasGoodHit)
 		{
 			// 0.7.3+/1.0.4: goodNoteHitPre / opponentNoteHitPre 回调
 			if (CompatEngine.isModern()) {
@@ -6268,11 +7040,7 @@ if (!cpuControlled) {
 
 				note.wasGoodHit = true;
 				if (!note.isSustainNote)
-				{
-					note.kill();
-					notes.remove(note, true);
-					note.destroy();
-				}
+					recycleNote(note);
 				return;
 			}
 			if (!note.isSustainNote)
@@ -6353,7 +7121,16 @@ if (!cpuControlled) {
 					spr.playAnim('confirm', true);
 				}
 			}
-			note.wasGoodHit = true;
+						note.wasGoodHit = true;
+			#if ONLINE_ALLOWED
+			if (seiunOnline && !cpuControlled && OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
+			{
+				// 每次本地判定都广播当前分数/实时统计 (PsychOnline 的 addScore 等价物),
+				// 对手 HUD 因此能实时刷新, 而不是只有漏键时才更新一次。
+				OnlineSession.sendLocalJudge(note.strumTime, Std.int(Math.abs(note.noteData)), rating, onlineHitDiff, note.isSustainNote,
+					songScore, songMisses, maxcombo, ratingPercent, ratingName, ratingFC, 0, health);
+			}
+			#end
 			vocals.volume = 1;
 			vocalsPlayer.volume = 1;
 			vocalsOpponent.volume = 1;
@@ -6384,11 +7161,7 @@ if (!cpuControlled) {
 				callOnHScript(scriptName, [note]);
 
 			if (!note.isSustainNote)
-			{
-				note.kill();
-				notes.remove(note, true);
-				note.destroy();
-			}
+				recycleNote(note);
 		}
 		if (cpuControlled && !ClientPrefs.data.opponentfe) {
 			setgoodnoteStrumStatic(Std.int(Math.abs(note.noteData)));
@@ -6499,21 +7272,32 @@ if (!cpuControlled) {
 		if (NoteMs != null) NoteMs = [];
 		if (NoteTime != null) NoteTime = [];
 
-		// Return this song's notes to the pool. unspawnNotes uses a cursor
-		// (spawn only advances notesAddedCount), so it holds every note of
-		// the song exactly once; the group is just cleared (releaseToPool
-		// does the resource release).
+		// unspawnNotes 现在是轻量 PreloadedChartNote 数据，不持有 Note 对象。
 		if (unspawnNotes != null)
-		{
-			for (note in unspawnNotes)
-			{
-				if (note != null)
-					note.releaseToPool();
-			}
 			unspawnNotes = [];
-		}
+		lastSpawnedNote = new Map<Int, Note>();
+
+		// 销毁仍然存活的 Note；已 destroy 的壳直接移除。
 		if (notes != null)
+		{
+			var i:Int = notes.members.length - 1;
+			while (i >= 0) {
+				var note:Note = notes.members[i];
+				if (note != null) {
+					notes.remove(note, true);
+					if (note.scale != null)
+						note.destroy();
+				}
+				i--;
+			}
 			notes.clear();
+		}
+		notePool = [];
+
+		// 清空跨歌曲静态 Note 池，释放池中 Note 的动画/ColorSwap 等常驻内存。
+		if (Note.pool != null)
+			Note.pool.clear(function(note) { if (note != null && note.scale != null) note.destroy(); });
+
 		// 1.0.4: 清理溅射配置缓存, 防止跨谱面/换模组时串配置
 		NoteSplash.configs.clear();
 		if (eventNotes != null) eventNotes = [];
@@ -6525,7 +7309,12 @@ if (!cpuControlled) {
 			stageBackdrop = null;
 		}
 
+
 		instance = null;
+		#if ONLINE_ALLOWED
+		onlineRestoreRoomSettings();
+		#end
+
 		super.destroy();
 	}
 

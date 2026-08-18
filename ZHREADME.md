@@ -43,6 +43,12 @@ lime build windows
 
 把 mod 放进 `mods/`，参见 `Modding.md`。
 
+## 联机
+
+- 桌面构建默认启用局域网联机（主菜单 → 联机）。
+- 离线构建：`art\build_x64_offline.bat`（`-D SEIUN_NO_ONLINE`），不编译联机代码、不发起任何网络请求。
+- 专用服务器：`server\start_server.bat`，详见 `docs/online-usage.md` 与 `docs/multiplayer-protocol.md`。
+
 ## 制作人员
 
 - **mo_hong** — 修改与中文翻译

@@ -839,10 +839,20 @@ class HScript
 		});
 
 		// State reference (allows hscript to access current MusicBeatState/MusicBeatSubstate)
+		// NOTE: FlxG.state resolves to FlxG.game._state; during early init (before
+		// FlxGame is constructed, e.g. HScript.initialize() runs before addChild(new FlxGame))
+		// FlxG.game is null, which is a native SIGSEGV that Haxe try/catch cannot trap.
+		// Guard the whole chain explicitly.
 		try {
-			set('state', (FlxG.state != null) ? FlxG.state : this);
+			var __stateRef:Dynamic = null;
+			@:privateAccess
+			if (FlxG.game != null) __stateRef = FlxG.game._state;
+			set('state', (__stateRef != null) ? __stateRef : this);
 		} catch (e:Dynamic) { handleError('setupVariables → state: $e'); return; }
-		set('getState', function():Dynamic return FlxG.state);
+		set('getState', @:privateAccess function():Dynamic {
+			if (FlxG.game == null) return null;
+			return FlxG.game._state;
+		});
 
 		// Lua bridge (independent per-state, uses FunkinLua)
 		#if LUA_ALLOWED

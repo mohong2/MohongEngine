@@ -90,12 +90,11 @@ class Main extends Sprite
 			
 			switch(mode) {
 				case 'borderless':
-					window.fullscreen = false;
+					// SDL3 下 fullscreen=true + borderless=true 才是“无边框全屏桌面模式”，
+					// 不切独占全屏，alt-tab 不会黑屏/模式切换。
+					FlxG.fullscreen = true;
+					window.fullscreen = true;
 					window.borderless = true;
-					window.width = Lib.current.stage.stageWidth;
-					window.height = Lib.current.stage.stageHeight;
-					window.x = 0;
-					window.y = 0;
 				case 'fullscreen':
 					window.fullscreen = true;
 				default:
@@ -192,6 +191,13 @@ class Main extends Sprite
 
 		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, updateFramerate, drawFramerate, skipSplash, startFullscreen));
 
+		// 每次状态切换时，旧 state 已 destroy、FlxG.bitmap.clearCache() 已执行，
+		// 这里统一清掉上一状态残留的 Paths 图片缓存，避免反复进出关卡内存只增不减。
+		FlxG.signals.preStateCreate.add(function(_) {
+			Paths.clearStoredMemory();
+			Paths.clearUnusedMemory();
+		});
+
 		// Sync separateUpdateDraw (property setter handles timer + FlxG sync)
 		if (FlxG.game != null)
 			FlxG.game.separateUpdateDraw = ClientPrefs.data.separateUpdateDraw;
@@ -229,6 +235,16 @@ class Main extends Sprite
 				states.CrashCatcherState.lastCrashStack = stack;
 				states.CrashCatcherState.lastCrashPath = path;
 				states.CrashCatcherState.crashCount++;
+				#if ONLINE_ALLOWED
+				// 联机对局中崩溃: 非阻塞发送崩溃信号, 失败只写本地补报标记。
+				try
+				{
+					var stackHead:String = stack == null ? "" : stack.substr(0, 500);
+					online.client.CrashReporter.notifyCrash(msg, stackHead);
+				}
+				catch (crashNotifyError:Dynamic) {}
+				#end
+
 
 				// Show a native dialog first
 				var dialogTitle:String = Language.get("CrashCatcher.dialog.title", "Game Crashed!");
@@ -347,6 +363,11 @@ class Main extends Sprite
 					return;
 				}
 			}
+			#if ONLINE_ALLOWED
+			// 关闭游戏时同步关闭内置托管服务器, 房间随房主退出而关闭。
+			online.server.EmbeddedServerRunner.stop();
+			#end
+
 
 			#if windows
 			// 未启用关闭动画：直接放行原生关闭
@@ -729,6 +750,15 @@ class Main extends Sprite
 		CrashCatcherState.lastCrashStack = stackLines;
 		CrashCatcherState.lastCrashPath = path;
 		CrashCatcherState.crashCount++;
+
+		#if ONLINE_ALLOWED
+		try
+		{
+			online.client.CrashReporter.notifyCrash(Std.string(e.error), stackLines);
+		}
+		catch (crashNotifyError:Dynamic) {}
+		#end
+
 
 		// Show a native dialog first to notify the user before entering recovery UI
 		var dialogTitle:String = Language.get("CrashCatcher.dialog.title", "Game Crashed!");

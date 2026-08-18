@@ -152,6 +152,24 @@ class CrashCatcherState extends MusicBeatState
 		subtitleTxt.setFormat(Paths.languageFont(), 16, FlxColor.GRAY, CENTER);
 		subtitleTxt.alpha = 0;
 		add(subtitleTxt);
+		#if ONLINE_ALLOWED
+		// 联机崩溃提示 (仅一行, 不打断现有恢复流程)
+		var onlineNotice:FlxText = new FlxText(0, titleAreaY + 2, FlxG.width,
+			(online.client.OnlineSession.active && online.client.CrashReporter.lastAttemptMade)
+				? (online.client.CrashReporter.lastAttemptSucceeded
+					? Language.get("CrashCatcher.onlineSent", "联机对局中崩溃，已尝试通知房主")
+					: Language.get("CrashCatcher.onlinePending", "未能发送通知，将在下次启动时补报"))
+				: "", 12);
+		onlineNotice.setFormat(Paths.languageFont(), 12, FlxColor.fromRGB(255, 210, 130), CENTER);
+		onlineNotice.alpha = 0;
+		add(onlineNotice);
+		if (onlineNotice.text.length > 0)
+		{
+			titleAreaY += 22;
+			FlxTween.tween(onlineNotice, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.2});
+		}
+		#end
+
 
 		// -- Crash count indicator (if > 1) --
 		if (crashCount > 1)
@@ -735,6 +753,14 @@ class CrashCatcherState extends MusicBeatState
 		FlxG.sound.play(Paths.sound('cancelMenu'));
 
 		new FlxTimer().start(fadeTime + 0.05, function(_) {
+			#if ONLINE_ALLOWED
+			// 崩溃恢复返回主菜单时, 必须清掉联机会话, 避免污染下一局离线成绩。
+			online.client.OnlineSession.clear();
+			online.server.EmbeddedServerRunner.stop();
+			PlayState.seiunOnline = false;
+			PlayState.seiunSkipLocalCountdown = false;
+			PlayState.startOnTime = 0;
+			#end
 			WeekData.loadTheFirstEnabledMod();
 			PlayState.changedDifficulty = false;
 			PlayState.replayMode = false;

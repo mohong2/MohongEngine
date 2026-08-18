@@ -121,6 +121,8 @@ class SUtil
 		} catch (e:Dynamic) {}
 		#elseif ios
 		daPath = LimeSystem.documentsDirectory;
+		#else
+		daPath = Sys.getCwd();
 		#end
 
 		return daPath;

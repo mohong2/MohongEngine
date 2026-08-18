@@ -148,6 +148,12 @@ class Note extends FlxSprite {
     public var applyLaneColorShader:Bool = true;
     public var inEditor:Bool = false;
 
+    /** Index into PlayState.unspawnNotes (PreloadedChartNote), used for data-based sustain tail lookup. */
+    public var sourceIndex:Int = -1;
+
+    /** True while this Note sits in PlayState.notePool (per-state recycling). */
+    public var pooled:Bool = false;
+
     public var animSuffix:String = '';
     public var gfNote:Bool = false;
     public var earlyHitMult:Float = 0.5;
@@ -550,8 +556,10 @@ class Note extends FlxSprite {
     }
 
     // ── Note pool (mohong.ObjectPool) ──
-    // borrow: PlayState.generateSong -> Note.fromPool (same as new Note)
-    // return: PlayState.destroy -> note.releaseToPool
+    // 当前 PlayState 已改为懒物化：spawn 时直接 new Note，destroy 时清空池。
+    // 保留 fromPool/releaseToPool 作为底层复用能力（mod/编辑器/未来优化可选用）。
+    // borrow: Note.fromPool (same as new Note)
+    // return: note.releaseToPool
     // Reuse only happens between songs (scripts already stopped), so
     // in-song object identity is unchanged for mods.
 
@@ -563,7 +571,8 @@ class Note extends FlxSprite {
         if (pool == null)
         {
             pool = new ObjectPool<Note>(
-                function() return new Note(0, 0, null, false, false, true),
+                // noteData = -1：池中空闲 Note 不创建 ColorSwap/RGBShader，真正借出时 reinitForPool 会按实际 noteData 创建。
+                function() return new Note(0, -1, null, false, false, true),
                 null, // release-side cleanup lives in releaseToPool
                 null,
                 16384
@@ -588,6 +597,8 @@ class Note extends FlxSprite {
     function reinitForPool(strumTime:Float, noteData:Int, prevNote:Note, sustainNote:Bool, inEditor:Bool, skipTexture:Bool):Void
     {
         revive();
+        sourceIndex = -1;
+        pooled = false;
 
         x = 0;
         y = 0;
@@ -620,13 +631,39 @@ class Note extends FlxSprite {
      * (graphic=null drops useCount, same accounting as the zombie guard)
      * and keep the FlxSprite structure intact.
      */
-    public function releaseToPool():Void
+    /**
+     * Reset a Note for reuse without returning it to the static pool.
+     * Used by PlayState's per-state notePool (H-Slice style recycling).
+     * @return false if the Note was already fully destroyed and cannot be reused.
+     */
+    public function resetForReuse():Bool
     {
         // A fully-destroyed instance can't revive (scale/offset/origin are
         // null and updateHitbox/loadGraphic would crash). Notes killed
         // mid-song fall here; just drop them for GC.
         if (scale == null)
-            return;
+            return false;
+
+        // ── reset FlxSprite transform state (same as reinitForPool) ──
+        x = 0;
+        y = 0;
+        scale.set(1, 1);
+        offset.set(0, 0);
+        origin.set(0, 0);
+        flipX = false;
+        flipY = false;
+        angle = 0;
+        alpha = 1;
+        visible = true;
+        color = 0xFFFFFFFF;
+        velocity.set(0, 0);
+        acceleration.set(0, 0);
+        drag.set(0, 0);
+        angularVelocity = 0;
+        angularDrag = 0;
+        scrollFactor.set(1, 1);
+        bakedRotationAngle = 0;
+        blend = BlendMode.NORMAL;
 
         // ── clear Note-level state (setupNoteData redoes most of it) ──
         extraData.clear();
@@ -641,6 +678,7 @@ class Note extends FlxSprite {
         noteSplashSat = 0;
         noteSplashBrt = 0;
         noteType = null;
+        @:bypassAccessor texture = null;
         eventName = '';
         eventVal1 = '';
         eventVal2 = '';
@@ -648,6 +686,8 @@ class Note extends FlxSprite {
         rating = 'unknown';
         ratingMod = 0;
         ratingDisabled = false;
+        sourceIndex = -1;
+        pooled = false;
         spawned = false;
         wasGoodHit = false;
         hitByOpponent = false;
@@ -679,17 +719,29 @@ class Note extends FlxSprite {
 
         // ── release render resources (keep the FlxSprite structure) ──
         if (animation != null)
+        {
             animation.curAnim = null;
+            animation.destroyAnimations();
+        }
         frames = null;
         graphic = null;      // set_graphic: oldGraphic.useCount--
         _frame = null;
         _frameGraphic = null;
         clipRect = null;
         shader = null;
+        colorSwap = null;
+        rgbShader = null;
         // colorTransform/useColorTransform are managed by FlxSprite.set_color;
         // the color reset in reinitForPool restores the default.
 
         kill();
+        return true;
+    }
+
+    public function releaseToPool():Void
+    {
+        if (!resetForReuse())
+            return;
         ensurePool().release(this);
     }
 
@@ -943,15 +995,13 @@ class Note extends FlxSprite {
             shader = colorSwap.shader;
         }
         // 0.7.3/1.0.4 兼容: 重新绑定轨道色板 (池化复用/换 k 值后轨道色可能变化)。
-        // 先设 fallback 再 rebind, 保证 rebind 把 owner.shader 还原到 colorSwap。
-        rgbShader.fallbackShader = colorSwap != null ? colorSwap.shader : null;
-        rgbShader.forceDisabled = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
-        // 多k: 用该 Note 自身的 mania 快照找色板 (谱面中途 Change Mania 时,
-        // PlayState.mania 是播放头当前 k, 可能与这条 Note 所属段的 k 不同)。
+        // 先确保 rgbShader 存在，再设 fallback/rebind，避免池化复用 releaseToPool 置空后空引用。
         if (rgbShader == null)
             rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(chartNoteData.noteData, mania));
         else
             rgbShader.rebind(initializeGlobalRGBShader(chartNoteData.noteData, mania));
+        rgbShader.fallbackShader = colorSwap != null ? colorSwap.shader : null;
+        rgbShader.forceDisabled = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
         noteColorOverride = null;
         customCharAnim = null;
 
@@ -962,7 +1012,6 @@ class Note extends FlxSprite {
         else if(tx.length > 0) targetTexture = tx;
 
         animation.curAnim = null;
-        reloadNote('', targetTexture);
         this.texture = targetTexture;
 
         noteType = chartNoteData.noteType;

@@ -18,6 +18,12 @@ import flixel.tweens.FlxTween;
 import flixel.tweens.FlxEase;
 import flixel.math.FlxMath;
 
+#if ONLINE_ALLOWED
+import online.client.GameClient;
+import online.client.OnlineSession;
+import online.shared.SeiunProtocol;
+#end
+
 class PauseSubState extends MusicBeatSubstate
 {
 	public static var entries:ScoreEntry;
@@ -51,6 +57,9 @@ class PauseSubState extends MusicBeatSubstate
 	var selectionIndicator:FlxSprite;
 	var slideGroup:FlxSpriteGroup;
 	var indicatorTween:FlxTween;
+	#if ONLINE_ALLOWED
+	var onlineNoticeText:FlxText;
+	#end
 
 	// 3D perspective properties
 	var perspAngleX:Float = 0;
@@ -97,8 +106,19 @@ class PauseSubState extends MusicBeatSubstate
 		}
 		
 		#if (TOUCH_CONTROLS || desktop) 
-		menuItemsOG.insert(2, 'Chart Editor');
+		if(!PlayState.seiunOnline)
+			menuItemsOG.insert(2, 'Chart Editor');
 		#end
+		#if ONLINE_ALLOWED
+		if (PlayState.seiunOnline)
+		{
+			menuItemsOG.remove('Restart Song');
+			menuItemsOG.remove('Change Difficulty');
+			menuItemsOG.insert(1, 'Resume Online');
+			menuItemsOG.remove('Resume');
+		}
+		#end
+
 		
 		menuItems = menuItemsOG;
 
@@ -304,6 +324,32 @@ class PauseSubState extends MusicBeatSubstate
 		FlxTween.tween(slideGroup.scale, {x: 1, y: 1}, 0.55, {ease: FlxEase.circOut});
 
 		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+		#if ONLINE_ALLOWED
+		if (PlayState.seiunOnline)
+		{
+			// 区分专用服务器 / 局域网托管 (专用服务器不再显示"局域网")。
+			var onlineMsg:String = OnlineSession.dedicated
+				? Language.get('online.pauseRoomDedicated', '专用服务器房间') + " " + OnlineSession.roomCode
+				: Language.get('online.pauseRoomLan', '局域网房间') + " " + OnlineSession.roomCode;
+			// 实时对战: 对方暂停时明确提示 (双方都在暂停中, 任何一方恢复都会继续)。
+			if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+				&& OnlineSession.pauseNickname != null && OnlineSession.pauseNickname.length > 0)
+				onlineMsg += " | " + Language.get('online.pausedByRemote', '对方 {name} 暂停了游戏，双方已暂停')
+					.replace('{name}', OnlineSession.pauseNickname);
+			// 暂停策略: 仅房主可暂停的房间, 非房主提示等待房主恢复。
+			if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+				&& PlayState.onlinePausePolicy() == online.shared.OnlineTypes.OnlineConst.PAUSE_HOST_ONLY
+				&& !OnlineSession.isHost)
+				onlineMsg += " | " + Language.get('online.pauseHostOnlyWait', '仅房主可暂停，等待房主恢复');
+			if (OnlineSession.lastDisconnectMessage.length > 0)
+				onlineMsg += " | " + OnlineSession.lastDisconnectMessage;
+			onlineNoticeText = new FlxText(0, FlxG.height - 42, FlxG.width, onlineMsg, 14);
+			onlineNoticeText.setFormat(Paths.languageFont(), 14, FlxColor.fromRGB(255, 210, 120), CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			onlineNoticeText.scrollFactor.set();
+			add(onlineNoticeText);
+		}
+		#end
+
 		
 		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A);
@@ -336,6 +382,46 @@ class PauseSubState extends MusicBeatSubstate
 	override function update(elapsed:Float)
 	{
 		cantUnpause -= elapsed;
+		#if ONLINE_ALLOWED
+		if (PlayState.seiunOnline && GameClient.instance != null)
+		{
+			var gc:GameClient = GameClient.instance;
+			gc.update(elapsed);
+			var i:Int = 0;
+			while (i < gc.events.length)
+			{
+				var ev = gc.events[i];
+				if (ev.type == SeiunProtocol.MSG_GAME_RESUME && ev.channel == SeiunProtocol.CHANNEL_GAME
+					&& ev.data != null && ev.data.id != OnlineSession.selfId)
+				{
+					gc.events.remove(ev);
+					closeWithSlideAnimation();
+					return;
+				}
+				if (ev.type == SeiunProtocol.MSG_ROOM_ANNOUNCE && ev.data != null)
+				{
+					var notice:String = Std.string(Reflect.field(ev.data, "text"));
+					if (notice.indexOf("房主退出") >= 0 || notice.indexOf("房间已关闭") >= 0 || notice.indexOf("房主断开") >= 0)
+					{
+						gc.events.remove(ev);
+						leaveOnlineToMenu(notice);
+						return;
+					}
+				}
+				if (ev.type == SeiunProtocol.MSG_ERROR && ev.data != null)
+				{
+					var msg:String = ev.data.message == null ? "" : Std.string(ev.data.message);
+					if (msg.indexOf("移出房间") >= 0 || msg.indexOf("请出服务器") >= 0 || msg.indexOf("封禁") >= 0)
+					{
+						gc.events.remove(ev);
+						leaveOnlineToMenu(msg);
+						return;
+					}
+				}
+				i++;
+			}
+		}
+		#end
 		if (pauseMusic.volume < 0.5)
 			pauseMusic.volume += 0.01 * elapsed;
 
@@ -455,7 +541,25 @@ class PauseSubState extends MusicBeatSubstate
 
 		switch (daSelected)
 		{
-			case "Resume":
+			case "Resume", "Resume Online":
+				#if ONLINE_ALLOWED
+				if (PlayState.seiunOnline)
+				{
+					OnlineSession.pauseNickname = "";
+					// 暂停策略: 仅房主/禁止暂停时, 非房主不能恢复 (防止本地恢复造成两端解同步)。
+					if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+						&& GameClient.instance != null && PlayState.onlineCanPauseLocally())
+						GameClient.instance.send(SeiunProtocol.MSG_GAME_RESUME, SeiunProtocol.CHANNEL_GAME, {at: Date.now().getTime()});
+					else
+					{
+						FlxG.sound.play(Paths.sound('cancelMenu'));
+						if (onlineNoticeText != null)
+							onlineNoticeText.text = Language.get('online.pauseHostOnlyWait', '仅房主可以暂停/恢复，等待房主操作');
+						return;
+					}
+				}
+				#end
+
 				closeWithSlideAnimation();
 			case 'Change Difficulty':
 				if (PlayState.replayMode)
@@ -516,6 +620,28 @@ class PauseSubState extends MusicBeatSubstate
 			case "Exit to menu":
 				PlayState.deathCounter = 0;
 				PlayState.seenCutscene = false;
+			#if ONLINE_ALLOWED
+			if (PlayState.seiunOnline)
+			{
+				var wasHost:Bool = OnlineSession.isHost;
+				if (GameClient.instance != null)
+				{
+					GameClient.instance.send(SeiunProtocol.MSG_BYE, SeiunProtocol.CHANNEL_CONTROL, {});
+					GameClient.instance.flush();
+					GameClient.instance.disconnect(false);
+				}
+				if (wasHost)
+					online.server.EmbeddedServerRunner.stop();
+				OnlineSession.clear();
+				PlayState.seiunOnline = false;
+				PlayState.seiunSkipLocalCountdown = false;
+				PlayState.startOnTime = 0;
+				PlayState.replayMode = false;
+				MusicBeatState.switchState(new states.MainMenuState());
+				return;
+			}
+			#end
+
 
 				Paths.currentModDirectory = MainMenuState.selectedModFolder;
 				if(PlayState.isStoryMode) {
@@ -676,6 +802,24 @@ class PauseSubState extends MusicBeatSubstate
 		FlxTween.tween(bg, {alpha: 0}, 0.4, {ease: FlxEase.quartIn});
 		FlxTween.tween(acrylicOverlay, {alpha: 0}, 0.4, {ease: FlxEase.quartIn});
 	}
+
+	#if ONLINE_ALLOWED
+	/** 联机房间已关闭/被移出: 断开连接并回到联机主界面 (暂停菜单里也要能退出)。 */
+	function leaveOnlineToMenu(reason:String):Void
+	{
+		if (reason != null && reason.length > 0)
+			OnlineSession.recordDisconnect(reason);
+		if (GameClient.instance != null)
+			GameClient.instance.disconnect(true);
+		OnlineSession.clear();
+		PlayState.seiunOnline = false;
+		PlayState.seiunSkipLocalCountdown = false;
+		PlayState.startOnTime = 0;
+		PlayState.replayMode = false;
+		close();
+		MusicBeatState.switchState(new online.states.OnlineState());
+	}
+	#end
 
 	function deleteSkipTimeText()
 	{

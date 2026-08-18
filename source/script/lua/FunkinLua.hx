@@ -1640,7 +1640,12 @@ class FunkinLua {
 			if(!PlayState.instance.variables.exists(variableToSave))
 			{
 				if(args == null) args = [];
-				var myType:Dynamic = Type.resolveClass(className);
+				var resolvedName:String = className;
+				if(className == 'objects.Character' || className == 'Character')
+				{
+					resolvedName = 'Character';
+				}
+				var myType:Dynamic = Type.resolveClass(resolvedName);
 				if(myType == null)
 				{
 					luaTrace('createInstance: Class "' + className + '" not found!', false, false, FlxColor.RED);
@@ -4758,7 +4763,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 	}
 
 	public function luaTrace(text:String, ignoreCheck:Bool = false, deprecated:Bool = false, color:FlxColor = FlxColor.WHITE) {
-		#if LUA_ALLOWED
+		/*#if LUA_ALLOWED
 		if(ignoreCheck || getBool('luaDebugMode')) {
 			if(deprecated && !getBool('luaDeprecatedWarnings')) {
 				return;
@@ -4773,7 +4778,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 				cast(curState, MusicBeatSubstate).addTextToDebug(text, color);
 			TraceManager.info('trace.lua.luaTrace', '{}', [text]);
 		}
-		#end
+		#end*/
 	}
 
 	function getErrorMessage(status:Int):String {

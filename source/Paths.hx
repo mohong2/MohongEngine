@@ -74,6 +74,35 @@ class Paths
 	 *  the smaller maxCachedAssets instead. */
 	public static var allowGraphicAutoFree:Bool = false;
 
+	/**
+	 * 从 OpenFL 资源缓存取 BitmapData 后立刻从 OpenFL 缓存移除。
+	 * FlxGraphic 自己会持有这份 BitmapData，OpenFL 再留一份引用只会让图片
+	 * 在 FlxGraphic 销毁后仍无法释放，造成“同一张图内存多份”。
+	 */
+	static function getBitmapDataOnce(file:String):BitmapData
+	{
+		var bmp:BitmapData = null;
+		#if sys
+		// 优先直接走文件系统，避免 OpenFL 资产缓存再保留一份解码后的 BitmapData。
+		var fsPath:String = file;
+		if (fsPath.indexOf(':') > 0 && !fsPath.startsWith('assets/'))
+			fsPath = fsPath.substring(fsPath.indexOf(':') + 1);
+		if (FileSystem.exists(fsPath))
+			bmp = BitmapData.fromFile(fsPath);
+		#end
+		if (bmp == null && OpenFlAssets.exists(file, IMAGE))
+			bmp = OpenFlAssets.getBitmapData(file);
+		if (bmp != null)
+		{
+			try
+			{
+				openfl.Assets.cache.removeBitmapData(file);
+			}
+			catch (e:Dynamic) {}
+		}
+		return bmp;
+	}
+
 	/// haya I love you for the base cache dump I took to the max
 	/**
 	 * Remove a FlxGraphic from every cache (FlxG bitmap cache + currentTrackedAssets)
@@ -219,6 +248,24 @@ class Paths
 
 	// define the locally tracked assets
 	public static var localTrackedAssets:Array<String> = [];
+	static var localTrackedAssetSet:Map<String, Bool> = new Map<String, Bool>();
+
+	/** Record a key as used by the current state, deduplicated to avoid unbounded string-array growth. */
+	static function trackLocalAsset(key:String):Void
+	{
+		if (key == null || localTrackedAssetSet.exists(key)) return;
+		localTrackedAssetSet.set(key, true);
+		localTrackedAssets.push(key);
+	}
+
+	/** Remove a key from the current-state tracking (keeps the dedup set in sync). */
+	public static function untrackLocalAsset(key:String):Void
+	{
+		if (key == null) return;
+		localTrackedAssets.remove(key);
+		localTrackedAssetSet.remove(key);
+	}
+
 	public static function clearStoredMemory(?cleanUnused:Bool = false) {
 		// clear anything not in the tracked assets list
 		var cacheKeys:Array<String> = [];
@@ -243,6 +290,7 @@ class Paths
 		}
 		// flags everything to be cleared out next unused memory clear
 		localTrackedAssets = [];
+		localTrackedAssetSet = new Map<String, Bool>();
 
 		// Clear atlas cache on mod/state change.
 		clearAtlasFramesCache();
@@ -464,7 +512,7 @@ class Paths
 			{
 				if (!currentTrackedSounds.exists(file))
 					currentTrackedSounds.set(file, snd);
-				localTrackedAssets.push(songKey);
+				trackLocalAsset(songKey);
 				return currentTrackedSounds.get(file);
 			}
 		}
@@ -555,7 +603,7 @@ class Paths
 			var cached:FlxGraphic = currentTrackedAssets.get(file);
 			if (isGraphicAlive(cached))
 			{
-				localTrackedAssets.push(file);
+				trackLocalAsset(file);
 				return cached;
 			}
 			currentTrackedAssets.remove(file); // zombie — force a fresh load
@@ -579,7 +627,7 @@ class Paths
 				var cached:FlxGraphic = currentTrackedAssets.get(file);
 				if (isGraphicAlive(cached))
 				{
-					localTrackedAssets.push(file);
+					trackLocalAsset(file);
 					return cached;
 				}
 				currentTrackedAssets.remove(file); // zombie — force a fresh load
@@ -598,14 +646,14 @@ class Paths
 					var altCached:FlxGraphic = currentTrackedAssets.get(altKey);
 					if (isGraphicAlive(altCached))
 					{
-						localTrackedAssets.push(altKey);
+						trackLocalAsset(altKey);
 						return altCached;
 					}
 					currentTrackedAssets.remove(altKey);
 				}
 
 				if (OpenFlAssets.exists(file, IMAGE))
-					bitmap = OpenFlAssets.getBitmapData(file);
+					bitmap = getBitmapDataOnce(file);
 			}
 			#if sys
 			// 直接文件系统兜底：完全不依赖 manifest 注册（覆盖 dev 运行、打包后 manifest 缺项、
@@ -647,7 +695,7 @@ class Paths
 	static var _missingPlaceholder:FlxGraphic = null;
 	static function getMissingPlaceholder():FlxGraphic
 	{
-		if (_missingPlaceholder == null)
+		if (_missingPlaceholder == null || !isGraphicAlive(_missingPlaceholder))
 		{
 			var bmp:BitmapData = new BitmapData(16, 16, true, 0xFFFF00FF);
 			_missingPlaceholder = FlxGraphic.fromBitmapData(bmp, false, '__missing_image_placeholder__');
@@ -695,7 +743,7 @@ class Paths
 				var cached:FlxGraphic = currentTrackedAssets.get(file);
 				if (isGraphicAlive(cached))
 				{
-					localTrackedAssets.push(file);
+					trackLocalAsset(file);
 					return cached;
 				}
 				currentTrackedAssets.remove(file); // zombie — force a fresh load
@@ -706,12 +754,12 @@ class Paths
 				if (FileSystem.exists(file)) bitmap = BitmapData.fromFile(file);
 				else
 				#end {
-					if (OpenFlAssets.exists(file, IMAGE)) bitmap = OpenFlAssets.getBitmapData(file);
+					if (OpenFlAssets.exists(file, IMAGE)) bitmap = getBitmapDataOnce(file);
 				}
 			if (bitmap == null) return null;
 			}
 
-			localTrackedAssets.push(file);
+			trackLocalAsset(file);
 
 			// NOTE: The old "cache on GPU" path uploaded bitmaps to a Stage3D
 			// RectangleTexture and then disposed the CPU bitmap, wrapping the
@@ -1043,7 +1091,7 @@ class Paths
 				newGraphic.persist = true;
 				currentTrackedAssets.set(modKey, newGraphic);
 			}
-			localTrackedAssets.push(modKey);
+			trackLocalAsset(modKey);
 			return currentTrackedAssets.get(modKey);
 		}
 		#end
@@ -1056,7 +1104,7 @@ class Paths
 				newGraphic.persist = true;
 				currentTrackedAssets.set(path, newGraphic);
 			}
-			localTrackedAssets.push(path);
+			trackLocalAsset(path);
 			return currentTrackedAssets.get(path);
 		}
 		TraceManager.warn('trace.paths.nullReturn', 'oh no its returning null NOOOO');
@@ -1096,7 +1144,7 @@ class Paths
 			if(!currentTrackedSounds.exists(file)) {
 				currentTrackedSounds.set(file, Sound.fromFile(file));
 			}
-			localTrackedAssets.push(key);
+			trackLocalAsset(key);
 			return currentTrackedSounds.get(file);
 		}
 		#end
@@ -1115,7 +1163,7 @@ class Paths
 			currentTrackedSounds.set(gottenPath, OpenFlAssets.getSound(folder + getPath('$path/$key.$SOUND_EXT', SOUND, library)));
 		}
 		#end
-		localTrackedAssets.push(gottenPath);
+		trackLocalAsset(gottenPath);
 		return currentTrackedSounds.get(gottenPath);
 	}
 

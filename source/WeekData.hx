@@ -231,7 +231,19 @@ class WeekData {
 		#end
 
 		if(rawJson != null && rawJson.length > 0) {
-			return cast Json.parse(rawJson);
+			// tolerant parser (same as 0.7.3), so slightly broken JSON (missing commas etc.) still loads
+			try {
+				return cast tjson.TJSON.parse(rawJson);
+			}
+			catch(e:Dynamic) {
+				// strict fallback; if that also fails, skip the week instead of crashing the game
+				try {
+					return cast Json.parse(rawJson);
+				}
+				catch(e2:Dynamic) {
+					trace('WARNING: Could not parse week file "' + path + '", skipping it. Error: ' + e2);
+				}
+			}
 		}
 		return null;
 	}

@@ -183,7 +183,7 @@ class TitleState extends MusicBeatState
 		callOnLuas('onCreatePost', []);
 		#end
 
-		#if CHECK_FOR_UPDATES
+		#if (CHECK_FOR_UPDATES && ONLINE_ALLOWED)
 		if(ClientPrefs.data.checkForUpdates && !closedState) {
 			TraceManager.info('trace.title.checkUpdate', 'checking for update');
 			#if desktop
@@ -256,6 +256,16 @@ class TitleState extends MusicBeatState
 		{
 			locatedFiles = [];
 			maxLoopTimes = 0;
+			#if android
+			// Android: 原生 countMissingAssets() 是同步 JNI 全量扫 APK, 在低端
+			// 设备上会让首帧前卡死甚至 ANR (表现为"第一次能进, 第二次进不去")。
+			// 这里改成只读 .extract_version 版本标记快速判断; 真正需要补文件时
+			// 才进复制界面, 而实际复制由 extension-androidtools 在后台线程完成。
+			if (androidExtractionUpToDate())
+				continueNormalFlow();
+			else
+				initCopyState(false);
+			#else
 			checkExistingFiles();
 
 			if (maxLoopTimes > 0)
@@ -268,6 +278,7 @@ class TitleState extends MusicBeatState
 				// No files to copy, continue normal flow
 				continueNormalFlow();
 			}
+			#end
 		}
 		else
 		{
@@ -280,7 +291,8 @@ class TitleState extends MusicBeatState
 	}
 
 		#if mobile
-	function initCopyState():Void
+	/** @param showNotice Android 快速校验路径不弹"缺文件"对话框, 避免每次启动骚扰。 */
+	function initCopyState(?showNotice:Bool = true):Void
 	{
 		isCopying = true;
 		copyLoadedText = null;
@@ -295,9 +307,12 @@ class TitleState extends MusicBeatState
 		extractionResult = null;
 		#end
 
-		SUtil.showPopUp(
-			Language.get("TitleState.extractNotice", "Seems like you have some missing files that are necessary to run the game\nPress OK to begin the copy process"),
-			Language.get("TitleState.extractTitle", "Notice!"));
+		if (showNotice)
+		{
+			SUtil.showPopUp(
+				Language.get("TitleState.extractNotice", "Seems like you have some missing files that are necessary to run the game\nPress OK to begin the copy process"),
+				Language.get("TitleState.extractTitle", "Notice!"));
+		}
 
 		add(new FlxSprite(0, 0).makeGraphic(FlxG.width, FlxG.height, 0xffcaff4d));
 
@@ -386,6 +401,47 @@ class TitleState extends MusicBeatState
 		// Copy completed, proceed with normal flow
 		isCopying = false;
 		continueNormalFlow();
+	}
+	#end
+
+	#if android
+	/**
+		快速判断上一次启动是否已经完整解压过当前版本资源。
+		原生 .extract_version 内容为 "versionCode|versionName"; 标记存在且
+		版本名匹配就直接放行, 不再同步遍历整个 APK (解决部分设备第二次
+		启动时 countMissingAssets() 阻塞造成 ANR/黑屏的问题)。
+	**/
+	function androidExtractionUpToDate():Bool
+	{
+		try
+		{
+			var root:String = SUtil.getStorageDirectory();
+			var marker:String = root + '.extract_version';
+			if (!FileSystem.exists(marker))
+				return false;
+			// 至少确认关键资源目录已落盘, 防止用户手动删除 assets/ 后
+			// 仅凭标记误判为"已就绪"。
+			if (!FileSystem.exists(root + 'assets') || !FileSystem.isDirectory(root + 'assets'))
+				return false;
+			var stored:String = File.getContent(marker).trim();
+			var version:String = null;
+			try
+			{
+				var meta:Dynamic = Application.current.meta;
+				if (meta != null)
+					version = meta.get('version');
+			}
+			catch (e:Dynamic) {}
+			if (version == null || version.length == 0)
+				version = MainMenuState.psychEngineVersion;
+			if (version == null || version.length == 0)
+				return false;
+			return stored == version || stored.indexOf('|' + version) >= 0;
+		}
+		catch (e:Dynamic)
+		{
+			return false;
+		}
 	}
 	#end
 

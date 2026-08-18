@@ -10,8 +10,6 @@ export/*
 .vscode/*
 .claude/*
 .haxelib/*
-hxvlc-local/*
-!hxvlc-local/README-FORK.md
 *.code-workspace
 # Local history which shouldn't be shared.
 .history
@@ -23,6 +21,12 @@ hxvlc-local/*
 !.vscode/launch.json
 !.vscode/extensions.json
 
-# Android/iOS 模板里的 Gradle 构建缓存与 macOS 垃圾文件（不要提交）
 **/.gradle/
+**/app/build/
 .DS_Store
+
+# SeiunEngine local-only artifacts (not for commit)
+server/build/
+temp/
+server_data/
+seiun_online_profile.json

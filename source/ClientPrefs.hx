@@ -141,6 +141,8 @@ import sys.io.Process;
 	public var marvelousWindow:Int = 25;
 	/** osu! 尾判: 长条松键时按释放时机判定尾部 (开启后影响成绩/回放) */
 	public var osuTailJudgement:Bool = false;
+	/** osu! 尾判窗口倍率: 相对普通判定窗口的放宽倍数 (1.0 = 与普通音符一致, 默认 2.0)。 */
+	public var tailWindowMult:Float = 2.0;
 
 	public var saveReplayData:Bool = true;
 	public var lastNoteAnimation:Bool = false;
@@ -276,6 +278,7 @@ class ClientPrefs {
 	public static var marvelousRatings(get, never):Bool;
 	public static var marvelousWindow(get, never):Int;
 	public static var osuTailJudgement(get, never):Bool;
+	public static var tailWindowMult(get, never):Float;
 	public static var touchSwipeEnabled(get, never):Bool;
 	public static var separateUpdateDraw(get, never):Bool;
 
@@ -381,6 +384,7 @@ class ClientPrefs {
 	static inline function get_marvelousRatings() return data.marvelousRatings;
 	static inline function get_marvelousWindow() return data.marvelousWindow;
 	static inline function get_osuTailJudgement() return data.osuTailJudgement;
+	static inline function get_tailWindowMult() return data.tailWindowMult;
 	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
 	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
 
@@ -745,6 +749,10 @@ class ClientPrefs {
 					data.judgementPreset = 'Custom';
 			}
 		}
+
+		// osu! 尾判窗口倍率迁移: 老存档缺失/非法时用默认 2.0
+		if (Math.isNaN(data.tailWindowMult) || data.tailWindowMult <= 0 || data.tailWindowMult > 8)
+			data.tailWindowMult = 2.0;
 
 		if (Main.fpsVar != null) {
 			Main.fpsVar.visible = data.showFPS && !Main.useOldFPS;

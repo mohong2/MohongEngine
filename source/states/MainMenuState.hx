@@ -27,6 +27,10 @@ import sys.FileSystem;
 import sys.io.File;
 #end
 
+#if ONLINE_ALLOWED
+import online.states.OnlineState;
+#end
+
 using StringTools;
 
 class MainMenuState extends SeiunMenuState
@@ -35,7 +39,7 @@ class MainMenuState extends SeiunMenuState
 	public static var psychEngineVersion:String = '0.6.4';
 	public static var fnfGameVersion:String = '0.2.7.1';
 	public static var extrakeysVersion:String = '0.4.6';
-	public static var seiunOnlineVersion:String = 'Null';
+	public static var seiunOnlineVersion:String = #if ONLINE_ALLOWED '1.0' #else 'offline' #end;
 
 	public static var curSelected:Int = 0;
 
@@ -50,7 +54,7 @@ class MainMenuState extends SeiunMenuState
 		#if ACHIEVEMENTS_ALLOWED 'awards', #end
 		'credits',
 		#if !switch 'donate', #end
-		'online',
+		#if ONLINE_ALLOWED 'online', #end
 		'options'
 	];
 
@@ -496,8 +500,11 @@ class MainMenuState extends SeiunMenuState
 									case 'credits':
 										MenuFX.menuSwitch(new CreditsState());
 									case 'online':
-										Dialog.show('Seiun Online', 'Seiun Online is not available right now.');
+										#if ONLINE_ALLOWED
+										MenuFX.menuSwitch(new OnlineState());
+										#else
 										MenuFX.menuSwitch(new MainMenuState());
+										#end
 									case 'options':
 										// Options uses the standard transition so its
 										// images/UI settle in reliably on first entry.

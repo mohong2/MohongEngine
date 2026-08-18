@@ -20,6 +20,8 @@
     "option.marvelousWindow.desc": "Changes the amount of time you have\nfor hitting a \"Marvelous\" in milliseconds.\n(Manually editing sets Judgement Preset to Custom)",
     "option.osuTailJudgement": "osu! Tail Judgement",
     "option.osuTailJudgement.desc": "Judge Hold Note releases by tail timing (osu!mania style). Affects replays.",
+    "option.tailWindowMult": "Tail Judgement Window",
+    "option.tailWindowMult.desc": "Tail judgement window = normal judgement window × this multiplier.\nHigher = more forgiving hold releases. (0.5x - 5x)",
 
     "option.language.desc": "Select the game display language.",
     "option.luattf.desc": "Change the font of lua (if lua is not set).",

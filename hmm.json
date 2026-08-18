@@ -2,13 +2,15 @@
   "dependencies": [
     {
       "name": "lime",
-      "type": "haxelib",
-      "version": "8.0.1"
+      "type": "git",
+      "url": "https://github.com/mohong2/lime.git",
+      "ref": "master"
     },
     {
       "name": "openfl",
-      "type": "haxelib",
-      "version": "9.2.1"
+      "type": "git",
+      "url": "https://github.com/mohong2/openfl.git",
+      "ref": "master"
     },
     {
       "name": "flixel",

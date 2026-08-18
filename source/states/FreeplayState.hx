@@ -106,8 +106,8 @@ class FreeplayState extends SeiunMenuState
 
 	override function create()
 	{
-		//Paths.clearStoredMemory();
-		//Paths.clearUnusedMemory();
+		Paths.clearStoredMemory();
+		Paths.clearUnusedMemory();
 		instance = this;
 		persistentUpdate = true;
 		PlayState.isStoryMode = false;

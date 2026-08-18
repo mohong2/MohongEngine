@@ -181,6 +181,7 @@ class OptionsState extends MusicBeatState
 			'onChangeSickWindow'           => onChangeSickWindow,
 			'onChangeGoodWindow'           => onChangeGoodWindow,
 			'onChangeBadWindow'            => onChangeBadWindow,
+			'onChangeTailWindowMult'       => onChangeTailWindowMult,
 			'onChangeLanguage'             => onChangeLanguage,
 			'onChangeTraceConsole'         => onChangeTraceConsole,
 			'onChangeTraceConsoleLevel'    => onChangeTraceConsoleLevel,
@@ -1348,17 +1349,11 @@ class OptionsState extends MusicBeatState
 					Lib.application.window.borderless = false;
 
 				case 'borderless':
-					FlxG.fullscreen = false;
-					window.fullscreen = false;
+					// SDL3 下 fullscreen=true + borderless=true 才是“无边框全屏桌面模式”，
+					// 不切独占全屏，alt-tab 不会黑屏/模式切换。
+					FlxG.fullscreen = true;
+					window.fullscreen = true;
 					window.borderless = true;
-
-					var screenWidth:Int = Lib.current.stage.stageWidth;
-					var screenHeight:Int = Lib.current.stage.stageHeight;
-
-					window.width = screenWidth;
-					window.height = screenHeight;
-					window.x = 0;
-					window.y = 0;
 			}
 		} catch(e:Dynamic) {
 			TraceManager.error('trace.options.windowModeFailed', 'Failed to change window mode: {}', [e]);
@@ -1481,6 +1476,16 @@ class OptionsState extends MusicBeatState
 		backend.Ratings.syncWindows();
 		ClientPrefs.data.judgementPreset = 'Custom';
 		refreshJudgementPresetText();
+	}
+
+	function onChangeTailWindowMult()
+	{
+		var m:Float = ClientPrefs.data.tailWindowMult;
+		if (Math.isNaN(m) || m <= 0)
+			ClientPrefs.data.tailWindowMult = 2.0;
+		else if (m > 8)
+			ClientPrefs.data.tailWindowMult = 8;
+		ClientPrefs.saveSettings();
 	}
 
 	/** 刷新"判定预设"选项的显示文本 (改为 Custom 后立即更新) */

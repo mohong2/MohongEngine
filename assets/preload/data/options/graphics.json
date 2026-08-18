@@ -81,7 +81,7 @@
 		"variable": "windowedmode",
 		"type": "string",
 		"defaultValue": "windowed",
-		"options": ["windowed", "fullscreen"],
+		"options": ["windowed", "fullscreen", "borderless"],
 		"onChange": "onChangeWindowMode",
 		"platform": "desktop"
 	},

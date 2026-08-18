@@ -70,6 +70,10 @@ class PsychUIInputText extends FlxSpriteGroup
 	/** Corner radius for the input background. */
 	public var borderRadius:Int = 6;
 
+	
+	public var textOffsetX:Float = 1;
+	public var textOffsetY:Float = 1;
+
 	public function new(x:Float = 0, y:Float = 0, wid:Int = 100, ?text:String = '', size:Int = 8, ?font:String)
 	{
 		super(x, y);
@@ -682,6 +686,37 @@ class PsychUIInputText extends FlxSpriteGroup
 		selectIndex = -1;
 		caretIndex = 0;
 		updateCaret();
+	}
+	public function alignText():Void
+	{
+		if (textObj != null && textObj.exists)
+		{
+			textObj.x = x + textOffsetX;
+			textObj.y = y + textOffsetY;
+			updateCaret();
+		}
+	}
+
+	override function set_x(Value:Float):Float
+	{
+		var result:Float = super.set_x(Value);
+		if (textObj != null && textObj.exists)
+		{
+			textObj.x = x + textOffsetX;
+			textObj.y = y + textOffsetY;
+		}
+		return result;
+	}
+
+	override function set_y(Value:Float):Float
+	{
+		var result:Float = super.set_y(Value);
+		if (textObj != null && textObj.exists)
+		{
+			textObj.x = x + textOffsetX;
+			textObj.y = y + textOffsetY;
+		}
+		return result;
 	}
 
 	public function updateCaret()
