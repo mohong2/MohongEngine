@@ -232,6 +232,8 @@ jobs:
         run: haxelib run lime rebuild android -release -Dlime-sdl3
 
       - name: Compile Android
+        env:
+          _JAVA_OPTIONS: "-Xmx5g -XX:MaxMetaspaceSize=1g"
         run: haxelib run lime build android --app-version="$APP_VERSION-${{ github.run_id }}"
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
