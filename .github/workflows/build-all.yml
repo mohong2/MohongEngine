@@ -9,7 +9,10 @@ permissions:
 jobs:
   desktop:
     uses: ./.github/workflows/build-desktop.yml
+    secrets: inherit
   mobile:
     uses: ./.github/workflows/build-mobile.yml
+    secrets: inherit
   web:
     uses: ./.github/workflows/build-web.yml
+    secrets: inherit
