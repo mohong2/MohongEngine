@@ -58,31 +58,39 @@ lime build windows
 
 ## 制作人员
 
-- ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — 主要开发者和维护者，负责引擎的大量修改、性能优化、错误修复和中文本地化。还深入研究了无数指针和底层调试，确保稳定运行lol
+- ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — 主要开发者和维护者，负责引擎的大量修改、性能优化、错误修复和中文本地化。还深入研究了无数指针和底层调试，确保稳定运行 lol
+
 - ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — 旧引擎图标（MohongEngine）
 
-- **SeiunEngine 鸣谢名单：**
-  - ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — 为引擎提供了部分脚本设计方案并在开发引擎的这一段时间内一直提供支持     
-  - 
-  - ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — 为引擎找到了数不尽的bug，为引擎的稳定性和做出了重要贡献并在开发引擎的这一段时间内一直提供支持
-  
-- **Psych Engine 团队** — 基础引擎
-  - ![Shadow Mario](assets/preload/images/credits/shadowmario.png) Shadow Mario
-  - ![RiverOaken](assets/preload/images/credits/river.png) RiverOaken
-  - ![Yoshubs](assets/preload/images/credits/shubs.png) Yoshubs
-- 特别鸣谢：
-  - ![bbpanzu](assets/preload/images/credits/bb.png) bbpanzu
-  - ![shubs](assets/preload/images/credits/shubs.png) shubs
-  - ![SqirraRNG](assets/preload/images/credits/sqirra.png) SqirraRNG
-  - ![KadeDev](assets/preload/images/credits/kade.png) KadeDev
-  - ![iFlicky](assets/preload/images/credits/flicky.png) iFlicky
-  - ![PolybiusProxy](assets/preload/images/credits/proxy.png) PolybiusProxy
-  - ![Keoiki](assets/preload/images/credits/keoiki.png) Keoiki
-  - ![Smokey](assets/preload/images/credits/smokey.png) Smokey
-  - ![Nebula the Zorua](assets/preload/images/credits/nebula.png) Nebula the Zorua
-  
-- **Codename Engine 团队**（[CodenameCrew](https://github.com/CodenameCrew)）— 本引擎的 mod 系统参考了 Codename Engine 的 mod 格式（`pack.json`、`stateReplacements`/`substateReplacements`、谱面导入导出）。SeiunEngine **不是** Codename Engine 的分支，本仓库**不包含** Codename Engine 的任何源代码。Codename Engine 自身的条款请参阅 [Codename Engine 仓库](https://github.com/CodenameCrew/CodenameEngine)。
+### SeiunEngine 鸣谢名单
 
+- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — 为引擎提供了部分脚本设计方案，并在开发引擎的这一段时间内一直提供支持
+
+- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — 为引擎找到了数不尽的 bug，为引擎的稳定性做出了重要贡献，并在开发引擎的这一段时间内一直提供支持
+
+### Psych Engine 团队（基础引擎）
+
+- ![Shadow Mario](assets/preload/images/credits/shadowmario.png) **Shadow Mario**
+- ![RiverOaken](assets/preload/images/credits/river.png) **RiverOaken**
+- ![Yoshubs](assets/preload/images/credits/shubs.png) **Yoshubs**
+
+### 特别鸣谢
+
+- ![bbpanzu](assets/preload/images/credits/bb.png) **bbpanzu**
+- ![shubs](assets/preload/images/credits/shubs.png) **shubs**
+- ![SqirraRNG](assets/preload/images/credits/sqirra.png) **SqirraRNG**
+- ![KadeDev](assets/preload/images/credits/kade.png) **KadeDev**
+- ![iFlicky](assets/preload/images/credits/flicky.png) **iFlicky**
+- ![PolybiusProxy](assets/preload/images/credits/proxy.png) **PolybiusProxy**
+- ![Keoiki](assets/preload/images/credits/keoiki.png) **Keoiki**
+- ![Smokey](assets/preload/images/credits/smokey.png) **Smokey**
+- ![Nebula the Zorua](assets/preload/images/credits/nebula.png) **Nebula the Zorua**
+
+### Codename Engine 团队（[CodenameCrew](https://github.com/CodenameCrew)）
+
+本引擎的 Mod 系统参考了 Codename Engine 的 Mod 格式（`pack.json`、`stateReplacements`/`substateReplacements`、谱面导入导出）。  
+SeiunEngine **不是** Codename Engine 的分支，本仓库**不包含** Codename Engine 的任何源代码。  
+Codename Engine 自身的条款请参阅 [Codename Engine 仓库](https://github.com/CodenameCrew/CodenameEngine)。
 
 ## License
 
