@@ -281,6 +281,12 @@ jobs:
           find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
           ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
 
+      - name: Silence unused -stdlib=libc++ warning on macOS
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' \
+            -exec perl -0pi -e 's{(<flag value="-stdlib=libc\+\+" unless="STDLIBCPP" />)}{$1\n  <flag value="-Wno-unused-command-line-argument" if="HXCPP_CLANG" />}' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' -exec grep -q 'Wno-unused-command-line-argument' {} \;
+
       - name: Init discord_rpc submodules
         run: |
           cd ~/haxelib/discord_rpc/git
