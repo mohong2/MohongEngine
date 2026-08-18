@@ -32,12 +32,15 @@ You can also build via the Build workflow on GitHub Actions (manual trigger, pic
 
 ## Dependencies
 
-See `hmm.json`. Four of them are forks of mine:
+See `hmm.json`. Seven of them are forks of mine:
 
 - flixel
 - hxvlc
 - extension-androidtools
 - linc_luajit-rewriten
+- openfl
+- lime
+- hscript
 
 ### Classpath overrides (engine patches, tracked in `source/`)
 
@@ -65,11 +68,27 @@ Drop mods into `mods/`. See `Modding.md`.
 
 ## Credits
 
-- **mo_hong** — modifications and Chinese translation
-- **Li.tmc** — engine icon
-- **Psych Engine team** (Shadow Mario, RiverOaken, Yoshubs) — base engine
-- **Codename Engine team** ([CodenameCrew](https://github.com/CodenameCrew)) — this engine's mod system follows Codename Engine's mod format (`pack.json`, `stateReplacements`/`substateReplacements`, chart import/export). SeiunEngine is **not** a fork of Codename Engine and contains **no Codename Engine source code**. Please refer to the [Codename Engine repository](https://github.com/CodenameCrew/CodenameEngine) for their own terms.
-- Special thanks: bbpanzu, shubs, SqirraRNG, KadeDev, iFlicky, PolybiusProxy, Keoiki, Smokey, Nebula the Zorua
+- ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — Lead developer and maintainer, responsible for extensive engine modifications, performance optimizations, bug fixes, and Chinese localization. Also dove into countless pointers and low-level debugging to keep everything stable and running smoothly lol
+- ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — old engine icon（MohongEngine）
+- **Acknowledgements (鸣谢名单):**
+- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development.
+- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process.
+- 
+- **Psych Engine team** — base engine
+  - ![Shadow Mario](assets/preload/images/credits/shadowmario.png) Shadow Mario
+  - ![RiverOaken](assets/preload/images/credits/river.png) RiverOaken
+  - ![Yoshubs](assets/preload/images/credits/shubs.png) Yoshubs
+- Special thanks:
+  - ![bbpanzu](assets/preload/images/credits/bb.png) bbpanzu
+  - ![shubs](assets/preload/images/credits/shubs.png) shubs
+  - ![SqirraRNG](assets/preload/images/credits/sqirra.png) SqirraRNG
+  - ![KadeDev](assets/preload/images/credits/kade.png) KadeDev
+  - ![iFlicky](assets/preload/images/credits/flicky.png) iFlicky
+  - ![PolybiusProxy](assets/preload/images/credits/proxy.png) PolybiusProxy
+  - ![Keoiki](assets/preload/images/credits/keoiki.png) Keoiki
+  - ![Smokey](assets/preload/images/credits/smokey.png) Smokey
+  - ![Nebula the Zorua](assets/preload/images/credits/nebula.png) Nebula the Zorua
+  - **Codename Engine team** ([CodenameCrew](https://github.com/CodenameCrew)) — this engine's mod system follows Codename Engine's mod format (`pack.json`, `stateReplacements`/`substateReplacements`, chart import/export). SeiunEngine is **not** a fork of Codename Engine and contains **no Codename Engine source code**. Please refer to the [Codename Engine repository](https://github.com/CodenameCrew/CodenameEngine) for their own terms.
 
 ## License
 

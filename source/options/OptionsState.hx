@@ -1349,12 +1349,14 @@ class OptionsState extends MusicBeatState
 					Lib.application.window.borderless = false;
 
 				case 'borderless':
-					// SDL3 下 fullscreen=true + borderless=true 才是“无边框全屏桌面模式”，
-					// 不切独占全屏，alt-tab 不会黑屏/模式切换。
-					FlxG.fullscreen = true;
+				{
+					// 使用 SDL3 borderless desktop fullscreen：单次原生切换，避免手动 resize 的多次黑屏。
+					// 不额外操作 FlxG.fullscreen / window.borderless，减少重复切换和样式抖动。
 					window.fullscreen = true;
-					window.borderless = true;
+				}
+
 			}
+
 		} catch(e:Dynamic) {
 			TraceManager.error('trace.options.windowModeFailed', 'Failed to change window mode: {}', [e]);
 		}

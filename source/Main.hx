@@ -90,11 +90,10 @@ class Main extends Sprite
 			
 			switch(mode) {
 				case 'borderless':
-					// SDL3 下 fullscreen=true + borderless=true 才是“无边框全屏桌面模式”，
-					// 不切独占全屏，alt-tab 不会黑屏/模式切换。
-					FlxG.fullscreen = true;
+				{
 					window.fullscreen = true;
-					window.borderless = true;
+				}
+
 				case 'fullscreen':
 					window.fullscreen = true;
 				default:

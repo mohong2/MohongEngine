@@ -11,6 +11,8 @@ import sys.io.File;
 #end
 import lime.utils.Assets;
 
+import FlxTextMenuItem;
+
 using StringTools;
 
 class CreditsState extends MusicBeatState
@@ -18,7 +20,7 @@ class CreditsState extends MusicBeatState
 	public static var instance:CreditsState;
 	public var curSelected:Int = -1;
 
-	public var grpOptions:FlxTypedGroup<Alphabet>;
+	public var grpOptions:FlxTypedGroup<FlxTextMenuItem>;
 	public var iconArray:Array<AttachedSprite> = [];
 	public var creditsStuff:Array<Array<String>> = [];
 
@@ -29,6 +31,19 @@ class CreditsState extends MusicBeatState
 	public var descBox:AttachedSprite;
 
 	public var offsetThing:Float = -75;
+
+	static final MODE_CREDITS:Int = 0;
+	static final MODE_THANKS:Int = 1;
+	var currentMode:Int = MODE_CREDITS;
+	var transitioning:Bool = false;
+	var thanksCurSelected:Int = 0;
+
+	var thanksGrpOptions:FlxTypedGroup<FlxTextMenuItem>;
+	var thanksIcons:Array<AttachedSprite> = [];
+	var thanksTitle:FlxTextMenuItem;
+	var thanksDescText:FlxText;
+	var thanksDescBox:AttachedSprite;
+	var thanksStuff:Array<Array<String>> = [];
 
 	override function create()
 	{
@@ -42,8 +57,11 @@ class CreditsState extends MusicBeatState
 		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
 		add(bg);
 		bg.screenCenter();
+		bg.scrollFactor.set();
+		FlxG.camera.follow(null);
+		FlxG.camera.scroll.set(0, 0);
 		
-		grpOptions = new FlxTypedGroup<Alphabet>();
+		grpOptions = new FlxTypedGroup<FlxTextMenuItem>();
 		add(grpOptions);
 
 		#if MODS_ALLOWED
@@ -79,7 +97,7 @@ class CreditsState extends MusicBeatState
 			['Mo_Hong',	'mohong','Main Programmer of Seiun Engine(Modified from Psych Engine)','https://space.bilibili.com/672029688',	'87ceeb'],
 			['Li.tmc', 'Li.tmc', '(Old Mohong Engine)Engine icon', 'https://space.bilibili.com/3537117498051255', 'FF69B4'],
 			['None', 'none', 'Android port lol.', 'https://space.bilibili.com/392851046', 'A07275'],
-			
+			['SeiunEngine 鸣谢名单', 'none', 'SeiunEngine 特别鸣谢人员（按确定查看）', '', 'FF69B4'],
 			[''],
 			['Psych Engine Team'],
 			['Shadow Mario',		'shadowmario',		'Main Programmer of Psych Engine',								'https://twitter.com/Shadow_Mario_',	'444444'],
@@ -117,10 +135,11 @@ class CreditsState extends MusicBeatState
 		for (i in 0...creditsStuff.length)
 		{
 			var isSelectable:Bool = !unselectableCheck(i);
-			var optionText:Alphabet = new Alphabet(FlxG.width / 2, 300, creditsStuff[i][0], !isSelectable);
+			var optionText:FlxTextMenuItem = new FlxTextMenuItem(FlxG.width / 2, 300, creditsStuff[i][0], 48);
 			optionText.isMenuItem = true;
 			optionText.targetY = i;
 			optionText.changeX = false;
+			optionText.bold = !isSelectable;
 			optionText.snapToPosition();
 			grpOptions.add(optionText);
 
@@ -141,7 +160,11 @@ class CreditsState extends MusicBeatState
 
 				if(curSelected == -1) curSelected = i;
 			}
-			else optionText.alignment = CENTERED;
+			else
+			{
+				optionText.alignment = CENTER;
+				optionText.screenCenter(X);
+			}
 		}
 		
 		descBox = new AttachedSprite();
@@ -159,6 +182,8 @@ class CreditsState extends MusicBeatState
 		descBox.sprTracker = descText;
 		add(descText);
 
+		buildThanksView();
+
 		bg.color = getCurrentBGColor();
 		intendedColor = bg.color;
 		changeSelection();
@@ -175,6 +200,125 @@ class CreditsState extends MusicBeatState
 		#end
 	}
 
+	function buildThanksView()
+	{
+		thanksStuff = [
+			['CitriSnow', 'CitriSnow', '为引擎提供了部分脚本设计方案并在开发引擎的这一段时间内一直提供支持', 'https://space.bilibili.com/1951803423', 'FFB6C1'],
+			['慕雪', 'muxue', '为引擎找到了数不尽的bug，为引擎的稳定性和做出了重要贡献并在开发引擎的这一段时间内一直提供支持', 'https://space.bilibili.com/3493084289566971', '87CEEB']
+		];
+
+		thanksGrpOptions = new FlxTypedGroup<FlxTextMenuItem>();
+		add(thanksGrpOptions);
+
+		var baseX:Float = -FlxG.width + 200;
+		var baseY:Float = 260;
+		for (i in 0...thanksStuff.length)
+		{
+			var item:FlxTextMenuItem = new FlxTextMenuItem(baseX, baseY + i * 120, thanksStuff[i][0], 48);
+			item.isMenuItem = true;
+			item.targetY = i;
+			item.startPosition.set(baseX, baseY);
+			item.snapToPosition();
+			thanksGrpOptions.add(item);
+
+			var icon:AttachedSprite = new AttachedSprite('credits/' + thanksStuff[i][1]);
+			icon.xAdd = item.width + 10;
+			icon.sprTracker = item;
+			thanksIcons.push(icon);
+			add(icon);
+		}
+
+		thanksTitle = new FlxTextMenuItem(-FlxG.width + 75, 40, 'SeiunEngine 鸣谢名单', 32);
+		thanksTitle.isMenuItem = false;
+		thanksTitle.alpha = 0.4;
+		add(thanksTitle);
+
+		thanksDescBox = new AttachedSprite();
+		thanksDescBox.makeGraphic(1, 1, FlxColor.BLACK);
+		thanksDescBox.xAdd = -10;
+		thanksDescBox.yAdd = -10;
+		thanksDescBox.alphaMult = 0.6;
+		thanksDescBox.alpha = 0.6;
+		add(thanksDescBox);
+
+		thanksDescText = new FlxText(-FlxG.width + 50, FlxG.height - 160, 1180, "", 32);
+		thanksDescText.setFormat(Paths.languageFont(), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		thanksDescText.borderSize = 2.4;
+		add(thanksDescText);
+		thanksDescBox.sprTracker = thanksDescText;
+
+		changeThanksSelection(0, false);
+	}
+
+	function openThanks()
+	{
+		if(transitioning) return;
+		transitioning = true;
+		FlxG.sound.play(Paths.sound('confirmMenu'));
+		currentMode = MODE_THANKS;
+		descBox.visible = false;
+		descText.visible = false;
+		FlxTween.tween(FlxG.camera.scroll, {x: -FlxG.width}, 0.45, {
+			ease: FlxEase.cubeInOut,
+			onComplete: function(twn:FlxTween) {
+				transitioning = false;
+			}
+		});
+	}
+
+	function closeThanks()
+	{
+		if(transitioning) return;
+		transitioning = true;
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		FlxTween.tween(FlxG.camera.scroll, {x: 0}, 0.45, {
+			ease: FlxEase.cubeInOut,
+			onComplete: function(twn:FlxTween) {
+				currentMode = MODE_CREDITS;
+				transitioning = false;
+				descBox.visible = true;
+				descText.visible = true;
+			}
+		});
+	}
+
+	function updateThanks(elapsed:Float)
+	{
+		if(controls.UI_UP_P) changeThanksSelection(-1);
+		if(controls.UI_DOWN_P) changeThanksSelection(1);
+		if(controls.ACCEPT)
+		{
+			FlxG.sound.play(Paths.sound('confirmMenu'), 0.6);
+			if(thanksStuff[thanksCurSelected][3] != null && thanksStuff[thanksCurSelected][3].length > 4)
+				CoolUtil.browserLoad(thanksStuff[thanksCurSelected][3]);
+		}
+		if(controls.BACK) closeThanks();
+	}
+
+	function changeThanksSelection(change:Int = 0, playSound:Bool = true)
+	{
+		thanksCurSelected += change;
+		if(thanksCurSelected < 0) thanksCurSelected = thanksStuff.length - 1;
+		if(thanksCurSelected >= thanksStuff.length) thanksCurSelected = 0;
+
+		var bullShit:Int = 0;
+		for(item in thanksGrpOptions.members)
+		{
+			item.targetY = bullShit - thanksCurSelected;
+			bullShit++;
+			item.alpha = 0.6;
+			if(item.targetY == 0) item.alpha = 1;
+		}
+
+		thanksDescText.text = thanksStuff[thanksCurSelected][2];
+		thanksDescText.x = -FlxG.width + 50;
+		thanksDescText.y = FlxG.height - thanksDescText.height - 80;
+		thanksDescBox.setGraphicSize(Std.int(thanksDescText.width + 20), Std.int(thanksDescText.height + 25));
+		thanksDescBox.updateHitbox();
+
+		if(playSound) FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+	}
+
 	var quitting:Bool = false;
 	var holdTime:Float = 0;
 
@@ -189,51 +333,62 @@ class CreditsState extends MusicBeatState
 			FlxG.sound.music.volume += 0.5 * FlxG.elapsed;
 		
 
-		if(!quitting)
+		if(!quitting && !transitioning)
 		{
-			if(creditsStuff.length > 1)
+			if(currentMode == MODE_THANKS)
 			{
-				var shiftMult:Int = 1;
-				if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.pressed) || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
-
-				var upP = controls.UI_UP_P;
-				var downP = controls.UI_DOWN_P;
-
-				if (upP)
+				updateThanks(elapsed);
+			}
+			else
+			{
+				if(creditsStuff.length > 1)
 				{
-					changeSelection(-shiftMult);
-					holdTime = 0;
-				}
-				if (downP)
-				{
-					changeSelection(shiftMult);
-					holdTime = 0;
-				}
+					var shiftMult:Int = 1;
+					if(#if (TOUCH_CONTROLS || desktop) (virtualPad != null && virtualPad.buttonC.pressed) || #end FlxG.keys.pressed.SHIFT) shiftMult = 3;
 
-				if(controls.UI_DOWN || controls.UI_UP)
-				{
-					var checkLastHold:Int = Math.floor((holdTime - 0.5) * 10);
-					holdTime += elapsed;
-					var checkNewHold:Int = Math.floor((holdTime - 0.5) * 10);
+					var upP = controls.UI_UP_P;
+					var downP = controls.UI_DOWN_P;
 
-					if(holdTime > 0.5 && checkNewHold - checkLastHold > 0)
+					if (upP)
 					{
-						changeSelection((checkNewHold - checkLastHold) * (controls.UI_UP ? -shiftMult : shiftMult));
+						changeSelection(-shiftMult);
+						holdTime = 0;
+					}
+					if (downP)
+					{
+						changeSelection(shiftMult);
+						holdTime = 0;
+					}
+
+					if(controls.UI_DOWN || controls.UI_UP)
+					{
+						var checkLastHold:Int = Math.floor((holdTime - 0.5) * 10);
+						holdTime += elapsed;
+						var checkNewHold:Int = Math.floor((holdTime - 0.5) * 10);
+
+						if(holdTime > 0.5 && checkNewHold - checkLastHold > 0)
+						{
+							changeSelection((checkNewHold - checkLastHold) * (controls.UI_UP ? -shiftMult : shiftMult));
+						}
 					}
 				}
-			}
 
-			if(controls.ACCEPT && (creditsStuff[curSelected][3] == null || creditsStuff[curSelected][3].length > 4)) {
-				CoolUtil.browserLoad(creditsStuff[curSelected][3]);
-			}
-			if (controls.BACK)
-			{
-				if(colorTween != null) {
-					colorTween.cancel();
+				if(controls.ACCEPT)
+				{
+					if(creditsStuff[curSelected][0] == 'SeiunEngine 鸣谢名单')
+						openThanks();
+					else if(creditsStuff[curSelected][3] != null && creditsStuff[curSelected][3].length > 4)
+						CoolUtil.browserLoad(creditsStuff[curSelected][3]);
 				}
-				FlxG.sound.play(Paths.sound('cancelMenu'));
-				MusicBeatState.switchState(new MainMenuState());
-				quitting = true;
+				if (controls.BACK)
+				{
+					if(colorTween != null) {
+						colorTween.cancel();
+					}
+					FlxG.sound.play(Paths.sound('cancelMenu'));
+					MusicBeatState.switchState(new MainMenuState());
+					quitting = true;
+				}
 			}
 		}
 		

@@ -8,6 +8,7 @@ import lime.utils.AssetManifest;
 import flixel.system.FlxSound;
 #if sys
 import sys.io.File;
+import sys.io.Process;
 import sys.FileSystem;
 #else
 import openfl.utils.Assets;
@@ -172,12 +173,8 @@ class CoolUtil
 		return dumbArray;
 	}
 
-	inline public static function browserLoad(site:String) {
-		#if linux
-		Sys.command('/usr/bin/xdg-open', [site]);
-		#else
+	public static function browserLoad(site:String) {
 		FlxG.openURL(site);
-		#end
 	}
 	inline public static function openFolder(folder:String, absolute:Bool = false) {
 		#if sys
