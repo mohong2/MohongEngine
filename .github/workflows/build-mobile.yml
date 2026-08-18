@@ -1,0 +1,214 @@
+name: Build Mobile
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  HAXE_VERSION: "4.2.5"
+
+jobs:
+  android:
+    name: Android
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+      - name: Install Android SDK components
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null 2>&1 || true
+          "$SDKMANAGER" "platforms;android-33" "build-tools;34.0.0" "platform-tools" "ndk;21.4.7075529"
+          echo "ANDROID_SDK=$ANDROID_HOME" >> "$GITHUB_ENV"
+          echo "ANDROID_NDK_ROOT=$ANDROID_HOME/ndk/21.4.7075529" >> "$GITHUB_ENV"
+          echo "ANDROID_SETUP=true" >> "$GITHUB_ENV"
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "11"
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+      - name: Configure Android SDK
+        run: |
+          printf '%s\n%s\n%s\n' "$ANDROID_SDK" "$ANDROID_NDK_ROOT" "$JAVA_HOME" | haxelib run lime setup android
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+      - name: Apply Android template patches
+        run: |
+          LT="$HOME/haxelib/lime/git/templates/android/template"
+          mkdir -p "$LT/app/src/main/java/org/haxe/extension" "$LT/app/src/main/res/drawable"
+          cp templates/android/java/org/haxe/extension/SeiunOverlay.java "$LT/app/src/main/java/org/haxe/extension/SeiunOverlay.java"
+          cp templates/android/template/app/src/main/res/drawable/seiun_ic_keyboard.xml "$LT/app/src/main/res/drawable/seiun_ic_keyboard.xml"
+          cp templates/android/template/app/src/main/AndroidManifest.xml "$LT/app/src/main/AndroidManifest.xml"
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+      - name: Rebuild Lime Android ndll (SDL3)
+        run: haxelib run lime rebuild android -release -Dlime-sdl3
+      - name: Compile Android
+        env:
+          _JAVA_OPTIONS: "-Xmx5g -XX:MaxMetaspaceSize=1g"
+        run: haxelib run lime build android --app-version="$APP_VERSION-${{ github.run_id }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-android
+          path: export/release/android/bin/app/build/outputs/apk/release/*.apk
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-device:
+    name: iOS Device (arm64)
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+      - name: Patch hxcpp zlib for iOS 18 SDK
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+      - name: Apply iOS template patches
+        run: |
+          LT="$HOME/haxelib/lime/git/templates/ios/template"
+          cp "templates/ios/template/{{app.file}}/{{app.file}}-Info.plist" "$LT/{{app.file}}/{{app.file}}-Info.plist"
+          PBX="$LT/{{app.file}}.xcodeproj/project.pbxproj"
+          perl -0pi -e 's/("CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "::config\.ios\.identity::";)/$1\n\tCODE_SIGNING_ALLOWED = NO;\n\tCODE_SIGNING_REQUIRED = NO;/g' "$PBX"
+          grep -c 'CODE_SIGNING_ALLOWED = NO' "$PBX"
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+      - name: Configure ad-hoc iOS signing
+        run: |
+          CONF="$HOME/.lime/config.xml"
+          mkdir -p "$HOME/.lime"
+          if [ ! -f "$CONF" ]; then printf '<?xml version="1.0" encoding="utf-8"?>\n<config>\n</config>\n' > "$CONF"; fi
+          sed -i '' '/<set name="ios.identity"/d' "$CONF"
+          sed -i '' 's#</config>#<set name="ios.identity" value="-" /></config>#' "$CONF"
+          cat "$CONF"
+      - name: Rebuild Lime iOS ndll
+        run: haxelib run lime rebuild ios -arm64 -release
+      - name: Compile iOS (device, arm64)
+        run: haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-ios-device
+          path: export/release/ios/build/Release-iphoneos
+          if-no-files-found: error
+          retention-days: 14
+
+  ios-simulator:
+    name: iOS Simulator (experimental)
+    runs-on: macos-14
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+      - name: Patch hxcpp zlib for iOS 18 SDK
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+      - name: Apply iOS template patches
+        run: |
+          LT="$HOME/haxelib/lime/git/templates/ios/template"
+          cp "templates/ios/template/{{app.file}}/{{app.file}}-Info.plist" "$LT/{{app.file}}/{{app.file}}-Info.plist"
+          PBX="$LT/{{app.file}}.xcodeproj/project.pbxproj"
+          perl -0pi -e 's/("CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "::config\.ios\.identity::";)/$1\n\tCODE_SIGNING_ALLOWED = NO;\n\tCODE_SIGNING_REQUIRED = NO;/g' "$PBX"
+          grep -c 'CODE_SIGNING_ALLOWED = NO' "$PBX"
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+      - name: Configure ad-hoc iOS signing
+        run: |
+          CONF="$HOME/.lime/config.xml"
+          mkdir -p "$HOME/.lime"
+          if [ ! -f "$CONF" ]; then printf '<?xml version="1.0" encoding="utf-8"?>\n<config>\n</config>\n' > "$CONF"; fi
+          sed -i '' '/<set name="ios.identity"/d' "$CONF"
+          sed -i '' 's#</config>#<set name="ios.identity" value="-" /></config>#' "$CONF"
+          cat "$CONF"
+      - name: Rebuild Lime iOS simulator ndll
+        run: haxelib run lime rebuild ios -simulator -release
+      - name: Compile iOS simulator
+        run: haxelib run lime build ios -simulator --app-version="$APP_VERSION-${{ github.run_id }}"
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-ios-simulator
+          path: export/release/ios/build/Release-iphonesimulator
+          if-no-files-found: error
+          retention-days: 14
+

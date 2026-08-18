@@ -1,0 +1,15 @@
+name: Build All Platforms
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  desktop:
+    uses: ./.github/workflows/build-desktop.yml
+  mobile:
+    uses: ./.github/workflows/build-mobile.yml
+  web:
+    uses: ./.github/workflows/build-web.yml
