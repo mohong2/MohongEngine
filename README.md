@@ -71,8 +71,9 @@ Drop mods into `mods/`. See `Modding.md`.
 - ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — Lead developer and maintainer, responsible for extensive engine modifications, performance optimizations, bug fixes, and Chinese localization. Also dove into countless pointers and low-level debugging to keep everything stable and running smoothly lol
 - ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — old engine icon（MohongEngine）
 - **Acknowledgements (鸣谢名单):**
-- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development.
-- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process.
+  - ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development.
+  - 
+  - ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process.
 - 
 - **Psych Engine team** — base engine
   - ![Shadow Mario](assets/preload/images/credits/shadowmario.png) Shadow Mario

@@ -60,9 +60,11 @@ lime build windows
 
 - ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — 主要开发者和维护者，负责引擎的大量修改、性能优化、错误修复和中文本地化。还深入研究了无数指针和底层调试，确保稳定运行lol
 - ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — 旧引擎图标（MohongEngine）
+
 - **SeiunEngine 鸣谢名单：**
-- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — 为引擎提供了部分脚本设计方案并在开发引擎的这一段时间内一直提供支持     
-- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — 为引擎找到了数不尽的bug，为引擎的稳定性和做出了重要贡献并在开发引擎的这一段时间内一直提供支持
+  - ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — 为引擎提供了部分脚本设计方案并在开发引擎的这一段时间内一直提供支持     
+  - 
+  - ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — 为引擎找到了数不尽的bug，为引擎的稳定性和做出了重要贡献并在开发引擎的这一段时间内一直提供支持
   
 - **Psych Engine 团队** — 基础引擎
   - ![Shadow Mario](assets/preload/images/credits/shadowmario.png) Shadow Mario
