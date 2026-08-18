@@ -28,13 +28,9 @@ jobs:
   mobile:
     uses: ./.github/workflows/build-mobile.yml
     secrets: inherit
-  web:
-    uses: ./.github/workflows/build-web.yml
-    secrets: inherit
-
   release:
     name: Publish Release
-    needs: [desktop, mobile, web]
+    needs: [desktop, mobile]
     if: github.event.inputs.publish != 'none'
     runs-on: ubuntu-latest
     steps:
@@ -82,5 +78,4 @@ jobs:
             - macOS arm64
             - Android
             - iOS Device
-            - HTML5
           files: release/*.zip

@@ -2,32 +2,10 @@ name: Build Desktop
 
 on:
   workflow_call:
-    inputs:
-      publish:
-        type: string
-        default: 'none'
-      release_notes:
-        type: string
-        default: ''
   workflow_dispatch:
-    inputs:
-      publish:
-        description: '是否发布（none=不发布, alpha=阿尔法, release=正式）'
-        required: true
-        default: 'none'
-        type: choice
-        options:
-          - none
-          - alpha
-          - release
-      release_notes:
-        description: '更新公告 / Release Notes'
-        required: false
-        default: ''
-        type: string
 
 permissions:
-  contents: write
+  contents: read
 
 env:
   HAXE_VERSION: "4.2.5"
@@ -241,53 +219,3 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-
-  release:
-    name: Publish Release
-    needs: [linux-x64, windows-x64, macos-x64, macos-arm64]
-    if: inputs.publish != 'none'
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
-      - name: Read app version
-        run: |
-          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
-      - name: Prepare release metadata
-        run: |
-          if [ "${{ inputs.publish }}" = "release" ]; then
-            echo "TAG_NAME=v${APP_VERSION}" >> "$GITHUB_ENV"
-            echo "RELEASE_NAME=Release v${APP_VERSION}" >> "$GITHUB_ENV"
-            echo "IS_PRERELEASE=false" >> "$GITHUB_ENV"
-          else
-            echo "TAG_NAME=v${APP_VERSION}-alpha.${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
-            echo "RELEASE_NAME=Alpha v${APP_VERSION} (build ${GITHUB_RUN_ID})" >> "$GITHUB_ENV"
-            echo "IS_PRERELEASE=true" >> "$GITHUB_ENV"
-          fi
-      - name: Download artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
-        with:
-          path: release
-          github-token: ${{ github.token }}
-      - name: Package assets
-        run: |
-          cd release
-          for d in */; do
-            if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
-              zip -r "${d%/}.zip" "$d"
-            fi
-          done
-          ls -la
-      - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
-        with:
-          tag_name: ${{ env.TAG_NAME }}
-          name: ${{ env.RELEASE_NAME }}
-          prerelease: ${{ env.IS_PRERELEASE }}
-          body: |
-            ${{ inputs.release_notes }}
-
-            构建产物：
-            - Linux x64
-            - Windows x64
-            - macOS x64
-            - macOS arm64
-          files: release/*.zip
