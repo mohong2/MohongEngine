@@ -169,6 +169,17 @@ jobs:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
+      - name: Install system dependencies
+        # git 版 Lime 在 Linux host 上会先编译自身的 SDL2 原生部分，
+        # 缺少 X11 开发头会报 X11/Xlib.h not found。
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libvlc-dev libvlccore-dev libpulse0 zenity \
+            libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
+            libasound2-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev \
+            libmbedtls-dev libpng-dev libturbojpeg-dev libvorbis-dev \
+            libpulse-dev libdbus-1-dev libudev-dev libibus-1.0-dev libwayland-dev
+
       - name: Auth private haxelib deps
         env:
           GH_PAT: ${{ secrets.GH_PAT }}
