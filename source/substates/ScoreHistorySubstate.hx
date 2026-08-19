@@ -841,6 +841,28 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			PauseSubState.entries = entry;
 			var songLowercase:String = Paths.formatToSongPath(entry.songName);
 			var poop:String = Highscore.formatSong(songLowercase, entry.difficulty);
+
+			// 成绩/回放先按存档里的 mod 目录定位；旧存档没有 folder 时，
+			// 退回当前 Freeplay 选中歌曲的 mod 目录（与 Freeplay 加载谱面的方式一致）。
+			var modFolder:String = entry.folder != null ? entry.folder : '';
+			var hasFolder:Bool = entry.folder != null;
+			if (!hasFolder && FreeplayState.instance != null)
+			{
+				var songData = FreeplayState.instance.getCurrentSong();
+				if (songData != null)
+				{
+					// modFolder 是建列表时从 WeekData 显式传入的模组目录，
+					// 比 folder（创建瞬间的 Paths.currentModDirectory）更可靠。
+					modFolder = (songData.modFolder != null && songData.modFolder.length > 0)
+						? songData.modFolder
+						: (songData.folder != null ? songData.folder : '');
+					hasFolder = true;
+				}
+			}
+			var prevModDir:String = Paths.currentModDirectory;
+			if (hasFolder) Paths.currentModDirectory = modFolder;
+			Replay.dbgLog('[DEBUG-rpl] playReplay modFolder=' + modFolder);
+
 			try
 			{
 				PlayState.SONG = Song.loadFromJson(poop, songLowercase);
@@ -848,11 +870,13 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			catch (e:Dynamic)
 			{
 				// 谱面缺失/损坏: 明确提示而不是笼统失败 (回放必须依赖本地谱面才能生成音符)
+				Paths.currentModDirectory = prevModDir;
 				PlayState.replayMode = false;
 				Replay.dbgLog('[DEBUG-rpl] playReplay chart missing/corrupt: ' + Std.string(e));
 				CoolUtil.traceMsg('trace.scoreHistory.playReplay', 'Cannot play replay: chart file not found or corrupted ({}).', [poop]);
 				return;
 			}
+			// 成功后不还原 prevModDir：PlayState 需要继续用该 mod 目录解析音频/图片。
 			Replay.dbgLog('[DEBUG-rpl] playReplay loaded song=' + (PlayState.SONG != null ? PlayState.SONG.song : 'NULL'));
 			PlayState.changedDifficulty = false;
 			close();

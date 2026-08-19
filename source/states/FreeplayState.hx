@@ -462,7 +462,7 @@ class FreeplayState extends SeiunMenuState
 	}
 
 	/** Get the current SongMetadata from the filtered list */
-	function getCurrentSong():SongMetadata
+	public function getCurrentSong():SongMetadata
 	{
 		var idx = getRealSelectedIndex();
 		return (idx >= 0) ? songs[idx] : null;

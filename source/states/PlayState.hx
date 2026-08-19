@@ -5269,6 +5269,7 @@ class PlayState extends MusicBeatState
 			// input event; use the countdown clock and let update() start the song.
 			// Save the real position so the countdown clock isn't broken on restore.
 			var lastTime:Float = Conductor.songPosition;
+			var hitTime:Float = (replayMode && time != -999999) ? time : lastTime;
 			var startedByInput:Bool = false;
 			if (startingSong)
 			{
@@ -5286,6 +5287,10 @@ class PlayState extends MusicBeatState
 				});
 			}
 
+			// 回放模式: 让脚本/按键处理都基于录制帧的精确时间。
+			if (replayMode && time != -999999)
+				Conductor.songPosition = hitTime;
+
 		keyboardDisplay.pressed(key);
 			
 
@@ -5298,7 +5303,9 @@ class PlayState extends MusicBeatState
 				// that startup window has passed, otherwise the first hit can report
 				// hundreds of milliseconds even when the key was pressed on time.
 				var audioClockReady:Bool = songStartTicks >= 0 && FlxG.game.ticks - songStartTicks >= 1000;
-				if (!startedByInput && audioClockReady && FlxG.sound.music != null)
+				if (replayMode && time != -999999)
+					Conductor.songPosition = hitTime;
+				else if (!startedByInput && audioClockReady && FlxG.sound.music != null)
 					Conductor.songPosition = FlxG.sound.music.time;
 
 				var canMiss:Bool = !ClientPrefs.data.ghostTapping;

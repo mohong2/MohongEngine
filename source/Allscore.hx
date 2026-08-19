@@ -172,6 +172,7 @@ class Allscore
 			songName: songName,
 			difficulty: difficulty,
 			difficultyName: diffName,
+			folder: Paths.currentModDirectory != null ? Paths.currentModDirectory : '',
 			date: date != null ? date : Date.now().toString(),
 			ratingPercent: rating,
 			ratingFC: ratingFC,
@@ -313,6 +314,7 @@ class Allscore
 			songName: entry.songName,
 			difficulty: entry.difficulty,
 			difficultyName: entry.difficultyName,
+			folder: entry.folder,
 			date: entry.date,
 			score: entry.score,
 			ratingPercent: entry.ratingPercent,
@@ -402,6 +404,7 @@ class Allscore
 			songName: data.songName != null ? Std.string(data.songName) : null,
 			difficulty: difficulty,
 			difficultyName: data.difficultyName != null ? Std.string(data.difficultyName) : null,
+			folder: data.folder != null ? Std.string(data.folder) : null,
 			date: data.date != null ? Std.string(data.date) : '',
 			ratingPercent: ratingPercent,
 			ratingFC: data.ratingFC != null ? Std.string(data.ratingFC) : '',
@@ -449,6 +452,7 @@ typedef ScoreEntry = {
 	var songName:String;
 	var difficulty:Int;
 	@:optional var difficultyName:String;
+	@:optional var folder:String;
 	var date:String;
 	var score:Int;
 	var ratingPercent:Float;
