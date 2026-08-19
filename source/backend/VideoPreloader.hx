@@ -104,7 +104,10 @@ class VideoPreloader
 		var dummy:Video = new Video();
 		try
 		{
-			dummy.prewarm();
+			// Use reflection so this also compiles against unpatched upstream
+			// hxvlc builds (which may not have the `prewarm` helper yet).
+			if (Reflect.hasField(dummy, "prewarm"))
+				Reflect.callMethod(dummy, Reflect.field(dummy, "prewarm"), []);
 		}
 		catch (e:Dynamic)
 		{
