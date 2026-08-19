@@ -43,13 +43,17 @@ jobs:
           cache-dependency-path: hmm.json
 
       - name: Install system dependencies
+        # 只装编译实际需要的头文件；apt update 加超时/重试并在失败时继续，避免源慢卡住。
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libvlc-dev libvlccore-dev libpulse0 zenity \
+          sudo apt-get update \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=10 \
+            -o Acquire::https::Timeout=10 \
+            -o Acquire::Languages=none || true
+          sudo apt-get install -y --no-install-recommends libvlc-dev libvlccore-dev \
             libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
             libasound2-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev \
-            libmbedtls-dev libpng-dev libturbojpeg-dev libvorbis-dev \
-            libpulse-dev libdbus-1-dev libudev-dev libibus-1.0-dev libwayland-dev
+            libpulse-dev
 
       - name: Auth private haxelib deps
         env:
