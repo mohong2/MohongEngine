@@ -172,9 +172,14 @@ jobs:
       - name: Install system dependencies
         # git 版 Lime 在 Linux host 上会先编译自身的 SDL2 原生部分，
         # 缺少 X11 开发头会报 X11/Xlib.h not found。
+        # update 加超时/重试并在失败时继续，避免 apt 源慢导致 job 卡住。
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libvlc-dev libvlccore-dev libpulse0 zenity \
+          sudo apt-get update \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=10 \
+            -o Acquire::https::Timeout=10 \
+            -o Acquire::Languages=none || true
+          sudo apt-get install -y --no-install-recommends libvlc-dev libvlccore-dev libpulse0 zenity \
             libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
             libasound2-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev \
             libmbedtls-dev libpng-dev libturbojpeg-dev libvorbis-dev \
