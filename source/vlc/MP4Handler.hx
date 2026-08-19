@@ -6,6 +6,7 @@ import hxvlc.flixel.FlxInternalVideo;
 import openfl.display.BitmapData;
 import openfl.events.Event;
 import sys.FileSystem;
+import backend.VideoPreloader;
 
 /**
  * hxCodec 2.5.x `vlc.MP4Handler` compatibility layer, backed by hxvlc.
@@ -237,37 +238,51 @@ class MP4Handler extends FlxInternalVideo
 	 */
 	public function playVideo(path:String, ?repeat:Bool = false, pauseMusic:Bool = false):Void
 	{
-		this.pauseMusic = pauseMusic;
-		this._repeat = repeat ? -1 : 0;
-
-		if (FlxG.sound.music != null && pauseMusic)
-			FlxG.sound.music.pause();
-
-		var videoPath = checkFile(path);
-		_location = videoPath;
-
-		try
+		// Don't let the first-time LibVLC initialization freeze the caller.
+		// `VideoPreloader.whenReady` runs immediately when already initialized.
+		VideoPreloader.whenReady(function():Void
 		{
-			if (load(videoPath))
+			if (_isDisposed)
+				return;
+
+			if (VideoPreloader.isFailed())
 			{
-				try
-				{
-					play();
-				}
-				catch (e:Dynamic)
-				{
-					trace('MP4Handler: play() failed: $e');
-					onVLCError('Unable to play video: $path');
-				}
+				onVLCError('Unable to initialize video: $path');
+				return;
 			}
-			else
+
+			this.pauseMusic = pauseMusic;
+			this._repeat = repeat ? -1 : 0;
+
+			if (FlxG.sound.music != null && pauseMusic)
+				FlxG.sound.music.pause();
+
+			var videoPath = checkFile(path);
+			_location = videoPath;
+
+			try
+			{
+				if (load(videoPath))
+				{
+					try
+					{
+						play();
+					}
+					catch (e:Dynamic)
+					{
+						trace('MP4Handler: play() failed: $e');
+						onVLCError('Unable to play video: $path');
+					}
+				}
+				else
+					onVLCError('Unable to load video: $path');
+			}
+			catch (e:Dynamic)
+			{
+				trace('MP4Handler: load() failed: $e');
 				onVLCError('Unable to load video: $path');
-		}
-		catch (e:Dynamic)
-		{
-			trace('MP4Handler: load() failed: $e');
-			onVLCError('Unable to load video: $path');
-		}
+			}
+		});
 	}
 
 	@:noCompletion

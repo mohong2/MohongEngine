@@ -107,16 +107,16 @@ class GameOverSubstate extends MusicBeatSubstate
 			PlayState.instance.callOnScripts('onGameOverConfirm', [false]);
 		}
 
-		if (boyfriend.animation.curAnim != null && boyfriend.animation.curAnim.name == 'firstDeath')
+		if (!boyfriend.isAnimationNull() && boyfriend.getAnimationName() == 'firstDeath')
 		{
-			if(boyfriend.animation.curAnim.curFrame >= 12 && !isFollowingAlready)
+			if(boyfriend.getAnimationFrame() >= 12 && !isFollowingAlready)
 			{
 				FlxG.camera.follow(camFollowPos, LOCKON, 1);
 				updateCamera = true;
 				isFollowingAlready = true;
 			}
 
-			if (boyfriend.animation.curAnim.finished && !playingDeathSound)
+			if (boyfriend.isAnimationFinished() && !playingDeathSound)
 			{
 				if (PlayState.SONG.stage == 'tank')
 				{

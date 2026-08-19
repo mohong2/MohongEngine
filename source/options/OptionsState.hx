@@ -954,8 +954,7 @@ class OptionsState extends MusicBeatState
 			}
 		}
 
-		if (setBoyfriend != null && setBoyfriend.animation != null
-			&& setBoyfriend.animation.curAnim != null && setBoyfriend.animation.curAnim.finished)
+		if (setBoyfriend != null && !setBoyfriend.isAnimationNull() && setBoyfriend.isAnimationFinished())
 			setBoyfriend.dance();
 
 		if (nextAccept > 0) nextAccept -= 1;
@@ -1042,7 +1041,7 @@ class OptionsState extends MusicBeatState
 		setBoyfriend = new Character(840, 170, 'bf', true);
 		setBoyfriend.setGraphicSize(Std.int(setBoyfriend.width * 0.75));
 		setBoyfriend.updateHitbox();
-		if (setBoyfriend.animation != null && setBoyfriend.animation.curAnim != null)
+		if (!setBoyfriend.isAnimationNull())
 			setBoyfriend.dance();
 		add(setBoyfriend);
 		setBoyfriend.visible = false;

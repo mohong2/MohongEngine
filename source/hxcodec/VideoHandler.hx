@@ -6,6 +6,7 @@ import flixel.input.keyboard.FlxKey;
 import hxvlc.flixel.FlxInternalVideo;
 import openfl.events.Event;
 import sys.FileSystem;
+import backend.VideoPreloader;
 
 /**
  * hxCodec 2.6.x `hxcodec.VideoHandler` compatibility layer, backed by hxvlc.
@@ -139,27 +140,40 @@ class VideoHandler extends FlxInternalVideo
 	 */
 	public function playVideo(Path:String, Loop:Bool = false, PauseMusic:Bool = false):Void
 	{
-		pauseMusic = PauseMusic;
-		_loop = Loop;
-
-		if (FlxG.sound.music != null && PauseMusic)
-			FlxG.sound.music.pause();
-
-		var videoPath = Path;
-		if (FileSystem.exists(Sys.getCwd() + Path))
-			videoPath = Sys.getCwd() + Path;
-
-		_location = videoPath;
-
-		if (load(videoPath))
+		// Avoid blocking the main thread on the first LibVLC initialization.
+		VideoPreloader.whenReady(function():Void
 		{
-			_isPlaying = true;
-			play();
-		}
-		else
-		{
-			onVLCEncounteredError('Unable to load video: $Path');
-		}
+			if (_isDisposed)
+				return;
+
+			if (VideoPreloader.isFailed())
+			{
+				onVLCEncounteredError('Unable to initialize video: $Path');
+				return;
+			}
+
+			pauseMusic = PauseMusic;
+			_loop = Loop;
+
+			if (FlxG.sound.music != null && PauseMusic)
+				FlxG.sound.music.pause();
+
+			var videoPath = Path;
+			if (FileSystem.exists(Sys.getCwd() + Path))
+				videoPath = Sys.getCwd() + Path;
+
+			_location = videoPath;
+
+			if (load(videoPath))
+			{
+				_isPlaying = true;
+				play();
+			}
+			else
+			{
+				onVLCEncounteredError('Unable to load video: $Path');
+			}
+		});
 	}
 
 	public function calcSize(Ind:Int):Int

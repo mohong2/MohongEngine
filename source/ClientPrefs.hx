@@ -6,7 +6,6 @@ import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
-import mohong.GPUTextureManager;
 #if sys
 import sys.io.Process;
 #end
@@ -179,10 +178,6 @@ import sys.io.Process;
 	// Android storage type (empty = auto-detect)
 	public var storageType:String = "";
 
-	// FNF-SeiunEngine — Memory optimization flags
-	/** Whether GPU texture pooling is enabled (reduces VRAM fragmentation). */
-	public var texturePooling:Bool = true;
-
 	// Lua / HScript error loop protection: ignore a script file after too many consecutive errors.
 	public var ignoreErrorLoopScripts:Bool = true;
 	public var scriptErrorLimit:Int = 50;
@@ -281,8 +276,6 @@ class ClientPrefs {
 	public static var tailWindowMult(get, never):Float;
 	public static var touchSwipeEnabled(get, never):Bool;
 	public static var separateUpdateDraw(get, never):Bool;
-
-	public static var texturePooling(get, never):Bool;
 
 	public static var ignoreErrorLoopScripts(get, never):Bool;
 	public static var scriptErrorLimit(get, never):Int;
@@ -387,8 +380,6 @@ class ClientPrefs {
 	static inline function get_tailWindowMult() return data.tailWindowMult;
 	static inline function get_touchSwipeEnabled() return data.touchSwipeEnabled;
 	static inline function get_separateUpdateDraw() return data.separateUpdateDraw;
-
-	static inline function get_texturePooling() return data.texturePooling;
 
 	static inline function get_ignoreErrorLoopScripts() return data.ignoreErrorLoopScripts;
 	static inline function get_scriptErrorLimit() return data.scriptErrorLimit;
@@ -789,9 +780,6 @@ class ClientPrefs {
 		// Ensure draw wrapper is null (threaded rendering removed)
 		if (FlxG.game != null)
 			FlxG.game.drawWrapper = null;
-
-		// Apply FNF-SeiunEngine optimization flags
-		GPUTextureManager.managementEnabled = data.texturePooling;
 
 		// only tunes observation intensity; visuals stay with lowQuality.
 

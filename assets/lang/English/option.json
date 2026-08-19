@@ -260,10 +260,5 @@
     "option.mobileCAlpha.desc": "How transparent the virtual pad buttons are when not pressed.",
     "option.keyboard": "Keyboard Display",
     "option.storageType": "Storage Type",
-    "option.storageType.desc": "Choose how the game accesses storage.\nEXTERNAL_DATA (safest) → /Android/data/<package>/files\nEXTERNAL (legacy) → /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\nIf the selected path fails, the game falls back automatically.",
-
-    "option.texturePooling": "GPU Texture Pooling",
-    "option.texturePooling.desc": "Enables GPU texture reuse to reduce video memory fragmentation and allocation overhead.\nRecommended for systems with a dedicated graphics processor.",
-
-    "gpuTextureManager.orphanWarning": "Detected {count} orphaned GPU texture(s) — possible video memory leak."
+    "option.storageType.desc": "Choose how the game accesses storage.\nEXTERNAL_DATA (safest) → /Android/data/<package>/files\nEXTERNAL (legacy) → /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\nIf the selected path fails, the game falls back automatically."
 }

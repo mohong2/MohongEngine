@@ -5,6 +5,7 @@ import flixel.FlxG;
 import hxvlc.flixel.FlxInternalVideo;
 import openfl.events.Event;
 import sys.FileSystem;
+import backend.VideoPreloader;
 
 /**
  * hxCodec 3.x `hxcodec.flixel.FlxVideo` compatibility layer, backed by hxvlc.
@@ -97,6 +98,9 @@ class FlxVideo extends FlxInternalVideo
 			videoPath = Sys.getCwd() + location;
 
 		_location = videoPath;
+
+		if (VideoPreloader.isFailed())
+			return false;
 
 		var success = load(videoPath);
 		if (success)

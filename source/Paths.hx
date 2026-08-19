@@ -25,7 +25,6 @@ import flash.media.Sound;
 
 using StringTools;
 import mohong.TraceManager;
-import mohong.GPUTextureManager;
 
 class Paths
 {
@@ -134,7 +133,6 @@ class Paths
 		if (fileKey != null)
 		{
 			currentTrackedAssets.remove(fileKey);
-			GPUTextureManager.untrackGraphic(fileKey);
 		}
 		else
 		{
@@ -144,7 +142,6 @@ class Paths
 			for (ck in fileKeys)
 			{
 				currentTrackedAssets.remove(ck);
-				GPUTextureManager.untrackGraphic(ck);
 			}
 		}
 		// Safety net: never destroy a graphic a live sprite still references.
@@ -771,8 +768,6 @@ class Paths
 			newGraphic.persist = !allowGraphicAutoFree;
 			newGraphic.destroyOnNoUse = allowGraphicAutoFree;
 			currentTrackedAssets.set(file, newGraphic);
-			// Texture bookkeeping (same lifecycle as the useCount/zombie path).
-			GPUTextureManager.trackGraphic(file, newGraphic);
 			return newGraphic;
 		}
 	static public function getTextFromFile(key:String, ?ignoreMods:Bool = false):String
@@ -1037,7 +1032,11 @@ class Paths
 
 				if (!changedAtlasJson)
 				{
-					spriteJson = getTextFromFile('images/$originalPath/spritemap$st.json');
+					if (fileExists('images/$originalPath/spritemap$st.json', TEXT))
+						spriteJson = getTextFromFile('images/$originalPath/spritemap$st.json');
+					else
+						spriteJson = null;
+
 					if (spriteJson != null)
 					{
 						changedImage = true;
@@ -1063,7 +1062,10 @@ class Paths
 			if (!changedAnimJson)
 			{
 				changedAnimJson = true;
-				animationJson = getTextFromFile('images/$originalPath/Animation.json');
+				if (fileExists('images/$originalPath/Animation.json', TEXT))
+					animationJson = getTextFromFile('images/$originalPath/Animation.json');
+				else
+					animationJson = null;
 			}
 		}
 

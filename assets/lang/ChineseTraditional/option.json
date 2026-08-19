@@ -252,10 +252,5 @@
     "option.storageType": "儲存類型",
     "option.storageType.desc": "選擇遊戲存取儲存的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（舊版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所選路徑不可用，遊戲會自動回退。",
     "option.adaptiveResolution": "自適應解析度",
-    "option.adaptiveResolution.desc": "不再鎖定 1280x720，而是自動適配該裝置的最大解析度，\n畫面填滿整個螢幕且更清晰。\n重新啟動遊戲後生效。\n在低效能裝置上可能會降低幀率。",
-
-    "option.texturePooling": "GPU 紋理池化",
-    "option.texturePooling.desc": "啟用 GPU 紋理復用機制，以減少顯示記憶體碎片化與重複分配開銷。\n建議配備獨立顯示卡的系統開啟此選項。",
-
-    "gpuTextureManager.orphanWarning": "偵測到 {count} 個孤立 GPU 紋理 — 可能存在顯示記憶體流失。"
+    "option.adaptiveResolution.desc": "不再鎖定 1280x720，而是自動適配該裝置的最大解析度，\n畫面填滿整個螢幕且更清晰。\n重新啟動遊戲後生效。\n在低效能裝置上可能會降低幀率。"
 }

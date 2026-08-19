@@ -6,6 +6,7 @@ import flixel.FlxSprite;
 import flixel.util.FlxColor;
 import hxvlc.flixel.FlxInternalVideo;
 import sys.FileSystem;
+import backend.VideoPreloader;
 
 /**
  * hxCodec 3.x `hxcodec.flixel.FlxVideoSprite` compatibility layer, backed by hxvlc.
@@ -61,6 +62,9 @@ class FlxVideoSprite extends FlxSprite
 			videoPath = Sys.getCwd() + location;
 
 		_location = videoPath;
+
+		if (VideoPreloader.isFailed())
+			return false;
 
 		var success = bitmap.load(videoPath);
 		if (success)

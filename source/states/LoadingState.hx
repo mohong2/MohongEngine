@@ -11,6 +11,9 @@ import lime.utils.AssetManifest;
 
 import haxe.io.Path;
 import mohong.TraceManager;
+#if VIDEOS_ALLOWED
+import backend.VideoPreloader;
+#end
 
 class LoadingState extends MusicBeatState
 {
@@ -70,6 +73,20 @@ class LoadingState extends MusicBeatState
 			{
 				callbacks = new MultiCallback(onLoad);
 				var introComplete = callbacks.add("introComplete");
+				#if VIDEOS_ALLOWED
+				// Make sure LibVLC is ready before entering the next state, so
+				// the first cutscene video starts immediately instead of being
+				// delayed by a lazy init (and without any main-thread freeze).
+				var videoInitComplete = callbacks.add("videoInit");
+				VideoPreloader.whenReady(function()
+				{
+					// Warm the one-time media player setup now, while the loading
+					// screen is visible, so the first cutscene video doesn't pay
+					// that cost (and doesn't cause a focus/delay hitch).
+					VideoPreloader.prewarmMedia();
+					videoInitComplete();
+				});
+				#end
 				if (PlayState.SONG != null) {
 					checkLoadSong(getSongPath());
 					if (PlayState.SONG.needsVoices)

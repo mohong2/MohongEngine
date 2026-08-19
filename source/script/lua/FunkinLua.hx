@@ -1486,10 +1486,17 @@ class FunkinLua {
 			}
 			var split:Array<String> = variable.split('.');
 
+			var result:Dynamic = null;
 			if(split.length > 1)
-				return getVarInArray(getPropertyLoop(split, true, true, allowMaps), split[split.length-1], allowMaps);
-			return getVarInArray(getTargetInstance(), variable, allowMaps);
-			
+				result = getVarInArray(getPropertyLoop(split, true, true, allowMaps), split[split.length-1], allowMaps);
+			else
+				result = getVarInArray(getTargetInstance(), variable, allowMaps);
+
+			// 1.0.4 兼容：Bar/FlxBar 的 scale 在某些路径下读成 null，Lua 里 `<0` 会直接崩。
+			// 这里对 healthBar.scale.x/y 给一个安全默认值 1，和 104 行为一致。
+			if(result == null && (variable == 'healthBar.scale.x' || variable == 'healthBar.scale.y'))
+				result = 1;
+			return result;
 		});
 		Lua_helper.add_callback(lua, "setProperty", function(variable:String, value:Dynamic, allowMaps:Bool = false) {
 			if (CompatEngine.compatMode()) {
@@ -1633,7 +1640,12 @@ class FunkinLua {
 			
 		});
 		Lua_helper.add_callback(lua, "callMethodFromClass", function(className:String, funcToRun:String, ?args:Array<Dynamic> = null) {
-			return callMethodFromObject(Type.resolveClass(className), funcToRun, parseInstances(args));
+			var resolvedClass:Dynamic = Type.resolveClass(className);
+			if(resolvedClass == null && StringTools.startsWith(className, 'backend.'))
+				resolvedClass = Type.resolveClass(className.substr(8));
+			else if(resolvedClass == null && StringTools.startsWith(className, 'objects.'))
+				resolvedClass = Type.resolveClass(className.substr(8));
+			return callMethodFromObject(resolvedClass, funcToRun, parseInstances(args));
 		});
 		Lua_helper.add_callback(lua, "createInstance", function(variableToSave:String, className:String, ?args:Array<Dynamic> = null) {
 			variableToSave = variableToSave.trim().replace('.', '');
@@ -2693,21 +2705,29 @@ class FunkinLua {
 
 		Lua_helper.add_callback(lua, "playAnim", function(obj:String, name:String, forced:Bool = false, ?reverse:Bool = false, ?startFrame:Int = 0)
 		{
-			if(PlayState.instance.getLuaObject(obj, false) != null) {
-				var luaObj:FlxSprite = PlayState.instance.getLuaObject(obj,false);
-				if(luaObj.animation.getByName(name) != null)
+			var luaObj:FlxSprite = PlayState.instance.getLuaObject(obj, false);
+			if(luaObj != null)
+			{
+				if(Std.isOfType(luaObj, Character))
+				{
+					var char:Character = cast luaObj;
+					if(char.hasAnimation(name)) char.playAnim(name, forced, reverse, startFrame);
+				}
+				else if(Std.isOfType(luaObj, ModchartAnimateSprite))
+				{
+					var animSpr:ModchartAnimateSprite = cast luaObj;
+					animSpr.playAnim(name, forced, reverse, startFrame);
+				}
+				else if(luaObj.animation.getByName(name) != null)
 				{
 					luaObj.animation.play(name, forced, reverse, startFrame);
 					if(Std.isOfType(luaObj, ModchartSprite))
 					{
-						//convert luaObj to ModchartSprite
-						var obj:Dynamic = luaObj;
-						var luaObj:ModchartSprite = obj;
-
-						var daOffset = luaObj.animOffsets.get(name);
-						if (luaObj.animOffsets.exists(name))
+						var modSpr:ModchartSprite = cast luaObj;
+						var daOffset = modSpr.animOffsets.get(name);
+						if (modSpr.animOffsets.exists(name))
 						{
-							luaObj.offset.set(daOffset[0], daOffset[1]);
+							modSpr.offset.set(daOffset[0], daOffset[1]);
 						}
 					}
 				}
@@ -2715,18 +2735,21 @@ class FunkinLua {
 			}
 
 			var spr:FlxSprite = Reflect.getProperty(getInstance(), obj);
-			if(spr != null) {
-				if(spr.animation.getByName(name) != null)
+			if(spr != null)
+			{
+				if(Std.isOfType(spr, Character))
 				{
-					if(Std.isOfType(spr, Character))
-					{
-						//convert spr to Character
-						var obj:Dynamic = spr;
-						var spr:Character = obj;
-						spr.playAnim(name, forced, reverse, startFrame);
-					}
-					else
-						spr.animation.play(name, forced, reverse, startFrame);
+					var char:Character = cast spr;
+					if(char.hasAnimation(name)) char.playAnim(name, forced, reverse, startFrame);
+				}
+				else if(Std.isOfType(spr, ModchartAnimateSprite))
+				{
+					var animSpr:ModchartAnimateSprite = cast spr;
+					animSpr.playAnim(name, forced, reverse, startFrame);
+				}
+				else if(spr.animation.getByName(name) != null)
+				{
+					spr.animation.play(name, forced, reverse, startFrame);
 				}
 				return true;
 			}

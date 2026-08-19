@@ -754,9 +754,9 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		}
 		if(!blocked && FlxG.keys.justPressed.DELETE && selectedSprite >= 0) removeSelectedSprite();
 		handleCanvasInput(elapsed, blocked);
-		if(charDad != null && charDad.animation.curAnim == null) charDad.dance();
-		if(charBF != null && charBF.animation.curAnim == null) charBF.dance();
-		if(charGF != null && charGF.animation.curAnim == null) charGF.dance();
+		if(charDad != null && charDad.isAnimationNull()) charDad.dance();
+		if(charBF != null && charBF.isAnimationNull()) charBF.dance();
+		if(charGF != null && charGF.isAnimationNull()) charGF.dance();
 		super.update(elapsed);
 	}
 

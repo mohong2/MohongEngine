@@ -259,10 +259,5 @@
     "option.mobileCAlpha.desc": "虚拟按键未按下时的透明程度。",
     "option.keyboard": "键盘显示",
     "option.storageType": "存储类型",
-    "option.storageType.desc": "选择游戏访问存储的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（旧版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所选路径不可用，游戏会自动回退。",
-
-    "option.texturePooling": "GPU 纹理池化",
-    "option.texturePooling.desc": "启用 GPU 纹理复用机制，以减少显存碎片化和重复分配开销。\n建议配备独立显卡的系统开启此选项。",
-    
-    "gpuTextureManager.orphanWarning": "检测到 {count} 个孤立 GPU 纹理 — 可能存在显存泄漏。"
+    "option.storageType.desc": "选择游戏访问存储的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（旧版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所选路径不可用，游戏会自动回退。"
 }

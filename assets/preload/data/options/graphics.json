@@ -108,15 +108,6 @@
 		"platform": "desktop"
 	},
 	{
-		"nameKey": "option.texturePooling",
-		"defaultName": "GPU Texture Pooling",
-		"descKey": "option.texturePooling.desc",
-		"defaultDesc": "Enables GPU texture reuse to reduce video memory fragmentation and allocation overhead.\nRecommended for systems with a dedicated graphics processor.",
-		"variable": "texturePooling",
-		"type": "bool",
-		"defaultValue": true
-	},
-	{
 		"nameKey": "option.closeAnimStyle",
 		"defaultName": "Close Animation",
 		"descKey": "option.closeAnimStyle.desc",

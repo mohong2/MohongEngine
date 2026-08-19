@@ -14,6 +14,9 @@ using StringTools;
 #end
 
 import mohong.TraceManager;
+#if VIDEOS_ALLOWED
+import backend.VideoPreloader;
+#end
 #if MODS_ALLOWED
 import states.ModState;
 #end
@@ -126,6 +129,11 @@ class TitleState extends MusicBeatState
 	override public function create():Void
 	{
 		instance = this;
+
+		#if VIDEOS_ALLOWED
+		// Retry/warm LibVLC once the game loop is definitely running.
+		VideoPreloader.warmup();
+		#end
 
 		#if MODS_ALLOWED
 		// Load persisted mod selection FIRST so window title & state replacements

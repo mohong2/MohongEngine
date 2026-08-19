@@ -38,18 +38,25 @@ class VideoSpriteManager extends VideoSprite {
     }
     
     public function startVideo(path:String, loop:Bool = false) {
-        try
-        {
-            playVideo(path, loop, false);
-            if(onPlayState)
-                playbackRate = PlayState.instance.playbackRate;
-        }
-        catch (e:Dynamic)
-        {
-            // Log failures instead of failing silently, then run the end callback.
-            TraceManager.error('trace.video.startFailed', 'VideoSpriteManager failed to start video: {} - {}', [path, e]);
-            finishCallback();
-        }
+        // Wait for LibVLC init before calling playVideo; otherwise playVideo is
+        // deferred and the immediate playbackRate assignment below would be lost.
+        VideoPreloader.whenReady(function() {
+            if (video == null)
+                return;
+
+            try
+            {
+                playVideo(path, loop, false);
+                if(onPlayState && video != null)
+                    playbackRate = PlayState.instance.playbackRate;
+            }
+            catch (e:Dynamic)
+            {
+                // Log failures instead of failing silently, then run the end callback.
+                TraceManager.error('trace.video.startFailed', 'VideoSpriteManager failed to start video: {} - {}', [path, e]);
+                finishCallback();
+            }
+        });
     }
 
     @:noCompletion

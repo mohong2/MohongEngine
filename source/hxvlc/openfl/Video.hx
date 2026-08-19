@@ -247,7 +247,7 @@ class Video extends openfl.display.Bitmap
 	#if lime_openal
 	/** The number of buffers used for the buffer pool. */
 	@:noCompletion
-	private static final MAX_AUDIO_BUFFER_COUNT:Int = DefineMacro.getInt('HXVLC_MAX_AUDIO_BUFFER_COUNT', 255);
+	private static final MAX_AUDIO_BUFFER_COUNT:Int = DefineMacro.getInt('HXVLC_MAX_AUDIO_BUFFER_COUNT', 32);
 	#end
 
 	/**
@@ -467,14 +467,50 @@ class Video extends openfl.display.Bitmap
 	{
 		super(null, AUTO, smoothing);
 
-		{
-			while (Handle.loading)
-				Sys.sleep(0.05);
+		// SeiunEngine perf fix: do not block the main thread while LibVLC is
+		// initializing for the first time (plugin cache scan/reset can take a
+		// noticeable amount of time). Construction is now non-blocking; init is
+		// started lazily by `VideoPreloader.warmup()` / `whenReady()` or, as a
+		// compatibility fallback, inside `load()`.
+		Gc.doNotKill(this);
+	}
 
-			Handle.init();
+	/**
+	 * Pre-creates and tears down a media player so the first real playback
+	 * doesn't pay the one-time setup cost (OpenAL buffers, libVLC player, event
+	 * hooks) on the main thread during a cutscene.
+	 */
+	public function prewarm():Void
+	{
+		if (Handle.instance == null || mediaPlayer != null)
+			return;
+
+		// Create the media player and set up audio/video/event hooks. The caller
+		// is responsible for disposing this object exactly once.
+		load("__seiun_video_prewarm__.mp4");
+	}
+
+	/**
+	 * Precaches a media from the specified location.
+	 *
+	 * Unlike `load()`, this temporarily starts playback after loading the media,
+	 * causing it to be opened and prepared by the media player so it can begin
+	 * playback more quickly later. The media is automatically paused once
+	 * initialization is complete.
+	 *
+	 * @param location The location of the media file or stream.
+	 * @param options Additional options to configure the media.
+	 * @return `true` if the media was loaded successfully, `false` otherwise.
+	 */
+	public function precache(location:hxvlc.util.Location, ?options:Array<String>):Bool
+	{
+		if (load(location, options) && play())
+		{
+			pause();
+			return true;
 		}
 
-		Gc.doNotKill(this);
+		return false;
 	}
 
 	/**
@@ -486,8 +522,49 @@ class Video extends openfl.display.Bitmap
 	 */
 	public function load(location:hxvlc.util.Location, ?options:Array<String>):Bool
 	{
+		// Fallback for callers that did not wait for `VideoPreloader.whenReady`:
+		// if async init is still running, wait for it here (same behavior as the
+		// old synchronous constructor). If init already failed, return false.
 		if (Handle.instance == null)
-			return false;
+		{
+			try
+			{
+				if (!Handle.loading)
+					Handle.initAsync();
+			}
+			catch (e:Dynamic)
+			{
+				return false;
+			}
+
+			// Wait for the background init thread to actually start, then for it
+			// to finish. This never performs a second synchronous `Handle.init()`
+			// unless the async thread fails to start (safety timeout).
+			final waitStart:Float = haxe.Timer.stamp();
+			while (!Handle.loading && Handle.instance == null)
+			{
+				if (haxe.Timer.stamp() - waitStart > 10.0)
+				{
+					try
+					{
+						Handle.init();
+					}
+					catch (e:Dynamic)
+					{
+						return false;
+					}
+					break;
+				}
+
+				Sys.sleep(0.05);
+			}
+
+			while (Handle.loading)
+				Sys.sleep(0.05);
+
+			if (Handle.instance == null)
+				return false;
+		}
 
 		var mediaItem:Pointer<LibVLC_Media_T>;
 

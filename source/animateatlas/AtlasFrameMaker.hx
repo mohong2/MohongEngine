@@ -42,6 +42,12 @@ class AtlasFrameMaker extends FlxFramesCollection
 
 		if (Paths.fileExists('images/$key/spritemap1.json', TEXT))
 		{
+			#if flxanimate
+			var atlasJson:String = Paths.getTextFromFile('images/$key/spritemap1.json');
+			var atlasGraphic = Paths.image('$key/spritemap1');
+			if (atlasJson != null && atlasGraphic != null)
+				return flxanimate.frames.FlxAnimateFrames.fromSpriteMap(atlasJson, atlasGraphic);
+			#end
 			PlayState.instance.addTextToDebug("Only Spritemaps made with Adobe Animate 2018 are supported", FlxColor.RED);
 			CoolUtil.traceMsg('trace.atlasNotSupported', "Only Spritemaps made with Adobe Animate 2018 are supported");
 			return null;

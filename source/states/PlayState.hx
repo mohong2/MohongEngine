@@ -88,6 +88,7 @@ import online.shared.SeiunProtocol;
 #if VIDEOS_ALLOWED
 // hxvlc-backed hxCodec compatibility layer (see source/objects/hxcodec)
 import vlc.MP4Handler as VideoHandler;
+import backend.VideoPreloader;
 #end
 
 using StringTools;
@@ -2024,14 +2025,23 @@ class PlayState extends MusicBeatState
 			return;
 		}
 
+		// First-time LibVLC initialization can be expensive (plugin cache scan).
+		// Wait for it asynchronously instead of letting `new VideoHandler()`
+		// block the main thread and freeze the cutscene.
+		VideoPreloader.whenReady(function()
+		{
+			if (PlayState.instance != this)
+				return;
+
 			video = new VideoHandler();
-			video.playVideo(filepath);
 			video.finishCallback = function()
 			{
 				videoPlaying = false;
 				startAndEnd();
 				return;
 			}
+			video.playVideo(filepath);
+		});
 		#else
 		FlxG.log.warn('Platform not supported!');
 		startAndEnd();
@@ -2285,7 +2295,7 @@ class PlayState extends MusicBeatState
 
 				tankman.animation.addByPrefix('tightBars', 'TANK TALK 2', 24, false);
 				tankman.animation.play('tightBars', true);
-				boyfriend.animation.curAnim.finish();
+				boyfriend.finishAnimation();
 
 				cutsceneHandler.onStart = function()
 				{
@@ -2411,7 +2421,7 @@ class PlayState extends MusicBeatState
 								if(name != 'idle')
 								{
 									boyfriend.playAnim('idle', true);
-									boyfriend.animation.curAnim.finish(); //Instantly goes to last frame
+									boyfriend.finishAnimation(); //Instantly goes to last frame
 								}
 							};
 
@@ -2452,7 +2462,7 @@ class PlayState extends MusicBeatState
 						if (name == 'singUPmiss')
 						{
 							boyfriend.playAnim('idle', true);
-							boyfriend.animation.curAnim.finish(); //Instantly goes to last frame
+							boyfriend.finishAnimation(); //Instantly goes to last frame
 						}
 					};
 
@@ -2594,15 +2604,15 @@ class PlayState extends MusicBeatState
 
 			startTimer = new FlxTimer().start(Conductor.crochet / 1000 / playbackRate, function(tmr:FlxTimer)
 			{
-				if (gf != null && tmr.loopsLeft % Math.round(gfSpeed * gf.danceEveryNumBeats) == 0 && gf.animation.curAnim != null && !gf.animation.curAnim.name.startsWith("sing") && !gf.stunned)
+				if (gf != null && tmr.loopsLeft % Math.round(gfSpeed * gf.danceEveryNumBeats) == 0 && !gf.isAnimationNull() && !gf.getAnimationName().startsWith("sing") && !gf.stunned)
 				{
 					gf.dance();
 				}
-				if (tmr.loopsLeft % boyfriend.danceEveryNumBeats == 0 && boyfriend.animation.curAnim != null && !boyfriend.animation.curAnim.name.startsWith('sing') && !boyfriend.stunned)
+				if (tmr.loopsLeft % boyfriend.danceEveryNumBeats == 0 && !boyfriend.isAnimationNull() && !boyfriend.getAnimationName().startsWith('sing') && !boyfriend.stunned)
 				{
 					boyfriend.dance();
 				}
-				if (tmr.loopsLeft % dad.danceEveryNumBeats == 0 && dad.animation.curAnim != null && !dad.animation.curAnim.name.startsWith('sing') && !dad.stunned)
+				if (tmr.loopsLeft % dad.danceEveryNumBeats == 0 && !dad.isAnimationNull() && !dad.getAnimationName().startsWith('sing') && !dad.stunned)
 				{
 					dad.dance();
 				}
@@ -3832,7 +3842,7 @@ class PlayState extends MusicBeatState
 		if(!inCutscene) {
 			var lerpVal:Float = CoolUtil.boundTo(elapsed * 2.4 * cameraSpeed * playbackRate, 0, 1);
 			camFollowPos.setPosition(FlxMath.lerp(camFollowPos.x, camFollow.x, lerpVal), FlxMath.lerp(camFollowPos.y, camFollow.y, lerpVal));
-			if(!startingSong && !endingSong && boyfriend.animation.curAnim != null && boyfriend.animation.curAnim.name.startsWith('idle')) {
+			if(!startingSong && !endingSong && !boyfriend.isAnimationNull() && boyfriend.getAnimationName().startsWith('idle')) {
 				boyfriendIdleTime += elapsed;
 				if(boyfriendIdleTime >= 0.15) { // Kind of a mercy thing for making the achievement easier to get as it's apparently frustrating to some playerss
 					boyfriendIdled = true;
@@ -4126,7 +4136,7 @@ class PlayState extends MusicBeatState
 				if (replayExam != null) replayExam.replayUpdate(elapsed);
 			} else if(!cpuControlled) {
 				keysCheck();
-			} else if(boyfriend.animation.curAnim != null && boyfriend.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * boyfriend.singDuration && boyfriend.animation.curAnim.name.startsWith('sing') && !boyfriend.animation.curAnim.name.endsWith('miss')) {
+			} else if(!boyfriend.isAnimationNull() && boyfriend.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * boyfriend.singDuration && boyfriend.getAnimationName().startsWith('sing') && !boyfriend.getAnimationName().endsWith('miss')) {
 				boyfriend.dance();
 			}
 
@@ -5899,10 +5909,10 @@ class PlayState extends MusicBeatState
 		if (!_hold.contains(true) && !endingSong && generatedMusic)
 		{
 			var danceChar:Character = playOpponent ? dad : boyfriend;
-			if (danceChar.animation.curAnim != null
+			if (!danceChar.isAnimationNull()
 				&& danceChar.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * danceChar.singDuration
-				&& danceChar.animation.curAnim.name.startsWith('sing')
-				&& !danceChar.animation.curAnim.name.endsWith('miss'))
+				&& danceChar.getAnimationName().startsWith('sing')
+				&& !danceChar.getAnimationName().endsWith('miss'))
 				danceChar.dance();
 		}
 
@@ -6518,9 +6528,9 @@ class PlayState extends MusicBeatState
 			if (!holdArray.contains(true) && !endingSong && generatedMusic)
 			{
 				var danceChar:Character = playOpponent ? dad : boyfriend;
-				if (danceChar.animation.curAnim != null && danceChar.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * danceChar.singDuration && danceChar.animation.curAnim.name.startsWith('sing') && !danceChar.animation.curAnim.name.endsWith('miss'))
+				if (!danceChar.isAnimationNull() && danceChar.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * danceChar.singDuration && danceChar.getAnimationName().startsWith('sing') && !danceChar.getAnimationName().endsWith('miss'))
 					danceChar.dance();
-				if (playOpponent && boyfriend.animation.curAnim != null && boyfriend.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * boyfriend.singDuration && boyfriend.animation.curAnim.name.startsWith('sing') && !boyfriend.animation.curAnim.name.endsWith('miss'))
+				if (playOpponent && !boyfriend.isAnimationNull() && boyfriend.holdTimer > Conductor.stepCrochet * (0.0011 / FlxG.sound.music.pitch) * boyfriend.singDuration && boyfriend.getAnimationName().startsWith('sing') && !boyfriend.getAnimationName().endsWith('miss'))
 					boyfriend.dance();
 			}
 			for (i in 0...laneCount)
@@ -7374,15 +7384,15 @@ if (!note.wasGoodHit)
 		iconP1.updateHitbox();
 		iconP2.updateHitbox();
 
-		if (gf != null && curBeat % Math.round(gfSpeed * gf.danceEveryNumBeats) == 0 && gf.animation.curAnim != null && !gf.animation.curAnim.name.startsWith("sing") && !gf.stunned)
+		if (gf != null && curBeat % Math.round(gfSpeed * gf.danceEveryNumBeats) == 0 && !gf.isAnimationNull() && !gf.getAnimationName().startsWith("sing") && !gf.stunned)
 		{
 			gf.dance();
 		}
-		if (curBeat % boyfriend.danceEveryNumBeats == 0 && boyfriend.animation.curAnim != null && !boyfriend.animation.curAnim.name.startsWith('sing') && !boyfriend.stunned)
+		if (curBeat % boyfriend.danceEveryNumBeats == 0 && !boyfriend.isAnimationNull() && !boyfriend.getAnimationName().startsWith('sing') && !boyfriend.stunned)
 		{
 			boyfriend.dance();
 		}
-		if (curBeat % dad.danceEveryNumBeats == 0 && dad.animation.curAnim != null && !dad.animation.curAnim.name.startsWith('sing') && !dad.stunned)
+		if (curBeat % dad.danceEveryNumBeats == 0 && !dad.isAnimationNull() && !dad.getAnimationName().startsWith('sing') && !dad.stunned)
 		{
 			dad.dance();
 		}

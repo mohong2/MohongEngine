@@ -67,6 +67,12 @@ class Handle
 	/** Indicates whether the instance is still loading. */
 	public static var loading(default, null):Bool = false;
 
+	/** SeiunEngine: true while an async init thread has been requested but not
+	 * yet picked up by `initWithRetry`. Prevents duplicate `initAsync()` calls
+	 * from queueing multiple threads and reporting a false failure. */
+	@:noCompletion
+	private static var asyncStarting:Bool = false;
+
 	/** Retrieves the LibVLC version. */
 	public static var version(get, never):String;
 
@@ -98,16 +104,39 @@ class Handle
 	 */
 	public static function initAsync(?options:Array<String>, ?finishCallback:Bool->Void):Void
 	{
-		if (loading)
-			return;
+		instanceMutex.acquire();
 
-		MainLoop.addThread(function():Void
+		if (loading || asyncStarting)
 		{
-			final success:Bool = init(options);
+			instanceMutex.release();
+			return;
+		}
 
-			if (finishCallback != null)
-				MainLoop.runInMainThread(finishCallback.bind(success));
-		});
+		asyncStarting = true;
+		instanceMutex.release();
+
+		try
+		{
+			MainLoop.addThread(function():Void
+			{
+				final success:Bool = init(options);
+
+				instanceMutex.acquire();
+				asyncStarting = false;
+				instanceMutex.release();
+
+				if (finishCallback != null)
+					MainLoop.runInMainThread(finishCallback.bind(success));
+			});
+		}
+		catch (e:Dynamic)
+		{
+			instanceMutex.acquire();
+			asyncStarting = false;
+			instanceMutex.release();
+
+			throw e;
+		}
 	}
 
 	/**
@@ -146,9 +175,12 @@ class Handle
 
 			final args:VlcArgVector = new VlcArgVector();
 
+			#if (android || ios)
 			args.push_back("--audio-resampler=soxr");   // High-quality audio resampler (default in VLC 4.0)
+			#end
 			args.push_back("--ignore-config");          // Ignore any existing VLC config files
 			args.push_back("--drop-late-frames");       // Drop late video frames instead of trying to render them
+			args.push_back("--file-caching=0");         // Minimize first-play buffering delay for local cutscene videos
 
 			args.push_back("--aout=none");              // Disable audio output (we use amem)
 			args.push_back("--intf=none");              // Disable interface / UI

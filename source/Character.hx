@@ -4,11 +4,15 @@ import animateatlas.AtlasFrameMaker;
 import flixel.addons.effects.FlxTrail;
 import flixel.animation.FlxBaseAnimation;
 import flixel.graphics.frames.FlxAtlasFrames;
+import flixel.util.FlxDestroyUtil;
 import flixel.util.FlxSort;
 import Section.SwagSection;
 #if MODS_ALLOWED
 import sys.io.File;
 import sys.FileSystem;
+#end
+#if flxanimate
+import flxanimate.PsychFlxAnimate;
 #end
 import openfl.utils.AssetType;
 import openfl.utils.Assets;
@@ -68,6 +72,13 @@ class Character extends FlxSprite
 
 	public var hasMissAnimations:Bool = false;
 
+	// Adobe Animate 图集（0.7.3/1.0.4 兼容）
+	public var isAnimateAtlas:Bool = false;
+	#if flxanimate
+	public var atlas:PsychFlxAnimate = null;
+	#end
+	private var _lastPlayedAnimation:String = '';
+
 	//Used on Character Editor
 	public var imageFile:String = '';
 	public var jsonScale:Float = 1;
@@ -119,15 +130,13 @@ class Character extends FlxSprite
 
 				var json:CharacterFile = cast Json.parse(rawJson);
 				var spriteType = "sparrow";
+				var animateFailed:Bool = false;
 				//sparrow
 				//packer
 				//texture
 				#if MODS_ALLOWED
 				var modTxtToFind:String = Paths.modsTxt(json.image);
 				var txtToFind:String = Paths.getPath('images/' + json.image + '.txt', TEXT);
-				
-				//var modTextureToFind:String = Paths.modFolders("images/"+json.image);
-				//var textureToFind:String = Paths.getPath('images/' + json.image, new AssetType();
 				
 				if (FileSystem.exists(modTxtToFind) || FileSystem.exists(txtToFind) || Assets.exists(txtToFind))
 				#else
@@ -141,9 +150,6 @@ class Character extends FlxSprite
 				var modAnimToFind:String = Paths.modFolders('images/' + json.image + '/Animation.json');
 				var animToFind:String = Paths.getPath('images/' + json.image + '/Animation.json', TEXT);
 				
-				//var modTextureToFind:String = Paths.modFolders("images/"+json.image);
-				//var textureToFind:String = Paths.getPath('images/' + json.image, new AssetType();
-				
 				if (FileSystem.exists(modAnimToFind) || FileSystem.exists(animToFind) || Assets.exists(animToFind))
 				#else
 				if (Assets.exists(Paths.getPath('images/' + json.image + '/Animation.json', TEXT)))
@@ -152,20 +158,50 @@ class Character extends FlxSprite
 					spriteType = "texture";
 				}
 
-				switch (spriteType){
-					
-					case "packer":
-						frames = Paths.getPackerAtlas(json.image);
-					
-					case "sparrow":
-						frames = Paths.getSparrowAtlas(json.image);
-					
-					case "texture":
-						frames = AtlasFrameMaker.construct(json.image);
+				#if flxanimate
+				// New Adobe Animate spritemap format (spritemap1.json) uses FlxAnimate.
+				// Old 2018 spritemap.json stays on AtlasFrameMaker to avoid regressions.
+				if (spriteType == "texture" && Paths.fileExists('images/' + json.image + '/spritemap1.json', TEXT))
+				{
+					isAnimateAtlas = true;
+					atlas = new PsychFlxAnimate();
+					atlas.showPivot = false;
+					try
+					{
+						Paths.loadAnimateAtlas(atlas, json.image);
+					}
+					catch(e:Dynamic)
+					{
+						FlxG.log.warn('Could not load atlas ${json.image}: $e');
+						atlas = null;
+						isAnimateAtlas = false;
+						animateFailed = true;
+					}
 				}
+				#end
+
+				if (isAnimateAtlas)
+				{
+					// atlas is already loaded by the block above
+				}
+				else
+				{
+					switch (spriteType){
+						
+						case "packer":
+							frames = Paths.getPackerAtlas(json.image);
+						
+						case "sparrow":
+							frames = Paths.getSparrowAtlas(json.image);
+						
+						case "texture":
+							frames = AtlasFrameMaker.construct(json.image);
+					}
+				}
+				if (animateFailed && frames != null) frames = null;
 				imageFile = json.image;
 				
-				if (frames == null)
+				if (!isAnimateAtlas && frames == null)
 				{
 					loadGraphic(Paths.image(json.image));
 					if (graphic != null && animation != null)
@@ -174,8 +210,18 @@ class Character extends FlxSprite
 
 				if(json.scale != 1) {
 					jsonScale = json.scale;
-					setGraphicSize(Std.int(width * jsonScale));
-					updateHitbox();
+					#if flxanimate
+					if (isAnimateAtlas)
+					{
+						scale.set(jsonScale, jsonScale);
+						updateHitbox();
+					}
+					else
+					#end
+					{
+						setGraphicSize(Std.int(width * jsonScale));
+						updateHitbox();
+					}
 				}
 
 				positionArray = json.position;
@@ -195,7 +241,7 @@ class Character extends FlxSprite
 				antialiasing = !noAntialiasing;
 				if(!ClientPrefs.data.globalAntialiasing) antialiasing = false;
 
-				if (frames != null)
+				if (isAnimateAtlas || frames != null)
 				{
 					animationsArray = json.animations;
 					if(animationsArray != null && animationsArray.length > 0) {
@@ -205,20 +251,49 @@ class Character extends FlxSprite
 							var animFps:Int = anim.fps;
 							var animLoop:Bool = !!anim.loop; //Bruh
 							var animIndices:Array<Int> = anim.indices;
-							if(animIndices != null && animIndices.length > 0) {
-								animation.addByIndices(animAnim, animName, animIndices, "", animFps, animLoop);
-							} else {
-								animation.addByPrefix(animAnim, animName, animFps, animLoop);
+							#if flxanimate
+							if (isAnimateAtlas)
+							{
+								if(animIndices != null && animIndices.length > 0) {
+									atlas.anim.addBySymbolIndices(animAnim, animName, animIndices, animFps, animLoop);
+								} else {
+									atlas.anim.addBySymbol(animAnim, animName, animFps, animLoop);
+								}
+							}
+							else
+							#end
+							{
+								if(animIndices != null && animIndices.length > 0) {
+									animation.addByIndices(animAnim, animName, animIndices, "", animFps, animLoop);
+								} else {
+									animation.addByPrefix(animAnim, animName, animFps, animLoop);
+								}
 							}
 
 							if(anim.offsets != null && anim.offsets.length > 1) {
 								addOffset(anim.anim, anim.offsets[0], anim.offsets[1]);
+							} else {
+								addOffset(anim.anim, 0, 0);
 							}
 						}
 					} else {
+						#if flxanimate
+						if (isAnimateAtlas)
+						{
+							if (atlas != null)
+							{
+								atlas.anim.addBySymbol('idle', 'BF idle dance', 24, false);
+								addOffset('idle', 0, 0);
+							}
+						}
+						else
+						#end
 						quickAnimAdd('idle', 'BF idle dance');
 					}
 				}
+				#if flxanimate
+				if (isAnimateAtlas) copyAtlasValues();
+				#end
 				//trace('Loaded file to character ' + curCharacter);
 		}
 		originalFlipX = flipX;
@@ -263,21 +338,25 @@ class Character extends FlxSprite
 
 	override function update(elapsed:Float)
 	{
-		if(!debugMode && animation.curAnim != null)
+		#if flxanimate
+		if (isAnimateAtlas && atlas != null && atlas.anim != null) atlas.update(elapsed);
+		#end
+
+		if(!debugMode && (!isAnimateAtlas ? (animation.curAnim != null) : #if flxanimate (atlas != null && atlas.anim != null && atlas.anim.curInstance != null && atlas.anim.curSymbol != null) #else false #end))
 		{
 			if(heyTimer > 0)
 			{
 				heyTimer -= elapsed * PlayState.instance.playbackRate;
 				if(heyTimer <= 0)
 				{
-					if(specialAnim && animation.curAnim.name == 'hey' || animation.curAnim.name == 'cheer')
+					if(specialAnim && (getAnimationName() == 'hey' || getAnimationName() == 'cheer'))
 					{
 						specialAnim = false;
 						dance();
 					}
 					heyTimer = 0;
 				}
-			} else if(specialAnim && animation.curAnim.finished)
+			} else if(specialAnim && isAnimationFinished())
 			{
 				specialAnim = false;
 				dance();
@@ -295,12 +374,12 @@ class Character extends FlxSprite
 						playAnim('shoot' + noteData, true);
 						animationNotes.shift();
 					}
-					if(animation.curAnim.finished) playAnim(animation.curAnim.name, false, false, animation.curAnim.frames.length - 3);
+					if(isAnimationFinished()) playAnim(getAnimationName(), false, false, getAnimationLength() - 3);
 			}
 
 			if (!isPlayer)
 			{
-				if (animation.curAnim.name.startsWith('sing'))
+				if (getAnimationName().startsWith('sing'))
 				{
 					holdTimer += elapsed;
 				}
@@ -312,9 +391,9 @@ class Character extends FlxSprite
 				}
 			}
 
-			if(animation.curAnim.finished && animation.getByName(animation.curAnim.name + '-loop') != null)
+			if(isAnimationFinished() && hasAnimation(getAnimationName() + '-loop'))
 			{
-				playAnim(animation.curAnim.name + '-loop');
+				playAnim(getAnimationName() + '-loop');
 			}
 		}
 		super.update(elapsed);
@@ -339,7 +418,7 @@ class Character extends FlxSprite
 				else
 					playAnim('danceLeft' + idleSuffix);
 			}
-			else if(animation.getByName('idle' + idleSuffix) != null) {
+			else if(hasAnimation('idle' + idleSuffix)) {
 					playAnim('idle' + idleSuffix);
 			}
 		}
@@ -347,9 +426,21 @@ class Character extends FlxSprite
 
 	public function playAnim(AnimName:String, Force:Bool = false, Reversed:Bool = false, Frame:Int = 0):Void
 	{
-		if (animation == null) return;
+		#if flxanimate
+		if (isAnimateAtlas)
+		{
+			if (atlas == null || atlas.anim == null) return;
+			atlas.anim.play(AnimName, Force, Reversed, Frame);
+			atlas.update(0);
+		}
+		else
+		#end
+		{
+			if (animation == null) return;
+			animation.play(AnimName, Force, Reversed, Frame);
+		}
+		_lastPlayedAnimation = AnimName;
 		specialAnim = false;
-		animation.play(AnimName, Force, Reversed, Frame);
 
 		var daOffset = animOffsets.get(AnimName);
 		if (animOffsets.exists(AnimName))
@@ -398,7 +489,7 @@ class Character extends FlxSprite
 	private var settingCharacterUp:Bool = true;
 	public function recalculateDanceIdle() {
 		var lastDanceIdle:Bool = danceIdle;
-		danceIdle = (animation.getByName('danceLeft' + idleSuffix) != null && animation.getByName('danceRight' + idleSuffix) != null);
+		danceIdle = (hasAnimation('danceLeft' + idleSuffix) && hasAnimation('danceRight' + idleSuffix));
 
 		if(settingCharacterUp)
 		{
@@ -429,30 +520,119 @@ class Character extends FlxSprite
 
 	// ===== 兼容 Psych 0.7.3+ 回调必需的辅助方法 =====
 
+	inline public function isAnimationNull():Bool
+	{
+		#if flxanimate
+		if (isAnimateAtlas) return atlas == null || atlas.anim == null || atlas.anim.curInstance == null || atlas.anim.curSymbol == null;
+		#end
+		return animation.curAnim == null;
+	}
+
 	/** 获取当前播放的动画名称 (HScript 回调如 goodNoteHit/opponentNoteHit 等依赖此方法) */
 	public function getAnimationName():String
 	{
-		if (animation.curAnim == null) return '';
+		if (isAnimationNull()) return '';
+		#if flxanimate
+		if (isAnimateAtlas) return _lastPlayedAnimation;
+		#end
 		return animation.curAnim.name;
+	}
+
+	/** 获取当前动画总帧数 */
+	public function getAnimationLength():Int
+	{
+		#if flxanimate
+		if (isAnimateAtlas && atlas != null && atlas.anim != null) return atlas.anim.length;
+		#end
+		if (animation.curAnim == null) return 0;
+		return animation.curAnim.frames.length;
+	}
+
+	/** 获取当前动画帧号 */
+	public function getAnimationFrame():Int
+	{
+		#if flxanimate
+		if (isAnimateAtlas && atlas != null && atlas.anim != null) return atlas.anim.curFrame;
+		#end
+		if (animation.curAnim == null) return 0;
+		return animation.curAnim.curFrame;
 	}
 
 	/** 检查当前动画是否播放完毕 */
 	public function isAnimationFinished():Bool
 	{
-		if (animation.curAnim == null) return false;
+		if (isAnimationNull()) return false;
+		#if flxanimate
+		if (isAnimateAtlas) return atlas.anim.finished;
+		#end
 		return animation.curAnim.finished;
 	}
 
 	/** 强制结束当前动画 */
 	public function finishAnimation():Void
 	{
-		if (animation.curAnim == null) return;
+		if (isAnimationNull()) return;
+		#if flxanimate
+		if (isAnimateAtlas)
+		{
+			atlas.anim.curFrame = atlas.anim.length - 1;
+			return;
+		}
+		#end
 		animation.curAnim.finish();
 	}
 
 	/** 检查某动画名称是否存在 (通过 animOffsets 判断，兼容 104 版 Character API) */
 	public function hasAnimation(anim:String):Bool
 	{
+		#if flxanimate
+		if (isAnimateAtlas) return animOffsets.exists(anim);
+		#end
 		return animation.getByName(anim) != null;
 	}
+
+	#if flxanimate
+	public override function draw()
+	{
+		if (isAnimateAtlas)
+		{
+			if (atlas != null && atlas.anim != null && atlas.anim.curInstance != null && atlas.anim.curSymbol != null)
+			{
+				copyAtlasValues();
+				atlas.draw();
+			}
+			return;
+		}
+		super.draw();
+	}
+
+	public function copyAtlasValues()
+	{
+		if (atlas == null) return;
+		@:privateAccess
+		{
+			atlas.cameras = cameras;
+			atlas.scrollFactor = scrollFactor;
+			atlas.scale = scale;
+			atlas.offset = offset;
+			atlas.origin = origin;
+			atlas.x = x;
+			atlas.y = y;
+			atlas.angle = angle;
+			atlas.alpha = alpha;
+			atlas.visible = visible;
+			atlas.flipX = flipX;
+			atlas.flipY = flipY;
+			atlas.shader = shader;
+			atlas.antialiasing = antialiasing;
+			atlas.color = color;
+		}
+	}
+
+	public override function destroy()
+	{
+		atlas = FlxDestroyUtil.destroy(atlas);
+		super.destroy();
+	}
+	#end
 }

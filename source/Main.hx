@@ -29,6 +29,9 @@ import mohong.TraceManager;
 import mohong.TraceConsole;
 import backend.Dialog;
 import states.CrashCatcherState;
+#if VIDEOS_ALLOWED
+import backend.VideoPreloader;
+#end
 
 using StringTools;
 
@@ -189,6 +192,12 @@ class Main extends Sprite
 		if (drawFramerate < 30) drawFramerate = framerate;
 
 		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, updateFramerate, drawFramerate, skipSplash, startFullscreen));
+
+		// Warm up LibVLC in the background so the first video cutscene doesn't
+		// freeze the main thread while hxvlc scans/resets its plugin cache.
+		#if VIDEOS_ALLOWED
+		VideoPreloader.warmup();
+		#end
 
 		// 每次状态切换时，旧 state 已 destroy、FlxG.bitmap.clearCache() 已执行，
 		// 这里统一清掉上一状态残留的 Paths 图片缓存，避免反复进出关卡内存只增不减。
