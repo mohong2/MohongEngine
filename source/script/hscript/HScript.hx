@@ -1,4 +1,4 @@
-﻿package script.hscript;
+package script.hscript;
 
 import backend.MusicBeatState;
 import backend.ModConfig;
@@ -419,7 +419,7 @@ class HScript
 
 			// Version info
 			"hscriptVersion" => hscriptVersion,
-			"version" => MainMenuState.psychEngineVersion.trim(),
+			"version" => CompatEngine.current(),
 			"screenWidth" => FlxG.width, "screenHeight" => FlxG.height,
 		];
 

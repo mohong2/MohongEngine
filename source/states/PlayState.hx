@@ -178,6 +178,8 @@ class PlayState extends MusicBeatState
 	public var gfGroup:FlxSpriteGroup;
 	public static var curStage:String = '';
 	public static var isPixelStage:Bool = false;
+	/** 0.7.3 兼容：当前 UI 风格，例如 "normal" / "pixel" / 自定义 stageUI。 */
+	public static var stageUI:String = "normal";
 	public static var SONG:SwagSong = null;
 
 	/** Stage backdrop handler — manages background sprites, anims, and stage-specific logic. */
@@ -215,7 +217,22 @@ class PlayState extends MusicBeatState
 
 	public var vocals:FlxSound;
 	public var vocalsPlayer:FlxSound;
-	public var vocalsOpponent:FlxSound;
+	public var opponentVocals:FlxSound;
+
+	/** 旧名兼容：0.6.3/0.7.3 的 vocalsOpponent == 现在的 opponentVocals。 */
+	public var vocalsOpponent(get, set):FlxSound;
+	function get_vocalsOpponent():FlxSound return opponentVocals;
+	function set_vocalsOpponent(v:FlxSound):FlxSound return opponentVocals = v;
+
+	/** 1.0.4 兼容：playerVocals == 现在的 vocalsPlayer。 */
+	public var playerVocals(get, set):FlxSound;
+	function get_playerVocals():FlxSound return vocalsPlayer;
+	function set_playerVocals(v:FlxSound):FlxSound return vocalsPlayer = v;
+
+	/** 0.7.3 兼容：独立 instrumental 音轨别名，指向当前音乐。 */
+	public var inst(get, set):FlxSound;
+	function get_inst():FlxSound return FlxG.sound.music;
+	function set_inst(v:FlxSound):FlxSound return FlxG.sound.music = v;
 
 
 	public var dad:Character = null;
@@ -263,6 +280,8 @@ class PlayState extends MusicBeatState
 	public var health:Float = 1;
 	// Displayed health used for smooth healthbar transitions
 	public var displayHealth:Float = 1;
+	/** 0.7.3 兼容：图标受伤动画开关（iconShake 等脚本会读取）。 */
+	public var iconsAnimations:Bool = true;
 	public var combo:Int = 0;
 
 	public var healthBarBG:AttachedSprite;
@@ -783,6 +802,7 @@ class PlayState extends MusicBeatState
 				directory: "",
 				defaultZoom: 0.9,
 				isPixelStage: false,
+				stageUI: null,
 
 				boyfriend: [770, 100],
 				girlfriend: [400, 130],
@@ -798,6 +818,10 @@ class PlayState extends MusicBeatState
 
 		defaultCamZoom = stageData.defaultZoom;
 		isPixelStage = stageData.isPixelStage;
+		if (stageData.stageUI != null && stageData.stageUI.length > 0)
+			stageUI = stageData.stageUI;
+		else
+			stageUI = isPixelStage ? "pixel" : "normal";
 		BF_X = stageData.boyfriend[0];
 		BF_Y = stageData.boyfriend[1];
 		GF_X = stageData.girlfriend[0];
@@ -868,99 +892,10 @@ class PlayState extends MusicBeatState
 		#end
 
 		// ---- GLOBAL SCRIPTS (single pass over folders for both Lua & HScript) ----
-		var filesPushed:Array<String> = [];
-		var scriptFolders:Array<String> = [];
-
-		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
-		scriptFolders.push(Paths.getPreloadPath('scripts/'));
-		#end
-
-		#if MODS_ALLOWED
-		scriptFolders.push(Paths.mods('scripts/'));
-		if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
-			scriptFolders.push(Paths.mods(Paths.currentModDirectory + '/scripts/'));
-
-		for(mod in Paths.getGlobalMods())
-			scriptFolders.push(Paths.mods(mod + '/scripts/'));
-		#end
-
-		for (folder in scriptFolders)
-		{
-			#if (LUA_ALLOWED || HSCRIPT_ALLOWED || sys)
-			if (!FileSystem.exists(folder)) continue;
-			var dirContents:Array<String> = FileSystem.readDirectory(folder);
-			#end
-
-			#if LUA_ALLOWED
-			for (file in dirContents)
-			{
-				if(file.endsWith('.lua') && !filesPushed.contains(file))
-				{
-					luaArray.push(new FunkinLua(folder + file));
-					filesPushed.push(file);
-				}
-			}
-			#end
-
-			#if HSCRIPT_ALLOWED
-			for (file in dirContents)
-			{
-				if(HScript.isHscriptFile(file) && !filesPushed.contains(file))
-				{
-					try {
-						var script = new HScript(folder + file);
-						if(script != null) {
-							hscriptArray.push(script);
-							filesPushed.push(file);
-						}
-					} catch (e:Dynamic) {
-						TraceManager.error('trace.playState.hscriptFailed', 'Failed to load hscript: {} - {}', [file, e]);
-					}
-				}
-			}
-			#end
-		}
-
-		// ---- STAGE-SPECIFIC SCRIPTS ----
-		#if LUA_ALLOWED
-		(function() {
-			var luaFile:String = 'stages/' + curStage + '.lua';
-			#if MODS_ALLOWED
-			if(FileSystem.exists(Paths.modFolders(luaFile)))
-				luaFile = Paths.modFolders(luaFile);
-			else
-				luaFile = Paths.getPreloadPath(luaFile);
-			#else
-			luaFile = Paths.getPreloadPath(luaFile);
-			#end
-			#if sys
-			if(FileSystem.exists(luaFile))
-				luaArray.push(new FunkinLua(luaFile));
-			#end
-		})();
-		#end
-		
-		#if HSCRIPT_ALLOWED
-		(function() {
-			var hscriptFile:String = 'stages/' + curStage + '.hx';
-			#if MODS_ALLOWED
-			if(FileSystem.exists(Paths.modFolders(hscriptFile)))
-				hscriptFile = Paths.modFolders(hscriptFile);
-			else
-				hscriptFile = Paths.getPreloadPath(hscriptFile);
-			#else
-			hscriptFile = Paths.getPreloadPath(hscriptFile);
-			#end
-			if(FileSystem.exists(hscriptFile)) {
-				try {
-					hscriptArray.push(new HScript(hscriptFile));
-				} catch (e:Dynamic) {
-					TraceManager.error('trace.playState.hscriptStageFailed', 'Failed to load stage hscript: {} - {}', [hscriptFile, e]);
-				}
-			}
-		})();
-		#end
-
+		// 0.6.3/0.7.3 保持旧顺序：在角色创建前加载；
+		// 1.0.4 模式延后到角色/谱面生成后，兼容 104 风格脚本在顶层访问 dad/boyfriend/notes。
+		if (!CompatEngine.is104())
+			loadGlobalAndStageScripts();
 
 		var gfVersion:String = SONG.gfVersion;
 		if(gfVersion == null || gfVersion.length < 1)
@@ -1201,6 +1136,9 @@ class PlayState extends MusicBeatState
 
 		addAndroidControls(false, true);
 		generateSong(SONG.song);
+		// 1.0.4 模式：全局/舞台脚本延后到角色与谱面生成之后加载
+		if (CompatEngine.is104())
+			loadGlobalAndStageScripts();
 		#if ONLINE_ALLOWED
 		onlineGameStart();
 		#end
@@ -1772,7 +1710,7 @@ class PlayState extends MusicBeatState
 		var songName:String = PlayState.SONG.song; 
 		var difficultyName:String = displayDifficultyString();
 		var seiunEngineVersion:String = MainMenuState.seiunengineVersion;
-		var psychEngineVersion:String = MainMenuState.psychEngineVersion;
+		var psychEngineVersion:String = CompatEngine.current();
 
         var versionText:String = 'SE $seiunEngineVersion + PE $psychEngineVersion';
 		atkText = new FlxText(0, 700, 600, "", 15);
@@ -1811,13 +1749,14 @@ class PlayState extends MusicBeatState
 		trackBackground.cameras = [camHUD];
 		trackBackground.scrollFactor.set();
 		trackBackground.visible = (trackAlpha > 0);
+		// 0.7.3/1.0.4 兼容：Lua 的 onCreatePost 在 super.create() 之前调用，
+		// HScript 的 onCreatePost 由 super.create() 内部调用，避免重复。
+		callOnLuas('onCreatePost', []);
 		super.create();
 		if (CompatEngine.isModern())
 			insert(members.indexOf(noteGroup), trackBackground);
 		else
 			insert(members.indexOf(strumLineNotes), trackBackground);
-
-		callOnScripts('onCreatePost', []);
 
 		cacheCountdown();
 		cachePopUpScore();
@@ -1839,6 +1778,107 @@ class PlayState extends MusicBeatState
 		CustomFadeTransition.nextCamera = camOther;
 		
 	}
+
+	/**
+	 * 加载全局 scripts/ 与当前 stage 的脚本（Lua + HScript）。
+	 * 0.6.3/0.7.3 模式在角色创建前调用；1.0.4 模式在角色/谱面生成后调用。
+	 */
+	function loadGlobalAndStageScripts():Void
+	{
+		#if (LUA_ALLOWED || HSCRIPT_ALLOWED)
+		var filesPushed:Array<String> = [];
+		var scriptFolders:Array<String> = [];
+
+		scriptFolders.push(Paths.getPreloadPath('scripts/'));
+		#end
+
+		#if MODS_ALLOWED
+		scriptFolders.push(Paths.mods('scripts/'));
+		if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			scriptFolders.push(Paths.mods(Paths.currentModDirectory + '/scripts/'));
+
+		for(mod in Paths.getGlobalMods())
+			scriptFolders.push(Paths.mods(mod + '/scripts/'));
+		#end
+
+		for (folder in scriptFolders)
+		{
+			#if (LUA_ALLOWED || HSCRIPT_ALLOWED || sys)
+			if (!FileSystem.exists(folder)) continue;
+			var dirContents:Array<String> = FileSystem.readDirectory(folder);
+			#end
+
+			#if LUA_ALLOWED
+			for (file in dirContents)
+			{
+				if(file.endsWith('.lua') && !filesPushed.contains(file))
+				{
+					luaArray.push(new FunkinLua(folder + file));
+					filesPushed.push(file);
+				}
+			}
+			#end
+
+			#if HSCRIPT_ALLOWED
+			for (file in dirContents)
+			{
+				if(HScript.isHscriptFile(file) && !filesPushed.contains(file))
+				{
+					try {
+						var script = new HScript(folder + file);
+						if(script != null) {
+							hscriptArray.push(script);
+							filesPushed.push(file);
+						}
+					} catch (e:Dynamic) {
+						TraceManager.error('trace.playState.hscriptFailed', 'Failed to load hscript: {} - {}', [file, e]);
+					}
+				}
+			}
+			#end
+		}
+
+		// ---- STAGE-SPECIFIC SCRIPTS ----
+		#if LUA_ALLOWED
+		(function() {
+			var luaFile:String = 'stages/' + curStage + '.lua';
+			#if MODS_ALLOWED
+			if(FileSystem.exists(Paths.modFolders(luaFile)))
+				luaFile = Paths.modFolders(luaFile);
+			else
+				luaFile = Paths.getPreloadPath(luaFile);
+			#else
+			luaFile = Paths.getPreloadPath(luaFile);
+			#end
+			#if sys
+			if(FileSystem.exists(luaFile))
+				luaArray.push(new FunkinLua(luaFile));
+			#end
+		})();
+		#end
+		
+		#if HSCRIPT_ALLOWED
+		(function() {
+			var hscriptFile:String = 'stages/' + curStage + '.hx';
+			#if MODS_ALLOWED
+			if(FileSystem.exists(Paths.modFolders(hscriptFile)))
+				hscriptFile = Paths.modFolders(hscriptFile);
+			else
+				hscriptFile = Paths.getPreloadPath(hscriptFile);
+			#else
+			hscriptFile = Paths.getPreloadPath(hscriptFile);
+			#end
+			if(FileSystem.exists(hscriptFile)) {
+				try {
+					hscriptArray.push(new HScript(hscriptFile));
+				} catch (e:Dynamic) {
+					TraceManager.error('trace.playState.hscriptStageFailed', 'Failed to load stage hscript: {} - {}', [hscriptFile, e]);
+				}
+			}
+		})();
+		#end
+	}
+
 	/** Cached reflect property getters for Dynamic healthBar. */
 	var _healthBarWidth(get, never):Float;
 	inline function get__healthBarWidth():Float return Reflect.getProperty(healthBar, "width");
@@ -1885,7 +1925,7 @@ class PlayState extends MusicBeatState
 		{
 			if(vocals != null) vocals.pitch = value;
 			if(vocalsPlayer != null) vocalsPlayer.pitch = value;
-			if(vocalsOpponent != null) vocalsOpponent.pitch = value;
+			if(opponentVocals != null) opponentVocals.pitch = value;
 			FlxG.sound.music.pitch = value;
 		}
 		playbackRate = value;
@@ -2802,7 +2842,7 @@ class PlayState extends MusicBeatState
 		FlxG.sound.music.pause();
 		vocals.pause();
 		vocalsPlayer.pause();
-		vocalsOpponent.pause();
+		opponentVocals.pause();
 
 		FlxG.sound.music.time = time;
 		FlxG.sound.music.pitch = playbackRate;
@@ -2814,10 +2854,10 @@ class PlayState extends MusicBeatState
 			vocals.pitch = playbackRate;
 		}
 		
-		if (Conductor.songPosition <= vocalsOpponent.length)
+		if (Conductor.songPosition <= opponentVocals.length)
 		{
-			vocalsOpponent.time = time;
-			vocalsOpponent.pitch = playbackRate;
+			opponentVocals.time = time;
+			opponentVocals.pitch = playbackRate;
 		}
 		
 		if (Conductor.songPosition <= vocalsPlayer.length)
@@ -2827,7 +2867,7 @@ class PlayState extends MusicBeatState
 		}
 		vocals.play();
 		vocalsPlayer.play();
-		vocalsOpponent.play();
+		opponentVocals.play();
 
 		Conductor.songPosition = time;
 		songTime = time;
@@ -2859,7 +2899,7 @@ class PlayState extends MusicBeatState
 		// 音乐轨: 直接复用 FlxG.sound.music, 0 音量播放
 		try { FlxG.sound.playMusic(Paths.inst(PlayState.SONG.song), 0, false); } catch (e:Dynamic) {}
 
-		var tracks:Array<FlxSound> = [vocals, vocalsPlayer, vocalsOpponent];
+		var tracks:Array<FlxSound> = [vocals, vocalsPlayer, opponentVocals];
 		for (snd in tracks)
 		{
 			if (snd == null || !snd.exists) continue;
@@ -2873,7 +2913,7 @@ class PlayState extends MusicBeatState
 		pauseAudioSource(FlxG.sound.music);
 		pauseAudioSource(vocals);
 		pauseAudioSource(vocalsPlayer);
-		pauseAudioSource(vocalsOpponent);
+		pauseAudioSource(opponentVocals);
 	}
 
 	/** 在 lime 层暂停音源 (保留通道与缓冲, 暂停即静音) */
@@ -2934,14 +2974,14 @@ class PlayState extends MusicBeatState
 
 		seekAudioToZero(vocals);
 		seekAudioToZero(vocalsPlayer);
-		seekAudioToZero(vocalsOpponent);
+		seekAudioToZero(opponentVocals);
 
 		// 全部归零完成后再恢复音量, 并做 80ms 极短淡入,
 		// 把倒带/重启瞬间任何残留的杂音或漏音都遮掉
 		FlxG.sound.music.volume = 0;
 		vocals.volume = 0;
 		vocalsPlayer.volume = 0;
-		vocalsOpponent.volume = 0;
+		opponentVocals.volume = 0;
 
 		FlxTween.num(0, 1, 0.08, {
 			onComplete: function(t:FlxTween)
@@ -2949,20 +2989,20 @@ class PlayState extends MusicBeatState
 				FlxG.sound.music.volume = 1;
 				vocals.volume = 1;
 				vocalsPlayer.volume = 1;
-				vocalsOpponent.volume = 1;
+				opponentVocals.volume = 1;
 			}
 		}, function(v:Float)
 		{
 			FlxG.sound.music.volume = v;
 			vocals.volume = v;
 			vocalsPlayer.volume = v;
-			vocalsOpponent.volume = v;
+			opponentVocals.volume = v;
 		});
 
 		// 通道已存在, 重新应用倍速音高
 		vocals.pitch = playbackRate;
 		vocalsPlayer.pitch = playbackRate;
-		vocalsOpponent.pitch = playbackRate;
+		opponentVocals.pitch = playbackRate;
 	}
 
 	function startSong():Void
@@ -2998,7 +3038,7 @@ class PlayState extends MusicBeatState
 			FlxG.sound.music.pause();
 		vocals.pause();
 		vocalsPlayer.pause();
-		vocalsOpponent.pause();
+		opponentVocals.pause();
 		}
 
 		// Song duration in a float, useful for the time left feature
@@ -3045,25 +3085,25 @@ class PlayState extends MusicBeatState
 			#if sys
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
 			vocalsPlayer = new FlxSound().loadEmbedded(Paths.playervoices(PlayState.SONG.song));
-			vocalsOpponent = new FlxSound().loadEmbedded(Paths.opponentvoices(PlayState.SONG.song));
+			opponentVocals = new FlxSound().loadEmbedded(Paths.opponentvoices(PlayState.SONG.song));
 			#else
 			var hasPlayerVoice:Bool = Assets.exists('songs:' + Paths.getPreloadPath('songs/$songPath/Voices-Player.' + Paths.SOUND_EXT), lime.utils.AssetType.SOUND);
 			var hasOpponentVoice:Bool = Assets.exists('songs:' + Paths.getPreloadPath('songs/$songPath/Voices-Opponent.' + Paths.SOUND_EXT), lime.utils.AssetType.SOUND);
 			vocals = new FlxSound().loadEmbedded(Paths.voices(PlayState.SONG.song));
 			vocalsPlayer = hasPlayerVoice ? new FlxSound().loadEmbedded(Paths.playervoices(PlayState.SONG.song)) : vocals;
-			vocalsOpponent = hasOpponentVoice ? new FlxSound().loadEmbedded(Paths.opponentvoices(PlayState.SONG.song)) : vocals;
+			opponentVocals = hasOpponentVoice ? new FlxSound().loadEmbedded(Paths.opponentvoices(PlayState.SONG.song)) : vocals;
 			#end
 		} else {
 			vocals = new FlxSound();
 			vocalsPlayer = new FlxSound();
-			vocalsOpponent = new FlxSound();
+			opponentVocals = new FlxSound();
 		}
 		vocals.pitch = playbackRate;
 		vocalsPlayer.pitch = playbackRate;
-		vocalsOpponent.pitch = playbackRate;
+		opponentVocals.pitch = playbackRate;
 		FlxG.sound.list.add(vocals);
 		FlxG.sound.list.add(vocalsPlayer);
-		FlxG.sound.list.add(vocalsOpponent);
+		FlxG.sound.list.add(opponentVocals);
 		FlxG.sound.list.add(new FlxSound().loadEmbedded(Paths.inst(PlayState.SONG.song)));
 
 		// 预滚歌曲音频: 在加载阶段静音播放一遍再停止, 强制完成 PCM 解码与
@@ -3668,7 +3708,7 @@ class PlayState extends MusicBeatState
 				FlxG.sound.music.pause();
 			vocals.pause();
 			vocalsPlayer.pause();
-			vocalsOpponent.pause();
+			opponentVocals.pause();
 			}
 
 			if (startTimer != null && !startTimer.finished)
@@ -3784,7 +3824,7 @@ class PlayState extends MusicBeatState
 
 		vocals.pause();
 		vocalsPlayer.pause();
-		vocalsOpponent.pause();
+		opponentVocals.pause();
 
 		FlxG.sound.music.play();
 		FlxG.sound.music.pitch = playbackRate;
@@ -3799,14 +3839,14 @@ class PlayState extends MusicBeatState
 			vocalsPlayer.time = Conductor.songPosition;
 			vocalsPlayer.pitch = playbackRate;
 		}
-		if (Conductor.songPosition <= vocalsOpponent.length)
+		if (Conductor.songPosition <= opponentVocals.length)
 		{
-			vocalsOpponent.time = Conductor.songPosition;
-			vocalsOpponent.pitch = playbackRate;
+			opponentVocals.time = Conductor.songPosition;
+			opponentVocals.pitch = playbackRate;
 		}
 		vocals.play();
 		vocalsPlayer.play();
-		vocalsOpponent.play();
+		opponentVocals.play();
 	}
 
 	public var paused:Bool = false;
@@ -4402,7 +4442,7 @@ class PlayState extends MusicBeatState
 			FlxG.sound.music.pause();
 			vocals.pause();
 			vocalsPlayer.pause();
-			vocalsOpponent.pause();
+			opponentVocals.pause();
 		}
 		#if HSCRIPT_ALLOWED
 		// 联机模式强制使用新版暂停菜单: 旧版没有联机暂停/恢复/退出房间的处理逻辑。
@@ -4457,7 +4497,7 @@ class PlayState extends MusicBeatState
 
 				vocals.stop();
 				vocalsPlayer.stop();
-				vocalsOpponent.stop();
+				opponentVocals.stop();
 				FlxG.sound.music.stop();
 				
 				persistentUpdate = false;
@@ -4915,10 +4955,10 @@ class PlayState extends MusicBeatState
 		FlxG.sound.music.volume = 0;
 		vocals.volume = 0;
 		vocalsPlayer.volume = 0;
-		vocalsOpponent.volume = 0;
+		opponentVocals.volume = 0;
 		vocals.pause();
 		vocalsPlayer.pause();
-		vocalsOpponent.pause();
+		opponentVocals.pause();
 		if(ClientPrefs.data.noteOffset <= 0 || ignoreNoteOffset) {
 			finishCallback();
 		} else {
@@ -5209,7 +5249,7 @@ class PlayState extends MusicBeatState
 		// boyfriend.playAnim('hey');
 		vocals.volume = 1;
 		vocalsPlayer.volume = 1;
-		vocalsOpponent.volume = 1;
+		opponentVocals.volume = 1;
 
 		var score:Int = 350;
 		var daRating:Rating = Conductor.judgeNote(note, noteDiff / playbackRate);
@@ -6786,7 +6826,7 @@ class PlayState extends MusicBeatState
 		if (SONG.needsVoices)
 			vocals.volume = 1;
 			vocalsPlayer.volume = 1;
-			vocalsOpponent.volume = 1;
+			opponentVocals.volume = 1;
 		var time:Float = 0.15;
 		if(note.isSustainNote && !note.animation.curAnim.name.endsWith('end')) {
 			time += 0.15;
@@ -7149,7 +7189,7 @@ if (!note.wasGoodHit)
 			#end
 			vocals.volume = 1;
 			vocalsPlayer.volume = 1;
-			vocalsOpponent.volume = 1;
+			opponentVocals.volume = 1;
 
 			var scriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
 			var result:Dynamic = FunkinLua.Function_Continue;

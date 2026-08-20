@@ -17,6 +17,7 @@ class HealthIcon extends FlxSprite
 		super();
 		isOldIcon = (char == 'bf-old');
 		this.isPlayer = isPlayer;
+		pixelPerfectPosition = isPlayer;
 		changeIcon(char);
 		scrollFactor.set();
 	}
@@ -76,6 +77,7 @@ class HealthIcon extends FlxSprite
 				animation.add(char, [0, 1, 0], 0, false, isPlayer);
 			}
 			animation.play(char);
+			pixelPerfectPosition = isPlayer;
 			drawFrame(true);
 			this.char = char;
 

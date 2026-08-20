@@ -33,11 +33,11 @@ class LuaUtils
 	// ==================== 常量 ====================
 
 	// 使用当前引擎的值（整数），与 FunkinLua 保持一致
-	public static var Function_Stop:Dynamic = 1;
-	public static var Function_Continue:Dynamic = 0;
-	public static var Function_StopLua:Dynamic = 2;
-	public static var Function_StopHScript:Dynamic = 3;
-	public static var Function_StopAll:Dynamic = 4;
+	public static var Function_Stop:Dynamic = "##PSYCHLUA_FUNCTIONSTOP";
+	public static var Function_Continue:Dynamic = "##PSYCHLUA_FUNCTIONCONTINUE";
+	public static var Function_StopLua:Dynamic = "##PSYCHLUA_FUNCTIONSTOPLUA";
+	public static var Function_StopHScript:Dynamic = "##PSYCHLUA_FUNCTIONSTOPHSCRIPT";
+	public static var Function_StopAll:Dynamic = "##PSYCHLUA_FUNCTIONSTOPALL";
 
 	// ==================== Tween 工具 ====================
 

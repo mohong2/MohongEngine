@@ -34,8 +34,8 @@ import Discord;
 using StringTools;
 
 class EditorLua {
-	public static var Function_Stop = 1;
-	public static var Function_Continue = 0;
+	public static var Function_Stop = "##PSYCHLUA_FUNCTIONSTOP";
+	public static var Function_Continue = "##PSYCHLUA_FUNCTIONCONTINUE";
 
 	#if LUA_ALLOWED
 	public var lua:State = null;
@@ -235,7 +235,11 @@ class EditorLua {
 			return;
 		}
 
+		// 与 FunkinLua.set 保持一致：类实例等无法安全转换的值静默置 nil。
+		var oldEnableUnsupportedTraces:Bool = Convert.enableUnsupportedTraces;
+		Convert.enableUnsupportedTraces = false;
 		Convert.toLua(lua, data);
+		Convert.enableUnsupportedTraces = oldEnableUnsupportedTraces;
 		Lua.setglobal(lua, variable);
 		#end
 	}

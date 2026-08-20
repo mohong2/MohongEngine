@@ -7,6 +7,7 @@ import options.OptionsState;
 import substates.ModSelectSubstate;
 import states.ModState;
 import backend.ModConfig;
+import backend.CompatEngine;
 #if cpp
 import Discord.DiscordClient;
 #end
@@ -225,34 +226,35 @@ class MainMenuState extends SeiunMenuState
 		}
 
 		FlxG.camera.follow(camFollowPos, null, 1);
-		var versionShitx = 1000;
+		// 版本信息统一右对齐，贴住屏幕右边缘，避免长文本溢出。
+		var versionRightEdge:Int = FlxG.width - 10;
 		// (y, label) pairs, listed top-to-bottom as they appear on screen
 		var versionLabels:Array<Array<Dynamic>> = [
 			[FlxG.height - 104, "Seiun Online v" + seiunOnlineVersion],
 			[FlxG.height - 84,  "ExtraKeys v" + extrakeysVersion],
 			[FlxG.height - 64,  "Seiun Engine v" + seiunengineVersion],
-			[FlxG.height - 44,  "Psych Engine v" + psychEngineVersion],
+			[FlxG.height - 44,  "Psych Engine v0.6.3+0.7.3+1.0.4 (Active: " + CompatEngine.current() + ")"],
 			[FlxG.height - 24,  "Friday Night Funkin' v" + fnfGameVersion]
 		];
 		for (label in versionLabels)
 		{
-			var versionShit:FlxText = new FlxText(versionShitx, Std.int(label[0]), 0, Std.string(label[1]), 12);
+			var versionShit:FlxText = new FlxText(0, Std.int(label[0]), versionRightEdge, Std.string(label[1]), 12);
 			versionShit.scrollFactor.set();
-			versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			add(versionShit);
 		}
 
 		#if HSCRIPT_ALLOWED
-		var hscriptversionShit:FlxText = new FlxText(versionShitx + 20, FlxG.height - 704, 0, "Hscript version: " + HScript.hscriptVersion, 12);
+		var hscriptversionShit:FlxText = new FlxText(0, FlxG.height - 704, versionRightEdge, "Hscript version: " + HScript.hscriptVersion, 12);
 		hscriptversionShit.scrollFactor.set();
-		hscriptversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		hscriptversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(hscriptversionShit);
 		#end
 
 		#if LUA_ALLOWED
-		var luaversionShit:FlxText = new FlxText(versionShitx + 20, FlxG.height - 684, 0, "Lua version: " + FunkinLua.luaversion, 12);
+		var luaversionShit:FlxText = new FlxText(0, FlxG.height - 684, versionRightEdge, "Lua version: " + FunkinLua.luaversion, 12);
 		luaversionShit.scrollFactor.set();
-		luaversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		luaversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(luaversionShit);
 		#end
 

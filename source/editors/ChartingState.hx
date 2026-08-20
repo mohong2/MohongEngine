@@ -741,7 +741,7 @@ class ChartingState extends MusicBeatState implements PsychUIEventHandler.PsychU
 	var playbackSpeed:Float = 1;
 
 	var vocals:FlxSound = null;
-	var vocalsOpponent:FlxSound = null;
+	var opponentVocals:FlxSound = null;
 
 	var leftIcon:HealthIcon;
 	var rightIcon:HealthIcon;
@@ -1965,7 +1965,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 
 		opponentVolume = new PsychUINumericStepper(voicesVolume.x + 100, instVolume.y, 0.1, 1, 0, 1, 1);
 			opponentVolume.textObj.font = 'assets/fonts/editors.ttf';
-		opponentVolume.value = vocalsOpponent.volume;
+		opponentVolume.value = opponentVocals.volume;
 		opponentVolume.name = 'voices_opponent';
 		blockPressWhileTypingOnStepper.push(opponentVolume);
 		/*
@@ -2018,7 +2018,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 
 		var file:Dynamic = Paths.voices(Paths.formatToSongPath(PlayState.SONG.song));
 		vocals = new FlxSound();
-		vocalsOpponent = new FlxSound();
+		opponentVocals = new FlxSound();
 		if (Std.isOfType(file, Sound) || OpenFlAssets.exists(file)) {
 			vocals.loadEmbedded(file);
 			FlxG.sound.list.add(vocals);
@@ -2036,13 +2036,13 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 			}
 			#if MODS_ALLOWED
 			if (sys.FileSystem.exists(Paths.modFolders(dadVocalPath))) {
-				vocalsOpponent.loadEmbedded(Paths.modFolders(dadVocalPath));
+				opponentVocals.loadEmbedded(Paths.modFolders(dadVocalPath));
 			}
 			#end
 			if (OpenFlAssets.exists(dadVocalPath)) {
-					vocalsOpponent.loadEmbedded(dadVocalPath);
+					opponentVocals.loadEmbedded(dadVocalPath);
 			}
-		FlxG.sound.list.add(vocalsOpponent);
+		FlxG.sound.list.add(opponentVocals);
 		generateSong();
 		FlxG.sound.music.pause();
 		Conductor.songPosition = sectionStartTime();
@@ -2053,7 +2053,7 @@ function generateSong() {
     FlxG.sound.playMusic(Paths.inst(currentSongName), 0.6/*, false*/);
     if (instVolume != null) FlxG.sound.music.volume = instVolume.value;
     if (check_mute_inst != null && check_mute_inst.checked) FlxG.sound.music.volume = 0;
-    if (opponentVolume != null) vocalsOpponent.volume = opponentVolume.value;
+    if (opponentVolume != null) opponentVocals.volume = opponentVolume.value;
 
     FlxG.sound.music.onComplete = function()
     {
@@ -2061,16 +2061,16 @@ function generateSong() {
         Conductor.songPosition = 0;
         if(vocals != null) {
             vocals.pause();
-            vocalsOpponent.pause();
+            opponentVocals.pause();
             vocals.time = 0;
-            vocalsOpponent.time = 0;
+            opponentVocals.time = 0;
         }
         changeSection();
         curSec = 0;
         updateGrid();
         updateSectionUI();
         vocals.play();
-        vocalsOpponent.play();
+        opponentVocals.play();
     };
 }
 
@@ -2175,7 +2175,7 @@ function generateSong() {
 			}
 			else if (wname == 'voices_opponent')
 			{
-    		vocalsOpponent.volume = nums.value;
+    		opponentVocals.volume = nums.value;
 			}
 		}
 		else if(id == PsychUIInputText.CHANGE_EVENT && (sender is PsychUIInputText)) {
@@ -2525,7 +2525,7 @@ function generateSong() {
 				{
 					FlxG.sound.music.pause();
 					if(vocals != null) vocals.pause();
-					if(vocalsOpponent != null) vocalsOpponent.pause();
+					if(opponentVocals != null) opponentVocals.pause();
 				}
 				else
 				{
@@ -2535,11 +2535,11 @@ function generateSong() {
 						vocals.time = FlxG.sound.music.time;
 						vocals.play();
 					}
-					if(vocalsOpponent != null) {
-						vocalsOpponent.play();
-						vocalsOpponent.pause();
-						vocalsOpponent.time = FlxG.sound.music.time;
-						vocalsOpponent.play();
+					if(opponentVocals != null) {
+						opponentVocals.play();
+						opponentVocals.pause();
+						opponentVocals.time = FlxG.sound.music.time;
+						opponentVocals.play();
 					}
 					FlxG.sound.music.play();
 				}
@@ -2577,9 +2577,9 @@ function generateSong() {
 					vocals.pause();
 					vocals.time = FlxG.sound.music.time;
 				}
-				if(vocalsOpponent != null){
-					vocalsOpponent.pause();
-					vocalsOpponent.time = FlxG.sound.music.time;
+				if(opponentVocals != null){
+					opponentVocals.pause();
+					opponentVocals.time = FlxG.sound.music.time;
 				}
 			}
 
@@ -2608,9 +2608,9 @@ function generateSong() {
 					vocals.pause();
 					vocals.time = FlxG.sound.music.time;
 				}
-				if(vocalsOpponent != null) {
-					vocalsOpponent.pause();
-					vocalsOpponent.time = FlxG.sound.music.time;
+				if(opponentVocals != null) {
+					opponentVocals.pause();
+					opponentVocals.time = FlxG.sound.music.time;
 				}
 			}
 
@@ -2702,9 +2702,9 @@ function generateSong() {
 						vocals.pause();
 						vocals.time = FlxG.sound.music.time;
 					}
-					if(vocalsOpponent != null) {
-						vocalsOpponent.pause();
-						vocalsOpponent.time = FlxG.sound.music.time;
+					if(opponentVocals != null) {
+						opponentVocals.pause();
+						opponentVocals.time = FlxG.sound.music.time;
 					}
 
 					var dastrum = 0;
@@ -2798,7 +2798,7 @@ function generateSong() {
 
 		FlxG.sound.music.pitch = playbackSpeed;
 		vocals.pitch = playbackSpeed;
-		vocalsOpponent.pitch = playbackSpeed;
+		opponentVocals.pitch = playbackSpeed;
 
 		bpmTxt.text =
 		Std.string(FlxMath.roundDecimal(Conductor.songPosition / 1000, 2)) + " / " + Std.string(FlxMath.roundDecimal(FlxG.sound.music.length / 1000, 2)) +
@@ -3139,7 +3139,7 @@ function generateSong() {
 
 		if (FlxG.save.data.chart_waveformVoices) {
 			var sound:FlxSound = vocals;
-			var soundOpponent:FlxSound = vocalsOpponent;
+			var soundOpponent:FlxSound = opponentVocals;
 			if (sound._sound != null && sound._sound.__buffer != null) {
 				var bytes:Bytes = sound._sound.__buffer.data.toBytes();
 
@@ -3369,9 +3369,9 @@ function generateSong() {
 
 		if(vocals != null) {
 			vocals.pause();
-			vocalsOpponent.pause();
+			opponentVocals.pause();
 			vocals.time = FlxG.sound.music.time;
-			vocalsOpponent.time = FlxG.sound.music.time;
+			opponentVocals.time = FlxG.sound.music.time;
 		}
 		updateCurStep();
 
@@ -3391,9 +3391,9 @@ function generateSong() {
 				FlxG.sound.music.time = sectionStartTime();
 				if(vocals != null) {
 				vocals.pause();
-				vocalsOpponent.pause();
+				opponentVocals.pause();
 				vocals.time = FlxG.sound.music.time;
-				vocalsOpponent.time = FlxG.sound.music.time;
+				opponentVocals.time = FlxG.sound.music.time;
 				}
 				updateCurStep();
 			}
@@ -4265,7 +4265,7 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 		PlayState.SONG = _song;
 		FlxG.sound.music.stop();
 		if(vocals != null) vocals.stop();
-		if(vocalsOpponent != null) vocalsOpponent.stop();
+		if(opponentVocals != null) opponentVocals.stop();
 		StageData.loadDirectory(_song);
 		LoadingState.loadAndSwitchState(new PlayState());
 		PlayState.replayMode = false;

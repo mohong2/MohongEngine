@@ -3,6 +3,7 @@ package script.lua;
 import backend.ModConfig;
 import backend.MusicBeatState;
 import backend.CompatEngine;
+import Achievements;
 import backend.Difficulty;
 import haxe.Constraints.Function;
 import script.hscript.HScript;
@@ -84,11 +85,11 @@ class FunkinLua {
 
 	public static var luaversion:String = "0.64.1";
 	public var callbacks:Map<String, Dynamic> = new Map<String, Dynamic>();
-	public static var Function_Stop:Dynamic = 1;
-	public static var Function_Continue:Dynamic = 0;
-	public static var Function_StopLua:Dynamic = 2;
-	public static var Function_StopHScript:Dynamic = 3;
-    public static var Function_StopAll:Dynamic = 4;
+	public static var Function_Stop:Dynamic = "##PSYCHLUA_FUNCTIONSTOP";
+	public static var Function_Continue:Dynamic = "##PSYCHLUA_FUNCTIONCONTINUE";
+	public static var Function_StopLua:Dynamic = "##PSYCHLUA_FUNCTIONSTOPLUA";
+	public static var Function_StopHScript:Dynamic = "##PSYCHLUA_FUNCTIONSTOPHSCRIPT";
+    public static var Function_StopAll:Dynamic = "##PSYCHLUA_FUNCTIONSTOPALL";
 	static final instanceStr:Dynamic = "##PSYCHLUA_STRINGTOOBJ";
 	//public var errorHandler:String->Void;
 	#if LUA_ALLOWED
@@ -300,7 +301,7 @@ class FunkinLua {
 		set('curDecBeat', 0);
 		set('curDecStep', 0);
 
-		set('version', MainMenuState.psychEngineVersion.trim());
+		set('version', CompatEngine.current());
 
 		// Some settings, no jokes
 		set('downscroll', ClientPrefs.data.downScroll);
@@ -325,8 +326,8 @@ class FunkinLua {
 		set('noteSkin', ClientPrefs.data.noteSkin);
 		set('splashSkin', ClientPrefs.data.splashSkin);
 		set('splashAlpha', ClientPrefs.data.splashAlpha);
-		set('noteSkinPostfix', '');
-		set('splashSkinPostfix', '');
+		set('noteSkinPostfix', Note.getNoteSkinPostfix());
+		set('splashSkinPostfix', NoteSplash.getSplashSkinPostfix());
 
 		set('luattf', ClientPrefs.data.luattf);
 		for (i in 0...4) {
@@ -1496,6 +1497,19 @@ class FunkinLua {
 			// 这里对 healthBar.scale.x/y 给一个安全默认值 1，和 104 行为一致。
 			if(result == null && (variable == 'healthBar.scale.x' || variable == 'healthBar.scale.y'))
 				result = 1;
+
+			// 0.6.3/0.7.3 旧加载顺序下，全局脚本可能在角色/谱面创建前访问
+			// dad/boyfriend/notes/strums 等对象。此时返回安全默认值而不是 nil，
+			// 避免脚本顶层 string.format / 算术直接报错，保证脚本能正常加载。
+			// 1.0.4 模式保持原有 nil 语义，避免影响已正常的 104 脚本。
+			if(result == null && !CompatEngine.is104() && split.length > 0)
+			{
+				var lastProp:String = split[split.length - 1];
+				if(lastProp == 'name' || lastProp == 'curCharacter' || lastProp == 'text' || lastProp.indexOf('Name') != -1)
+					result = '';
+				else
+					result = 0;
+			}
 			return result;
 		});
 		Lua_helper.add_callback(lua, "setProperty", function(variable:String, value:Dynamic, allowMaps:Bool = false) {
@@ -1542,20 +1556,49 @@ class FunkinLua {
 			return true;
 			});
 		}*/
-		Lua_helper.add_callback(lua, "getPropertyFromGroup", function(obj:String, index:Int, variable:Dynamic) {
+		Lua_helper.add_callback(lua, "getPropertyFromGroup", function(obj:String, index:Int, variable:Dynamic):Dynamic {
 			var shitMyPants:Array<String> = obj.split('.');
 			var realObject:Dynamic = Reflect.getProperty(getInstance(), obj);
 			if(shitMyPants.length>1)
 				realObject = getPropertyLoopThingWhatever(shitMyPants, true, false);
 
+			// 1.0.4 保持原行为，不改变 nil 语义
+			if (CompatEngine.is104())
+			{
+				if(Std.isOfType(realObject, FlxTypedGroup))
+				{
+					var result104:Dynamic = getGroupStuff(realObject.members[index], variable);
+					if(result104 == null) Lua.pushnil(lua);
+					return result104;
+				}
+
+				var leArray104:Dynamic = realObject[index];
+				if(leArray104 != null) {
+					var result104:Dynamic = null;
+					if(Type.typeof(variable) == ValueType.TInt)
+						result104 = leArray104[variable];
+					else
+						result104 = getGroupStuff(leArray104, variable);
+
+					if(result104 == null) Lua.pushnil(lua);
+					return result104;
+				}
+				luaTrace("getPropertyFromGroup: Object #" + index + " from group: " + obj + " doesn't exist!", false, false, FlxColor.RED);
+				Lua.pushnil(lua);
+				return null;
+			}
+
+			// 0.6.3/0.7.3 旧加载顺序下组可能还没创建，返回安全默认值避免脚本顶层崩溃。
+			if(realObject == null) return 0;
 
 			if(Std.isOfType(realObject, FlxTypedGroup))
 			{
+				if(realObject.members == null || index < 0 || index >= realObject.members.length)
+					return 0;
 				var result:Dynamic = getGroupStuff(realObject.members[index], variable);
-				if(result == null) Lua.pushnil(lua);
+				if(result == null) return 0;
 				return result;
 			}
-
 
 			var leArray:Dynamic = realObject[index];
 			if(leArray != null) {
@@ -1565,12 +1608,11 @@ class FunkinLua {
 				else
 					result = getGroupStuff(leArray, variable);
 
-				if(result == null) Lua.pushnil(lua);
+				if(result == null) return 0;
 				return result;
 			}
 			luaTrace("getPropertyFromGroup: Object #" + index + " from group: " + obj + " doesn't exist!", false, false, FlxColor.RED);
-			Lua.pushnil(lua);
-			return null;
+			return 0;
 		});
 		Lua_helper.add_callback(lua, "setPropertyFromGroup", function(obj:String, index:Int, variable:Dynamic, value:Dynamic) {
 			var shitMyPants:Array<String> = obj.split('.');
@@ -2158,21 +2200,75 @@ class FunkinLua {
 			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
 				&& PlayState.instance.replayExam.keyExists(name))
 				return PlayState.instance.replayExam.keyJustPressed(name);
-			return Reflect.getProperty(FlxG.keys.justPressed, name);
+
+			var keyDown:Bool = Reflect.getProperty(FlxG.keys.justPressed, name) == true;
+			if (keyDown) return true;
+			if (PlayState.instance == null) return false;
+
+			// 0.7.3/1.0.4 兼容：很多模组只检查 keyboardJustPressed('ENTER')，
+			// 这里在键盘没按时回退到 Controls 的 ACCEPT/BACK/UI_*，让手柄也能操作菜单。
+			switch(name.toUpperCase())
+			{
+				case 'ENTER' | 'SPACE' | 'Z':
+					return PlayState.instance.getControl('ACCEPT');
+				case 'ESCAPE' | 'BACKSPACE':
+					return PlayState.instance.getControl('BACK');
+				case 'W' | 'UP':
+					return PlayState.instance.getControl('UI_UP_P');
+				case 'S' | 'DOWN':
+					return PlayState.instance.getControl('UI_DOWN_P');
+				case 'A' | 'LEFT':
+					return PlayState.instance.getControl('UI_LEFT_P');
+				case 'D' | 'RIGHT':
+					return PlayState.instance.getControl('UI_RIGHT_P');
+			}
+			return false;
 		});
 		Lua_helper.add_callback(lua, "keyboardPressed", function(name:String)
 		{
 			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
 				&& PlayState.instance.replayExam.keyExists(name))
 				return PlayState.instance.replayExam.keyPressed(name);
-			return Reflect.getProperty(FlxG.keys.pressed, name);
+
+			var keyDown:Bool = Reflect.getProperty(FlxG.keys.pressed, name) == true;
+			if (keyDown) return true;
+			if (PlayState.instance == null) return false;
+
+			switch(name.toUpperCase())
+			{
+				case 'W' | 'UP':
+					return PlayState.instance.getControl('UI_UP');
+				case 'S' | 'DOWN':
+					return PlayState.instance.getControl('UI_DOWN');
+				case 'A' | 'LEFT':
+					return PlayState.instance.getControl('UI_LEFT');
+				case 'D' | 'RIGHT':
+					return PlayState.instance.getControl('UI_RIGHT');
+			}
+			return false;
 		});
 		Lua_helper.add_callback(lua, "keyboardReleased", function(name:String)
 		{
 			if (PlayState.replayMode && PlayState.instance != null && PlayState.instance.replayExam != null
 				&& PlayState.instance.replayExam.keyExists(name))
 				return PlayState.instance.replayExam.keyJustReleased(name);
-			return Reflect.getProperty(FlxG.keys.justReleased, name);
+
+			var keyUp:Bool = Reflect.getProperty(FlxG.keys.justReleased, name) == true;
+			if (keyUp) return true;
+			if (PlayState.instance == null) return false;
+
+			switch(name.toUpperCase())
+			{
+				case 'W' | 'UP':
+					return PlayState.instance.getControl('UI_UP_R');
+				case 'S' | 'DOWN':
+					return PlayState.instance.getControl('UI_DOWN_R');
+				case 'A' | 'LEFT':
+					return PlayState.instance.getControl('UI_LEFT_R');
+				case 'D' | 'RIGHT':
+					return PlayState.instance.getControl('UI_RIGHT_R');
+			}
+			return false;
 		});
 
 		Lua_helper.add_callback(lua, "anyGamepadJustPressed", function(name:String)
@@ -2250,6 +2346,7 @@ class FunkinLua {
 				case 'pause': key = PlayState.instance.getControl('PAUSE');
 				case 'reset': key = PlayState.instance.getControl('RESET');
 				case 'space': key = FlxG.keys.justPressed.SPACE;//an extra key for convinience
+				default: key = PlayState.instance.controls.justPressed(name);
 			}
 			return key;
 		});
@@ -2264,6 +2361,7 @@ class FunkinLua {
 				case 'up': key = PlayState.instance.getControl('NOTE_UP');
 				case 'right': key = PlayState.instance.getControl('NOTE_RIGHT');
 				case 'space': key = FlxG.keys.pressed.SPACE;//an extra key for convinience
+				default: key = PlayState.instance.controls.pressed(name);
 			}
 			return key;
 		});
@@ -2278,6 +2376,7 @@ class FunkinLua {
 				case 'up': key = PlayState.instance.getControl('NOTE_UP_R');
 				case 'right': key = PlayState.instance.getControl('NOTE_RIGHT_R');
 				case 'space': key = FlxG.keys.justReleased.SPACE;//an extra key for convinience
+				default: key = PlayState.instance.controls.justReleased(name);
 			}
 			return key;
 		});
@@ -2621,7 +2720,8 @@ class FunkinLua {
 			var leSprite:ModchartSprite = new ModchartSprite(x, y);
 			if(image != null && image.length > 0)
 			{
-				leSprite.loadGraphic(Paths.image(image));
+				// 单个贴图缺失不应中断整个脚本，保留空白 sprite 继续执行。
+				try { leSprite.loadGraphic(Paths.image(image)); } catch(e:Dynamic) {}
 			}
 			var sprites = getStateModchartSprites();
 			if(sprites != null) sprites.set(tag, leSprite);
@@ -2632,7 +2732,8 @@ class FunkinLua {
 			resetSpriteTag(tag);
 			var leSprite:ModchartSprite = new ModchartSprite(x, y);
 
-			loadFrames(leSprite, image, spriteType);
+			// 单个图集/贴图缺失不应中断整个脚本，保留空白 sprite 继续执行。
+			try { loadFrames(leSprite, image, spriteType); } catch(e:Dynamic) {}
 			var sprites = getStateModchartSprites();
 			if(sprites != null) sprites.set(tag, leSprite);
 		});
@@ -3251,6 +3352,16 @@ class FunkinLua {
 			DiscordClient.changePresence(details, state, smallImageKey, hasStartTimestamp, endTimestamp);
 			#end
 		});
+		Lua_helper.add_callback(lua, "changeDiscordPresence", function(details:String, state:Null<String>, ?smallImageKey:String, ?hasStartTimestamp:Bool, ?endTimestamp:Float) {
+			#if desktop
+			DiscordClient.changePresence(details, state, smallImageKey, hasStartTimestamp, endTimestamp);
+			#end
+		});
+		Lua_helper.add_callback(lua, "changeDiscordClientID", function(?newID:String = null) {
+			if (newID == null) newID = DiscordClient._defaultID;
+			DiscordClient.clientID = newID;
+		});
+		Achievements.addLuaCallbacks(lua);
 
 
 		// LUA TEXTS
@@ -3768,7 +3879,18 @@ class FunkinLua {
 			return;
 		}
 
+		// 0.7.3 兼容：onCreate 执行期间必须已经位于 PlayState.luaArray，
+		// 这样 HScript 的 createGlobalCallback 才能把 parseJson 等回调注册到当前 Lua 脚本。
+		// 这里临时加入，onCreate 结束后移除，由外部调用方负责正式入列，避免重复添加。
+		var __tempLuaPush:Bool = false;
+		if (PlayState.instance != null && !PlayState.instance.luaArray.contains(this))
+		{
+			PlayState.instance.luaArray.push(this);
+			__tempLuaPush = true;
+		}
 		call('onCreate', []);
+		if (__tempLuaPush && PlayState.instance != null && PlayState.instance.luaArray.contains(this))
+			PlayState.instance.luaArray.remove(this);
 		#end
 	}
 
@@ -4249,6 +4371,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			for (i in 1...splitProps.length)
 			{
 				var j:Dynamic = splitProps[i].substr(0, splitProps[i].length - 1);
+				if (target == null) return null; // 对象不存在时安全跳过，避免空指针中断脚本
 				if(i >= splitProps.length-1) //Last array
 					target[j] = value;
 				else //Anything else
@@ -4292,6 +4415,7 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			for (i in 1...splitProps.length)
 			{
 				var j:Dynamic = splitProps[i].substr(0, splitProps[i].length - 1);
+				if (target == null) return null; // 对象不存在时安全返回，避免空指针中断脚本
 				target = target[j];
 			}
 			return target;
@@ -4999,7 +5123,13 @@ public static function setVarInArray(instance:Dynamic, variable:String, value:Dy
 			return;
 		}
 
+		// Haxe 类实例（Controls/State 等）无法被 Lua 直接使用，Convert 会打印
+		// "Haxe value ... not supported" 并 push nil。这里静默走同一逻辑：
+		// 不产生噪音日志，也不会让脚本拿到半成品对象。
+		var oldEnableUnsupportedTraces:Bool = Convert.enableUnsupportedTraces;
+		Convert.enableUnsupportedTraces = false;
 		Convert.toLua(lua, data);
+		Convert.enableUnsupportedTraces = oldEnableUnsupportedTraces;
 		Lua.setglobal(lua, variable);
 		#end
 	}
@@ -5069,7 +5199,9 @@ class CustomSubstate extends MusicBeatSubstate
 	{
 		instance = this;
 		if (PlayState.instance != null) {
-			PlayState.instance.setOnLuas('customSubstate', this);
+			// Lua 侧不能直接转换 CustomSubstate 实例，给一个安全的字符串名；
+			// HScript 侧仍按 0.7.3 暴露真实实例。
+			PlayState.instance.setOnLuas('customSubstate', name);
 			PlayState.instance.setOnHscript('customSubstate', this);
 		}
 

@@ -15,12 +15,14 @@ using StringTools;
 class DiscordClient
 {
 	public static var isInitialized:Bool = false;
+	public static var clientID:String = "863222024192262205";
+	public static var _defaultID:String = clientID;
 	public function new()
 	{
 	  #if flash
 		CoolUtil.traceMsg('trace.discordStart', 'Discord Client starting...');
 		DiscordRpc.start({
-			clientID: "863222024192262205",
+			clientID: clientID,
 			onReady: onReady,
 			onError: onError,
 			onDisconnected: onDisconnected
