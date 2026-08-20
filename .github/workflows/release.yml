@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       run_id:
-        description: 构建 run 的纯数字编号（如 31261975698；留空则自动用最新一次 Build）
+        description: 'Numeric build run ID (e.g. 31261975698; leave empty to use the latest Build run)'
         required: false
         type: string
 
@@ -24,7 +24,7 @@ jobs:
         run: |
           RUN_ID="${{ github.event.inputs.run_id }}"
           if [ -n "$RUN_ID" ] && ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
-            echo "::warning::run_id 不是纯数字（$RUN_ID），改用最新一次 Build run"
+            echo "::warning::run_id is not numeric ($RUN_ID), falling back to the latest Build run"
             RUN_ID=""
           fi
           if [ -z "$RUN_ID" ]; then
@@ -44,14 +44,32 @@ jobs:
           run-id: ${{ env.RUN_ID }}
           github-token: ${{ github.token }}
 
-      - name: Package assets
+      - name: Package release assets
         run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
           cd release
           for d in */; do
-            if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
-              zip -r "${d%/}.zip" "$d"
+            d="${d%/}"
+            [ -d "$d" ] || continue
+            mobile=0
+            for f in "$d"/*.apk "$d"/*.ipa; do
+              if [ -f "$f" ]; then
+                cp "$f" ../dist/
+                mobile=1
+              fi
+            done
+            if [ "$mobile" -eq 0 ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+              zip -r "../dist/${d}.zip" "$d"
             fi
           done
+          cd ../dist
+          shopt -s nullglob
+          files=(*.apk *.ipa *.zip)
+          if [ "${#files[@]}" -gt 0 ]; then
+            sha256sum "${files[@]}" > SHA256SUMS.txt
+          fi
           ls -la
 
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
@@ -60,6 +78,15 @@ jobs:
           name: Alpha v${{ env.APP_VERSION }} (build ${{ env.RUN_ID }})
           prerelease: true
           body: |
-            自动构建的 alpha 预发布版，极不稳定，谨慎使用。
-            产物来自 Build workflow 的 run：${{ env.RUN_ID }}
-          files: release/*.zip
+            Automated alpha pre-release from Build workflow run ${{ env.RUN_ID }}.
+
+            Artifacts:
+            - Linux x64
+            - Windows x64
+            - macOS x64
+            - macOS arm64 (experimental)
+            - Android (APK)
+            - iOS Device (IPA)
+
+            Checksums are included in `SHA256SUMS.txt`.
+          files: dist/*

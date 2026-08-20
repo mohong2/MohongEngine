@@ -1,0 +1,97 @@
+name: Build Desktop Target
+description: Build a single desktop target for SeiunEngine (shared pipeline steps).
+
+inputs:
+  target:
+    description: 'Target id: linux, windows, macos-x64 or macos-arm64'
+    required: true
+  rebuild:
+    description: 'Lime rebuild command'
+    required: true
+  build:
+    description: 'Lime build command'
+    required: true
+  artifact:
+    description: 'Artifact name'
+    required: true
+  path:
+    description: 'Artifact path'
+    required: true
+  gh-pat:
+    description: 'Optional GitHub PAT for private haxelib dependencies'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Install system dependencies
+      if: inputs.target == 'linux'
+      shell: bash
+      # Only install headers actually needed for compilation. apt-get is given
+      # retries/timeouts and is allowed to continue on failure to avoid stalls.
+      run: |
+        sudo apt-get update \
+          -o Acquire::Retries=3 \
+          -o Acquire::http::Timeout=10 \
+          -o Acquire::https::Timeout=10 \
+          -o Acquire::Languages=none || true
+        sudo apt-get install -y --no-install-recommends libvlc-dev libvlccore-dev \
+          libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
+          libasound2-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev \
+          libpulse-dev
+
+    - name: Auth private haxelib deps
+      shell: bash
+      run: |
+        GH_PAT="${{ inputs.gh-pat }}"
+        GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+        if [ -n "$GH_PAT" ]; then
+          B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+          git ls-remote https://github.com/mohong2/flixel.git HEAD
+        else
+          echo '::warning::GH_PAT not set - private deps will fail'
+        fi
+
+    - name: Install haxelib dependencies
+      shell: bash
+      run: |
+        haxelib setup ~/haxelib
+        haxe -cp ./setup -main Main --interp
+
+    - name: Init discord_rpc submodules
+      shell: bash
+      run: |
+        cd ~/haxelib/discord_rpc/git
+        git submodule update --init --recursive
+
+    - name: Patch hxcpp zlib for modern macOS SDK
+      if: startsWith(inputs.target, 'macos')
+      shell: bash
+      run: |
+        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+        ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+
+    - name: Silence unused -stdlib=libc++ warning on macOS
+      if: startsWith(inputs.target, 'macos')
+      shell: bash
+      run: |
+        find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' \
+          -exec perl -0pi -e 's{(<flag value="-stdlib=libc\+\+" unless="STDLIBCPP" />)}{$1\n  <flag value="-Wno-unused-command-line-argument" if="HXCPP_CLANG" />}' {} +
+        find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' -exec grep -q 'Wno-unused-command-line-argument' {} \;
+
+    - name: Read app version
+      shell: bash
+      run: |
+        echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+    - name: Rebuild Lime ndll (SDL3)
+      shell: bash
+      run: ${{ inputs.rebuild }}
+
+    - name: Compile
+      shell: bash
+      run: ${{ inputs.build }}
