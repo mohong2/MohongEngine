@@ -22,61 +22,11 @@ permissions:
 env:
   HAXE_VERSION: "4.2.5"
 
-defaults:
-  run:
-    shell: bash
-
 jobs:
-  prepare:
-    name: Resolve desktop targets
+  linux-x64:
+    name: Linux x64
+    if: inputs.targets == 'all' || contains(inputs.targets, 'linux')
     runs-on: ubuntu-latest
-    outputs:
-      matrix: ${{ steps.set-matrix.outputs.matrix }}
-    steps:
-      - id: set-matrix
-        shell: bash
-        run: |
-          set -euo pipefail
-          TARGETS="${{ inputs.targets }}"
-          MATRIX='['
-          NEED_COMMA=0
-
-          add() {
-            if [ "$NEED_COMMA" -eq 1 ]; then
-              MATRIX+=','
-            fi
-            MATRIX+="$1"
-            NEED_COMMA=1
-          }
-
-          if [ "$TARGETS" = "all" ] || [[ "$TARGETS" == *linux* ]]; then
-            add '{"name":"Linux x64","os":"ubuntu-latest","target":"linux","experimental":false,"rebuild":"haxelib run lime rebuild linux -64 -release -Dlime-sdl3","build":"haxelib run lime build linux --app-version=\"$APP_VERSION-$GITHUB_RUN_ID\"","artifact":"SeiunEngine-linux-x64","path":"export/release/linux/bin"}'
-          fi
-
-          if [ "$TARGETS" = "all" ] || [[ "$TARGETS" == *windows* ]]; then
-            add '{"name":"Windows x64","os":"windows-latest","target":"windows","experimental":false,"rebuild":"haxelib run lime rebuild windows -64 -release -Dlime-sdl3","build":"haxelib run lime build windows --app-version=\"$APP_VERSION-$GITHUB_RUN_ID\"","artifact":"SeiunEngine-windows-x64","path":"export/release/windows/bin"}'
-          fi
-
-          if [ "$TARGETS" = "all" ] || [ "$TARGETS" = "macos" ] || [[ "$TARGETS" == *macos-x64* ]]; then
-            add '{"name":"macOS x64 (Intel)","os":"macos-15-intel","target":"macos-x64","experimental":false,"rebuild":"haxelib run lime rebuild mac -64 -release -Dlime-sdl3","build":"haxelib run lime build mac --app-version=\"$APP_VERSION-$GITHUB_RUN_ID\"","artifact":"SeiunEngine-mac-x64","path":"export/release/macos/bin"}'
-          fi
-
-          if [ "$TARGETS" = "all" ] || [ "$TARGETS" = "macos" ] || [[ "$TARGETS" == *macos-arm64* ]]; then
-            add '{"name":"macOS arm64 (Apple Silicon, experimental)","os":"macos-14","target":"macos-arm64","experimental":true,"rebuild":"haxelib run lime rebuild mac -arm64 -release -Dlime-sdl3","build":"haxelib run lime build mac -arm64 --app-version=\"$APP_VERSION-$GITHUB_RUN_ID\"","artifact":"SeiunEngine-mac-arm64","path":"export/release/macos/bin"}'
-          fi
-
-          MATRIX+=']'
-          echo "matrix=$MATRIX" >> "$GITHUB_OUTPUT"
-          echo "Resolved matrix: $MATRIX"
-
-  desktop:
-    name: ${{ matrix.name }}
-    needs: prepare
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.experimental }}
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.prepare.outputs.matrix) }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -87,16 +37,101 @@ jobs:
 
       - uses: ./.github/actions/build-desktop
         with:
-          target: ${{ matrix.target }}
-          rebuild: ${{ matrix.rebuild }}
-          build: ${{ matrix.build }}
-          artifact: ${{ matrix.artifact }}
-          path: ${{ matrix.path }}
+          target: linux
+          rebuild: haxelib run lime rebuild linux -64 -release -Dlime-sdl3
+          build: haxelib run lime build linux --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+          artifact: SeiunEngine-linux-x64
+          path: export/release/linux/bin
           gh-pat: ${{ secrets.GH_PAT }}
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: ${{ matrix.artifact }}
-          path: ${{ matrix.path }}
+          name: SeiunEngine-linux-x64
+          path: export/release/linux/bin
+          if-no-files-found: error
+          retention-days: 14
+
+  windows-x64:
+    name: Windows x64
+    if: inputs.targets == 'all' || contains(inputs.targets, 'windows')
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - uses: ./.github/actions/build-desktop
+        with:
+          target: windows
+          rebuild: haxelib run lime rebuild windows -64 -release -Dlime-sdl3
+          build: haxelib run lime build windows --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+          artifact: SeiunEngine-windows-x64
+          path: export/release/windows/bin
+          gh-pat: ${{ secrets.GH_PAT }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-windows-x64
+          path: export/release/windows/bin
+          if-no-files-found: error
+          retention-days: 14
+
+  macos-x64:
+    name: macOS x64 (Intel)
+    if: inputs.targets == 'all' || inputs.targets == 'macos' || contains(inputs.targets, 'macos-x64')
+    runs-on: macos-15-intel
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - uses: ./.github/actions/build-desktop
+        with:
+          target: macos-x64
+          rebuild: haxelib run lime rebuild mac -64 -release -Dlime-sdl3
+          build: haxelib run lime build mac --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+          artifact: SeiunEngine-mac-x64
+          path: export/release/macos/bin
+          gh-pat: ${{ secrets.GH_PAT }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-mac-x64
+          path: export/release/macos/bin
+          if-no-files-found: error
+          retention-days: 14
+
+  macos-arm64:
+    name: macOS arm64 (Apple Silicon, experimental)
+    if: inputs.targets == 'all' || inputs.targets == 'macos' || contains(inputs.targets, 'macos-arm64')
+    runs-on: macos-14
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - uses: ./.github/actions/build-desktop
+        with:
+          target: macos-arm64
+          rebuild: haxelib run lime rebuild mac -arm64 -release -Dlime-sdl3
+          build: haxelib run lime build mac -arm64 --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+          artifact: SeiunEngine-mac-arm64
+          path: export/release/macos/bin
+          gh-pat: ${{ secrets.GH_PAT }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: SeiunEngine-mac-arm64
+          path: export/release/macos/bin
           if-no-files-found: error
           retention-days: 14
