@@ -4,19 +4,14 @@ on:
   workflow_dispatch:
     inputs:
       publish:
-        description: '是否发布（none=不发布, alpha=阿尔法, release=正式）'
+        description: 'Publish mode (none, alpha, release)'
         required: true
-        default: 'none'
+        default: none
         type: choice
         options:
           - none
           - alpha
           - release
-      release_notes:
-        description: '更新公告 / Release Notes（多行请用 \n 分隔）'
-        required: false
-        default: ''
-        type: string
 
 permissions:
   contents: write
@@ -25,9 +20,11 @@ jobs:
   desktop:
     uses: ./.github/workflows/build-desktop.yml
     secrets: inherit
+
   mobile:
     uses: ./.github/workflows/build-mobile.yml
     secrets: inherit
+
   release:
     name: Publish Release
     needs: [desktop, mobile]
@@ -35,57 +32,79 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
       - name: Read app version
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
       - name: Prepare release metadata
         run: |
           if [ "${{ github.event.inputs.publish }}" = "release" ]; then
             echo "TAG_NAME=v${APP_VERSION}" >> "$GITHUB_ENV"
             echo "RELEASE_NAME=Release v${APP_VERSION}" >> "$GITHUB_ENV"
             echo "IS_PRERELEASE=false" >> "$GITHUB_ENV"
+            echo "RELEASE_KIND=release" >> "$GITHUB_ENV"
           else
             echo "TAG_NAME=v${APP_VERSION}-alpha.${GITHUB_RUN_ID}" >> "$GITHUB_ENV"
             echo "RELEASE_NAME=Alpha v${APP_VERSION} (build ${GITHUB_RUN_ID})" >> "$GITHUB_ENV"
             echo "IS_PRERELEASE=true" >> "$GITHUB_ENV"
+            echo "RELEASE_KIND=pre-release" >> "$GITHUB_ENV"
           fi
+
       - name: Download artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           path: release
           github-token: ${{ github.token }}
-      - name: Package assets
+
+      - name: Package release assets
         run: |
+          set -euo pipefail
+          rm -rf dist
+          mkdir -p dist
           cd release
           for d in */; do
-            if [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
-              zip -r "${d%/}.zip" "$d"
+            d="${d%/}"
+            [ -d "$d" ] || continue
+            mobile=0
+            for f in "$d"/*.apk "$d"/*.ipa; do
+              if [ -f "$f" ]; then
+                cp "$f" ../dist/
+                mobile=1
+              fi
+            done
+            if [ "$mobile" -eq 0 ] && [ -n "$(ls -A "$d" 2>/dev/null)" ]; then
+              zip -r "../dist/${d}.zip" "$d"
             fi
           done
-          ls -la
-      - name: Prepare release body
-        shell: bash
-        env:
-          RELEASE_NOTES: ${{ github.event.inputs.release_notes }}
-        run: |
-          printf '%s' "$RELEASE_NOTES" > release_body.md
-          sed -i 's/\\n/\n/g' release_body.md
-          if [ -s release_body.md ]; then
-            printf '\n\n' >> release_body.md
+          cd ../dist
+          shopt -s nullglob
+          files=(*.apk *.ipa *.zip)
+          if [ "${#files[@]}" -gt 0 ]; then
+            sha256sum "${files[@]}" > SHA256SUMS.txt
           fi
-          cat >> release_body.md <<'EOF'
-          构建产物：
+          ls -la
+
+      - name: Prepare release body
+        run: |
+          cat > release_body.md <<'EOF'
+          Automated ${{ env.RELEASE_KIND }} from commit `${{ github.sha }}`.
+
+          Artifacts:
           - Linux x64
           - Windows x64
           - macOS x64
-          - macOS arm64
-          - Android
-          - iOS Device
+          - macOS arm64 (experimental)
+          - Android (APK)
+          - iOS Device (IPA)
+
+          Checksums are included in `SHA256SUMS.txt`.
           EOF
+
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: ${{ env.TAG_NAME }}
           name: ${{ env.RELEASE_NAME }}
           prerelease: ${{ env.IS_PRERELEASE }}
           body_path: release_body.md
-          files: release/*.zip
+          files: dist/*

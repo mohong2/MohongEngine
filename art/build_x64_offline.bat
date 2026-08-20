@@ -1,5 +1,5 @@
 @echo off
-REM 离线构建: 不编译任何联机代码, 不发起任何网络请求, 主菜单无联机入口。
+REM Offline build: no online code is compiled, no network requests are made, and the main menu has no online entry.
 cd /d %~dp0\..
 set HAXELIB_PATH=%CD%\.haxelib
 echo BUILDING OFFLINE GAME
