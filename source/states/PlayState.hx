@@ -1199,7 +1199,7 @@ class PlayState extends MusicBeatState
 			insert(members.indexOf(strumLineNotes), ratingPopup.container);
 		}
 
-		addAndroidControls();
+		addAndroidControls(false, true);
 		generateSong(SONG.song);
 		#if ONLINE_ALLOWED
 		onlineGameStart();
@@ -1276,8 +1276,7 @@ class PlayState extends MusicBeatState
 		if (CompatEngine.isModern())
 			uiGroup.add(healthBar);
 
-		iconP1 = new HealthIcon(boyfriend.healthIcon, false);
-		iconP1.flipX = true;
+		iconP1 = new HealthIcon(boyfriend.healthIcon, true);
 		iconP1.y = healthBar.y - 75;
 		iconP1.x = healthBar.x + healthBar.width + 12;
 		iconP1.visible = !ClientPrefs.data.hideHud;
@@ -3914,7 +3913,7 @@ class PlayState extends MusicBeatState
 		}
 
 
-		if (controls.PAUSE	#if android || FlxG.android.justReleased.BACK #end && startedCountdown && canPause)
+		if ((controls.PAUSE	#if android || FlxG.android.justReleased.BACK #end) && startedCountdown && canPause)
 		{
 			var ret:Dynamic = callOnScripts('onPause', [], false);
 			if(ret != FunkinLua.Function_Stop#if VIDEOS_ALLOWED && !videoPlaying #end)  {

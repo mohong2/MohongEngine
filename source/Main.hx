@@ -193,6 +193,12 @@ class Main extends Sprite
 
 		addChild(new FlxGame(gameWidth, gameHeight, initialState, zoom, updateFramerate, drawFramerate, skipSplash, startFullscreen));
 
+		#if android
+		// SDL3 的 Android 返回键 keycode 与 FlxG.android 内置的旧 keycode 不同，
+		// 在这里做一次全局翻译，保证返回键暂停/退出菜单等逻辑继续生效。
+		backend.AndroidBackFix.init();
+		#end
+
 		// Warm up LibVLC in the background so the first video cutscene doesn't
 		// freeze the main thread while hxvlc scans/resets its plugin cache.
 		#if VIDEOS_ALLOWED

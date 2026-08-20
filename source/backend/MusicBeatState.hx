@@ -130,7 +130,7 @@ class MusicBeatState extends FlxUIState
 	 * 创建安卓移动端控件 (虚拟按键/Hitbox)。
 	 * 安卓/iOS 始终启用; 桌面端只有开启"触屏支持"设置后才创建。
 	 */
-	public function addAndroidControls(DefaultDrawTarget:Bool = false)
+	public function addAndroidControls(DefaultDrawTarget:Bool = false, ?withPauseButton:Bool = false)
 	{
 		#if !TOUCH_CONTROLS
 		if (!ClientPrefs.data.touchControls)
@@ -145,6 +145,14 @@ class MusicBeatState extends FlxUIState
 			case 'Hitbox': controls.setHitBox(androidControls.hitbox);
 			case 'Keyboard': // do nothing
 		}
+
+		if (withPauseButton && androidControls != null)
+		{
+			androidControls.addPauseButton();
+			if (androidControls.pauseButton != null)
+				controls.addButtonNOTES(@:privateAccess controls._pause, androidControls.pauseButton, flixel.input.FlxInput.FlxInputState.JUST_PRESSED);
+		}
+
 		trackedinputsNOTES = controls.trackedinputsNOTES;
 		controls.trackedinputsNOTES = [];
 		var camControls:FlxCamera = new FlxCamera();
