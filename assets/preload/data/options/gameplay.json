@@ -281,31 +281,6 @@
 		"onChange": "onChangeBadWindow"
 	},
 	{
-		"nameKey": "option.osuTailJudgement",
-		"defaultName": "osu! Tail Judgement",
-		"descKey": "option.osuTailJudgement.desc",
-		"defaultDesc": "Judge Hold Note releases by tail timing (osu!mania style). Affects replays.",
-		"variable": "osuTailJudgement",
-		"type": "bool",
-		"defaultValue": false
-	},
-	{
-		"nameKey": "option.tailWindowMult",
-		"defaultName": "Tail Judgement Window",
-		"descKey": "option.tailWindowMult.desc",
-		"defaultDesc": "Tail judgement window = normal judgement window × this multiplier.\nHigher = more forgiving hold releases. (0.5x - 5x)",
-		"variable": "tailWindowMult",
-		"type": "float",
-		"defaultValue": 2,
-		"displayFormat": "%vx",
-		"scrollSpeed": 0.05,
-		"changeValue": 0.1,
-		"minValue": 0.5,
-		"maxValue": 5,
-		"decimals": 1,
-		"onChange": "onChangeTailWindowMult"
-	},
-	{
 		"nameKey": "option.sustainsAsOneNote",
 		"defaultName": "Sustains as One Note",
 		"descKey": "option.sustainsAsOneNote.desc",
@@ -313,28 +288,5 @@
 		"variable": "guitarHeroSustains",
 		"type": "bool",
 		"defaultValue": false
-	},
-	{
-		"nameKey": "option.preloadAllNotes",
-		"defaultName": "Preload All Notes",
-		"descKey": "option.preloadAllNotes.desc",
-		"defaultDesc": "On song load, pre-render every note (including sustain pieces) into a ready queue.\nLoading takes longer, but in-game note spawning becomes an instant O(1) pop with zero materialization cost,\nenabling tens of thousands of simultaneous notes at 60 FPS.\nOff = classic lazy spawn (fast load, per-frame spawn cost).\nUse the memory budget below to cap how much RAM preloading may use.",
-		"variable": "preloadAllNotes",
-		"type": "bool",
-		"defaultValue": false
-	},
-	{
-		"nameKey": "option.preloadNoteCap",
-		"defaultName": "Preload Memory Budget",
-		"descKey": "option.preloadNoteCap.desc",
-		"defaultDesc": "Max memory for pre-rendered notes:\n0 = unlimited (render everything, eats RAM),\nnegative = MB budget (recommended -1024 = 1 GB ≈ ~1.2M notes).\nNotes beyond the budget automatically fall back to lazy spawn.\nPositive values (exact note count) can be set by editing ClientPrefs directly.",
-		"variable": "preloadNoteCap",
-		"type": "int",
-		"defaultValue": -1024,
-		"displayFormat": "%v",
-		"scrollSpeed": 256,
-		"changeValue": 512,
-		"minValue": -8192,
-		"maxValue": 0
 	}
 ]

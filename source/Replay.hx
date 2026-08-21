@@ -69,9 +69,9 @@ typedef StateRecord = {
 	@:optional var marvelousRatings:Bool;
 	@:optional var marvelousWindow:Int;
 	/** osu! 尾判: 录制时是否开启尾判 + 尾判窗口 (ms) */
-	@:optional var osuTailJudgement:Bool;
+	//@:optional var osuTailJudgement:Bool;
 	/** osu! 尾判窗口倍率 (相对普通判定窗口, 默认 2.0) */
-	@:optional var tailWindowMult:Float;
+	//@:optional var tailWindowMult:Float;
 	/** 联机回放标识: 该回放录制于联机对局 */
 	@:optional var isOnline:Bool;
 	/** 联机回放: 房间码 / 房间名 / 模式 (realtime/async) */
@@ -323,8 +323,8 @@ class Replay extends FlxBasic
 		var prevBad:Int = ClientPrefs.data.badWindow;
 		var prevMarv:Int = ClientPrefs.data.marvelousWindow;
 		var prevMarvOn:Bool = ClientPrefs.data.marvelousRatings;
-		var prevTailOn:Bool = ClientPrefs.data.osuTailJudgement;
-		var prevTailMult:Float = ClientPrefs.data.tailWindowMult;
+		//var prevTailOn:Bool = ClientPrefs.data.osuTailJudgement;
+		//var prevTailMult:Float = ClientPrefs.data.tailWindowMult;
 		var prevRatingOffset:Int = ClientPrefs.data.ratingOffset;
 		var prevGuitarHero:Bool = ClientPrefs.data.guitarHeroSustains;
 
@@ -365,22 +365,22 @@ class Replay extends FlxBasic
 		if (stateRecord.marvelousRatings != null) ClientPrefs.data.marvelousRatings = toBool(stateRecord.marvelousRatings);
 		if (stateRecord.marvelousWindow != null) ClientPrefs.data.marvelousWindow = Std.int(toFloat(stateRecord.marvelousWindow, ClientPrefs.data.marvelousWindow));
 		// osu! 尾判: 强制还原录制时的尾判开关与窗口, 保证尾判成绩可复现
-		if (stateRecord.osuTailJudgement != null)
-			ClientPrefs.data.osuTailJudgement = toBool(stateRecord.osuTailJudgement);
-		else
+		//if (stateRecord.osuTailJudgement != null)
+		//	ClientPrefs.data.osuTailJudgement = toBool(stateRecord.osuTailJudgement);
+		//else
 			// 老版本回放没有尾判字段: 按关闭处理, 与录制时 (无尾判) 的行为一致
-			ClientPrefs.data.osuTailJudgement = false;
+		//	ClientPrefs.data.osuTailJudgement = false;
 		// 尾判窗口倍率: 还原录制时的倍率 (非法值回退默认 2.0)
-		if (stateRecord.tailWindowMult != null)
-		{
-			var mult:Float = toFloat(stateRecord.tailWindowMult, 2.0);
-			if (!Math.isNaN(mult) && mult > 0 && mult <= 8)
-				ClientPrefs.data.tailWindowMult = mult;
-			else
-				ClientPrefs.data.tailWindowMult = 2.0;
-		}
-		else
-			ClientPrefs.data.tailWindowMult = 2.0;
+		//if (stateRecord.tailWindowMult != null)
+		//{
+		//	var mult:Float = toFloat(stateRecord.tailWindowMult, 2.0);
+		//	if (!Math.isNaN(mult) && mult > 0 && mult <= 8)
+		//		ClientPrefs.data.tailWindowMult = mult;
+		//	else
+		//		ClientPrefs.data.tailWindowMult = 2.0;
+		//}
+		//else
+		//	ClientPrefs.data.tailWindowMult = 2.0;
 		// 判定相关手感补全: 评级偏移 / 长条单音符判定 (此前未强制还原)
 		if (stateRecord.ratingOffset != null) ClientPrefs.data.ratingOffset = Std.int(toFloat(stateRecord.ratingOffset, ClientPrefs.data.ratingOffset));
 		if (stateRecord.guitarHeroSustains != null)
@@ -397,8 +397,8 @@ class Replay extends FlxBasic
 			|| prevBad != ClientPrefs.data.badWindow
 			|| prevMarv != ClientPrefs.data.marvelousWindow
 			|| prevMarvOn != ClientPrefs.data.marvelousRatings
-			|| prevTailOn != ClientPrefs.data.osuTailJudgement
-			|| prevTailMult != ClientPrefs.data.tailWindowMult
+			//|| prevTailOn != ClientPrefs.data.osuTailJudgement
+			//|| prevTailMult != ClientPrefs.data.tailWindowMult
 			|| prevRatingOffset != ClientPrefs.data.ratingOffset
 			|| prevGuitarHero != ClientPrefs.data.guitarHeroSustains);
 
@@ -415,10 +415,10 @@ class Replay extends FlxBasic
 					+ (ClientPrefs.data.marvelousRatings ? " (Marvelous)" : "");
 			// osu! 尾判 / 评级偏移 / 长条单音符判定 的还原信息 (仅列出入)
 			var extra:Array<String> = [];
-			if (prevTailOn != ClientPrefs.data.osuTailJudgement)
-				extra.push("osu! Tail: " + (ClientPrefs.data.osuTailJudgement ? "ON" : "OFF"));
-			if (prevTailMult != ClientPrefs.data.tailWindowMult)
-				extra.push("Tail Window: " + Std.string(ClientPrefs.data.tailWindowMult) + "x");
+			//if (prevTailOn != ClientPrefs.data.osuTailJudgement)
+			//	extra.push("osu! Tail: " + (ClientPrefs.data.osuTailJudgement ? "ON" : "OFF"));
+			//if (prevTailMult != ClientPrefs.data.tailWindowMult)
+			//	extra.push("Tail Window: " + Std.string(ClientPrefs.data.tailWindowMult) + "x");
 			if (prevRatingOffset != ClientPrefs.data.ratingOffset)
 				extra.push("Rating Offset: " + Std.string(ClientPrefs.data.ratingOffset) + "ms");
 			if (prevGuitarHero != ClientPrefs.data.guitarHeroSustains)
@@ -481,8 +481,8 @@ class Replay extends FlxBasic
 			judgementPreset: ClientPrefs.data.judgementPreset,
 			marvelousRatings: ClientPrefs.data.marvelousRatings,
 			marvelousWindow: ClientPrefs.data.marvelousWindow,
-			osuTailJudgement: ClientPrefs.data.osuTailJudgement,
-			tailWindowMult: ClientPrefs.data.tailWindowMult,
+			//osuTailJudgement: ClientPrefs.data.osuTailJudgement,
+			//tailWindowMult: ClientPrefs.data.tailWindowMult,
 			ratingOffset: ClientPrefs.data.ratingOffset,
 			guitarHeroSustains: ClientPrefs.data.guitarHeroSustains,
 			replayVersion: ClientPrefs.data.saveReplayData ? 2 : 1,

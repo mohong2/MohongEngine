@@ -181,7 +181,7 @@ class OptionsState extends MusicBeatState
 			'onChangeSickWindow'           => onChangeSickWindow,
 			'onChangeGoodWindow'           => onChangeGoodWindow,
 			'onChangeBadWindow'            => onChangeBadWindow,
-			'onChangeTailWindowMult'       => onChangeTailWindowMult,
+			//'onChangeTailWindowMult'       => onChangeTailWindowMult,
 			'onChangeLanguage'             => onChangeLanguage,
 			'onChangeTraceConsole'         => onChangeTraceConsole,
 			'onChangeTraceConsoleLevel'    => onChangeTraceConsoleLevel,
@@ -1478,6 +1478,7 @@ class OptionsState extends MusicBeatState
 		ClientPrefs.data.judgementPreset = 'Custom';
 		refreshJudgementPresetText();
 	}
+	/*
 
 	function onChangeTailWindowMult()
 	{
@@ -1488,7 +1489,7 @@ class OptionsState extends MusicBeatState
 			ClientPrefs.data.tailWindowMult = 8;
 		ClientPrefs.saveSettings();
 	}
-
+*/
 	/** 刷新"判定预设"选项的显示文本 (改为 Custom 后立即更新) */
 	function refreshJudgementPresetText()
 	{

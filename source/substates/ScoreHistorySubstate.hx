@@ -820,7 +820,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 				marvelousRatings: details != null && details.length > 25 && details[25] != null ? details[25] : null,
 				marvelousWindow: details != null && details.length > 30 && details[30] != null ? details[30] : null,
 				// osu! 尾判 / 判定相关手感: 从成绩详情强制还原
-				osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
+				//osuTailJudgement: details != null && details.length > 27 && details[27] != null ? details[27] : null,
 				ratingOffset: details != null && details.length > 28 && details[28] != null ? details[28] : null,
 				guitarHeroSustains: details != null && details.length > 29 && details[29] != null ? details[29] : null,
 				replayVersion: 2
