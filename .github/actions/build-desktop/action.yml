@@ -95,3 +95,21 @@ runs:
     - name: Compile
       shell: bash
       run: ${{ inputs.build }}
+
+    - name: Ad-hoc codesign macOS app
+      if: startsWith(inputs.target, 'macos')
+      shell: bash
+      run: |
+        # lime produces an unsigned .app; macOS (especially Apple Silicon)
+        # refuses to run unsigned/mis-signed bundles ("damaged" / killed).
+        # Ad-hoc signing makes the app launchable (right-click -> Open on the
+        # first run). Real Developer ID + notarization would need Apple certs.
+        APP="$(find export/release/macos/bin -maxdepth 2 -name '*.app' | head -n1)"
+        if [ -n "$APP" ]; then
+          echo "Signing: $APP"
+          codesign --force --deep -s - "$APP"
+          codesign --verify --deep --strict -v "$APP"
+          echo "Ad-hoc signing OK"
+        else
+          echo "::warning::No .app bundle found in export/release/macos/bin - skipping codesign"
+        fi
