@@ -703,8 +703,6 @@ class Replay extends FlxBasic
 				simKnownKeys.set(simName, true);
 			}
 
-			buildHeldLanes();
-
 			for (keyName in frame.releaseKey)
 			{
 				var flxKey:FlxKey = FlxKey.fromString(keyName);
@@ -717,6 +715,9 @@ class Replay extends FlxBasic
 				simJustReleased.set(simName, true);
 				simKnownKeys.set(simName, true);
 			}
+
+			// 先应用完本帧 press/release 再生成 held 状态，避免释放帧仍把该轨道视为按住
+			buildHeldLanes();
 
 			// 通知 PlayState 处理按键
 			ps.replayApplyInput(frame.time, tmpPressLanes, tmpReleaseLanes, tmpHeldLanes);
@@ -893,9 +894,13 @@ class Replay extends FlxBasic
 	{
 		if (d == null || Type.typeof(d) != TObject) return;
 
-		var time:Float = toFloat(d.time, 0);
-		// 没有时间戳的帧按上一帧顺序续排, 保证事件顺序不塌缩到 0ms
-		if (time <= 0 && out.length > 0) time = out[out.length - 1].time + 1;
+		var rawTime:Dynamic = d.time;
+		var time:Float = toFloat(rawTime, 0);
+		// 没有时间戳/时间戳非数字的帧按上一帧顺序续排, 保证事件顺序不塌缩到 0ms。
+		// 注意不能把合法的倒计时时间（负数/0）当成缺失值改写，否则回放里倒计时期间的
+		// 按下事件会被提前到第一帧附近，而释放事件仍保留在原时间，导致按键看起来一直按住。
+		if ((rawTime == null || Math.isNaN(Std.parseFloat(Std.string(rawTime)))) && out.length > 0)
+			time = out[out.length - 1].time + 1;
 		var songSpeed:Float = toFloat(d.songSpeed, 1); if (songSpeed <= 0) songSpeed = 1;
 		var playbackRate:Float = toFloat(d.playbackRate, 1); if (playbackRate <= 0) playbackRate = 1;
 

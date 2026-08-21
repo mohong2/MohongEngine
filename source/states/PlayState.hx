@@ -5072,7 +5072,7 @@ class PlayState extends MusicBeatState
 					ClientPrefs.data.marvelousRatings,
 					ClientPrefs.data.judgementPreset,
 					// osu! 尾判 + 判定相关手感 (27-30, 回放/成绩详情强制还原用)
-					//ClientPrefs.data.osuTailJudgement,
+					null, // 占位: osu! 尾判已禁用，保留 details[27] 索引，避免后续字段错位
 					ClientPrefs.data.ratingOffset,
 					ClientPrefs.data.guitarHeroSustains,
 					ClientPrefs.data.marvelousWindow
@@ -5571,7 +5571,9 @@ class PlayState extends MusicBeatState
 
 		public function keyReleased(key:Int, ?time:Float = -999999):Void
 		{
-			if (cpuControlled || !startedCountdown || paused)
+			// 回放模式必须对称处理按下/释放：keyPressed 不要求 startedCountdown，
+			// 如果这里仍要求 startedCountdown，倒计时/开场的释放会被吞掉，导致按键一直按住。
+			if (cpuControlled || paused || (!replayMode && !startedCountdown))
 				return;
 			keyboardDisplay.released(key);
 

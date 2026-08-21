@@ -154,6 +154,7 @@ class Allscore
 		?songSpeed:Float = 1, ?playbackRate:Float = 1, ?songSpeedType:String = "multiplicative"):Void
 	{
 		#if sys
+		details = normalizeDetails(details);
 		var key:String = Highscore.formatSong(songName, difficulty);
 
 		var safeName = Paths.formatToSongPath(songName);
@@ -341,6 +342,20 @@ class Allscore
 		#end
 	}
 
+	/**
+	 * 归一化成绩详情数组。
+	 * osu! 尾判被注释掉后曾产生过 30 项的 details（少了索引 27 的占位），
+	 * 导致 ratingOffset/guitarHeroSustains/marvelousWindow 整体前移一位，
+	 * 回放还原时会把 marvelousWindow 误读成 “Sustains as One Note” 开启。
+	 * 这里统一在索引 27 补 null 占位，恢复 27-30 的原始布局。
+	 */
+	private static function normalizeDetails(details:Array<Dynamic>):Array<Dynamic>
+	{
+		if (details != null && details.length == 30)
+			details.insert(27, null);
+		return details;
+	}
+
 	private static function readEntryFromJson(filePath:String):ScoreEntry
 	{
 		#if sys
@@ -400,6 +415,11 @@ class Allscore
 			if (Math.isNaN(playbackRate) || playbackRate <= 0) playbackRate = 1;
 		}
 
+		var details:Array<Dynamic> = null;
+		if (Std.isOfType(data.details, Array))
+			details = cast data.details;
+		details = normalizeDetails(details);
+
 		var entry:ScoreEntry = {
 			songName: data.songName != null ? Std.string(data.songName) : null,
 			difficulty: difficulty,
@@ -418,7 +438,7 @@ class Allscore
 			misses: data.misses != null ? Std.parseInt(Std.string(data.misses)) : 0,
 			maxCombo: data.maxCombo != null ? Std.parseInt(Std.string(data.maxCombo)) : 0,
 			replayData: data.replayData,
-			details: data.details,
+			details: details,
 			songSpeed: songSpeed,
 			playbackRate: playbackRate,
 			songSpeedType: data.songSpeedType != null ? Std.string(data.songSpeedType) : 'multiplicative',
