@@ -26,5 +26,6 @@
     "ScoreHistorySubstate.off" : "OFF",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
     "ScoreHistorySubstate.replayDifficultyLock" : "In replay mode, adjusting the difficulty is not allowed.",
-    "ScoreHistorySubstate.instructions": "UP/DOWN: Select  |  ENTER: Play  |  RESET: Delete  |  ESC: Back"
+    "ScoreHistorySubstate.deleteConfirm" : "Press RESET again to confirm delete  |  ESC to cancel",
+    "ScoreHistorySubstate.instructions": "UP/DOWN/HOVER: Select  |  ENTER/DOUBLE CLICK: Play  |  RESET x2: Delete  |  ESC: Back"
 }

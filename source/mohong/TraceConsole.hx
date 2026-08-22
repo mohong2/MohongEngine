@@ -28,6 +28,7 @@ class TraceConsole
 		running = true;
 		watchMode = true;
 		consoleAvailable = detectConsole();
+		TraceManager.setConsoleAvailable(consoleAvailable);
 		TraceManager.addListener(onTrace);
 		if (consoleAvailable)
 			printLine(GRAY + "[TraceConsole] Monitoring started." + RESET);
@@ -41,6 +42,8 @@ class TraceConsole
 		if (!running) return;
 		running = false;
 		watchMode = false;
+		consoleAvailable = false;
+		TraceManager.setConsoleAvailable(false);
 		TraceManager.removeListener(onTrace);
 	}
 
@@ -53,7 +56,9 @@ class TraceConsole
 		} catch (e:Dynamic) {
 			return false;
 		}
-		#elseif (sys || js)
+		#elseif (sys && !android)
+		return true;
+		#elseif js
 		return true;
 		#else
 		return false;
@@ -66,6 +71,7 @@ class TraceConsole
 	private static function onTrace(entry:TraceEntry):Void
 	{
 		if (!watchMode || !consoleAvailable) return;
+		if (!TraceManager.shouldEmitConsole(entry.level)) return;
 
 		var lvlColor:String = switch (entry.level) {
 			case DEBUG: "\x1b[90m";

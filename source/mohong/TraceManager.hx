@@ -31,11 +31,16 @@ class TraceManager
 	/** Intercept + record; off = forward to haxe.Log.trace. */
 	public static var enabled:Bool = true;
 
-	/** Also write to console. */
-	public static var consoleOutput:Bool = true;
+	/** Also write to console. Off by default; enabled via Trace Console option. */
+	public static var consoleOutput:Bool = false;
 
 	/** Min level printed to console. */
 	public static var consoleLevel:TraceLevel = DEBUG;
+
+	/** Console rate limit: max lines actually written per `consoleRateWindow` seconds.
+	 *  Excess lines are still recorded in the ring buffer, just not flushed to the console. */
+	public static var consoleRateLimit:Int = 200;
+	public static var consoleRateWindow:Float = 0.1;
 
 	/** Saved haxe.Log.trace. */
 	private static var originalTrace:Dynamic = null;
@@ -59,6 +64,14 @@ class TraceManager
 	#if cpp
 	private static var bufferMutex:Mutex = new Mutex();
 	#end
+
+	/** Whether a real console/terminal output target is currently attached. */
+	private static var consoleAvailable:Bool = false;
+	private static var consoleAvailabilityKnown:Bool = false;
+
+	/** Console burst limiter state. */
+	private static var consoleRateStart:Float = 0;
+	private static var consoleRateCount:Int = 0;
 
 	/** Init flag. */
 	private static var initialized:Bool = false;
@@ -101,8 +114,51 @@ class TraceManager
 		}
 		#end
 
+		// Windows: Trace Console is opt-in (prevents silent console flooding when
+		// the game is started from a terminal). Other desktop sys targets keep
+		// the historic stdout logging behaviour.
+		#if (desktop && !windows && !android)
+		consoleOutput = true;
+		#end
+
 		originalTrace = haxe.Log.trace;
 		haxe.Log.trace = captureTrace;
+	}
+
+	/**
+	 * Update the cached console availability. TraceConsole calls this when a
+	 * console is allocated/freed so TraceManager can skip formatting when
+	 * there is no output target.
+	 */
+	public static function setConsoleAvailable(available:Bool):Void
+	{
+		consoleAvailable = available;
+		consoleAvailabilityKnown = true;
+	}
+
+	private static function isConsoleAvailable():Bool
+	{
+		if (!consoleAvailabilityKnown)
+			refreshConsoleAvailability();
+		return consoleAvailable;
+	}
+
+	private static function refreshConsoleAvailability():Void
+	{
+		#if (cpp && windows && !android)
+		try {
+			consoleAvailable = Windows.hasConsole();
+		} catch (e:Dynamic) {
+			consoleAvailable = false;
+		}
+		#elseif (sys && !android)
+		consoleAvailable = true;
+		#elseif js
+		consoleAvailable = true;
+		#else
+		consoleAvailable = false;
+		#end
+		consoleAvailabilityKnown = true;
 	}
 
 	/**
@@ -293,7 +349,11 @@ class TraceManager
 		bufferMutex.release();
 		#end
 
-		if (consoleOutput && shouldOutput(entry.level) && !consoleBusy)
+		// Console is written directly only when there is no live TraceConsole
+		// listener: TraceConsole already handles output and can apply its own
+		// rate limiting. This prevents duplicate writes and keeps the hot path
+		// free of synchronous console I/O for the common no-console case.
+		if (listeners.length == 0 && shouldEmitConsole(entry.level))
 		{
 			consoleBusy = true;
 			writeToConsole(entry);
@@ -302,6 +362,27 @@ class TraceManager
 
 		if (listeners.length > 0)
 			notifyListeners(entry);
+	}
+
+	/**
+	 * Combined console gate: master switch + minimum level + attached console +
+	 * burst limiter. Used by both TraceManager's direct path and TraceConsole
+	 * so a rapid burst cannot stall the game on synchronous console writes.
+	 */
+	public static function shouldEmitConsole(level:TraceLevel):Bool
+	{
+		if (!consoleOutput || !shouldOutput(level) || !isConsoleAvailable())
+			return false;
+
+		var now:Float = haxe.Timer.stamp();
+		if (now - consoleRateStart >= consoleRateWindow || consoleRateStart <= 0)
+		{
+			consoleRateStart = now;
+			consoleRateCount = 0;
+		}
+
+		consoleRateCount++;
+		return consoleRateCount <= consoleRateLimit;
 	}
 
 	private static function shouldOutput(level:TraceLevel):Bool

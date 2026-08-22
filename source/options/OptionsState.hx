@@ -115,6 +115,10 @@ class OptionsState extends MusicBeatState
 
 	var currentMode:Int = MODE_CATEGORY;
 	var currentSettingsPage:String = '';
+	var settingsPreviewMode:Bool = false;
+	var currentPreviewPage:String = '';
+	var optionPopupOpen:Bool = false;
+	var previewCam:flixel.FlxCamera = null;
 	var transitioning:Bool = false;
 
 	var nextAccept:Int = 5;
@@ -323,72 +327,82 @@ class OptionsState extends MusicBeatState
 			catSelectorRight.visible = false;
 		}
 
+		var keyboardUsed:Bool = controls.UI_UP_P || controls.UI_DOWN_P || controls.ACCEPT || controls.BACK;
+
 		if (controls.UI_UP_P)    changeCategorySelection(-1);
 		if (controls.UI_DOWN_P)  changeCategorySelection(1);
-		if (FlxG.mouse.wheel > 0)   changeCategorySelection(-1);
-		else if (FlxG.mouse.wheel < 0) changeCategorySelection(1);
 
-		#if !TOUCH_CONTROLS
+		if (!keyboardUsed)
 		{
-			for (i in 0...catGrpOptions.length)
-			{
-				var item = catGrpOptions.members[i];
-				if (item == null || !item.visible) continue;
+			if (FlxG.mouse.wheel > 0)   changeCategorySelection(-1);
+			else if (FlxG.mouse.wheel < 0) changeCategorySelection(1);
 
-				if (FlxG.mouse.overlaps(item, FlxG.camera))
+			#if !TOUCH_CONTROLS
+			{
+				for (i in 0...catGrpOptions.length)
 				{
-					if (curSelected != i)
+					var item = catGrpOptions.members[i];
+					if (item == null || !item.visible) continue;
+
+					if (FlxG.mouse.overlaps(item, FlxG.camera))
 					{
-						curSelected = i;
-						for (j in 0...catGrpOptions.length)
+						if (curSelected != i)
 						{
-							var other = catGrpOptions.members[j];
-							if (other != null) other.alpha = (j == curSelected) ? 1.0 : 0.6;
+							curSelected = i;
+							targetScrollOffset = -(i * itemSpacing);
+							updateCategoryPreview();
+							for (j in 0...catGrpOptions.length)
+							{
+								var other = catGrpOptions.members[j];
+								if (other != null) other.alpha = (j == curSelected) ? 1.0 : 0.6;
+							}
+							catSelectorLeft.x = item.x - 63;
+							catSelectorLeft.y = item.y;
+							catSelectorRight.x = item.x + item.width + 15;
+							catSelectorRight.y = item.y;
 						}
-						catSelectorLeft.x = item.x - 63;
-						catSelectorLeft.y = item.y;
-						catSelectorRight.x = item.x + item.width + 15;
-						catSelectorRight.y = item.y;
+						if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
+							openSelectedCategory(optionIds[curSelected]);
+						break;
 					}
-					if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
-						openSelectedCategory(optionIds[curSelected]);
-					break;
 				}
 			}
-		}
-		#else
-		if ((FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton())) || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].justReleased))
-		{
-			for (i in 0...catGrpOptions.length)
+			#else
+			if ((FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton())) || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].justReleased))
 			{
-				var item = catGrpOptions.members[i];
-				if (item == null || !item.visible) continue;
-
-				if (FlxG.mouse.overlaps(item, FlxG.camera)
-					#if TOUCH_CONTROLS || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].overlaps(item)) #end)
+				for (i in 0...catGrpOptions.length)
 				{
-					if (curSelected != i)
+					var item = catGrpOptions.members[i];
+					if (item == null || !item.visible) continue;
+
+					if (FlxG.mouse.overlaps(item, FlxG.camera)
+						#if TOUCH_CONTROLS || (FlxG.touches.list.length > 0 && FlxG.touches.list[0].overlaps(item)) #end)
 					{
-						curSelected = i;
-						for (j in 0...catGrpOptions.length)
+						if (curSelected != i)
 						{
-							var other = catGrpOptions.members[j];
-							if (other != null) other.alpha = (j == curSelected) ? 1.0 : 0.6;
+							curSelected = i;
+							targetScrollOffset = -(i * itemSpacing);
+							updateCategoryPreview();
+							for (j in 0...catGrpOptions.length)
+							{
+								var other = catGrpOptions.members[j];
+								if (other != null) other.alpha = (j == curSelected) ? 1.0 : 0.6;
+							}
+							catSelectorLeft.x = item.x - 63;
+							catSelectorLeft.y = item.y;
+							catSelectorRight.x = item.x + item.width + 15;
+							catSelectorRight.y = item.y;
 						}
-						catSelectorLeft.x = item.x - 63;
-						catSelectorLeft.y = item.y;
-						catSelectorRight.x = item.x + item.width + 15;
-						catSelectorRight.y = item.y;
+						else
+						{
+							openSelectedCategory(optionIds[curSelected]);
+						}
+						break;
 					}
-					else
-					{
-						openSelectedCategory(optionIds[curSelected]);
-					}
-					break;
 				}
 			}
+			#end
 		}
-		#end
 
 		if (controls.ACCEPT)
 			openSelectedCategory(optionIds[curSelected]);
@@ -424,8 +438,28 @@ class OptionsState extends MusicBeatState
 		if (curSelected >= optionIds.length) curSelected = 0;
 
 		targetScrollOffset = -(curSelected * itemSpacing);
+		updateCategoryPreview();
 
 		if (change != 0 && playSound) FlxG.sound.play(Paths.sound('scrollMenu'), 0.5);
+	}
+
+	/** Category preview temporarily disabled. Kept for later re-enable. */
+	function updateCategoryPreview():Void
+	{
+		destroySettingsSprites();
+		settingsPreviewMode = false;
+		currentPreviewPage = '';
+	}
+
+	function bringCategoryToFront():Void
+	{
+		if (catGrpOptions != null) { remove(catGrpOptions); add(catGrpOptions); }
+		if (catGrid != null) { remove(catGrid); add(catGrid); }
+		if (catSelectorLeft != null) { remove(catSelectorLeft); add(catSelectorLeft); }
+		if (catSelectorRight != null) { remove(catSelectorRight); add(catSelectorRight); }
+		#if (TOUCH_CONTROLS || desktop)
+		if (catTipText != null) { remove(catTipText); add(catTipText); }
+		#end
 	}
 
 	function openSelectedCategory(id:String)
@@ -570,9 +604,12 @@ class OptionsState extends MusicBeatState
 	//  Settings editing view
 	// ═══════════════════════════════════════════════════════════════════════════
 
-	function buildSettingsView(optionsArray:Array<Option>, title:String, rpcTitle:String)
+	function buildSettingsView(optionsArray:Array<Option>, title:String, rpcTitle:String, ?previewMode:Bool = false)
 	{
 		destroySettingsSprites();
+
+		settingsPreviewMode = previewMode;
+		currentPreviewPage = '';
 
 		setOptionsArray = optionsArray;
 		setCurSelected = 0;
@@ -660,18 +697,75 @@ class OptionsState extends MusicBeatState
 			settingsUpdateText(setOptionsArray[i]);
 		}
 
-		changeSettingsSelection(0);
+		changeSettingsSelection(0, !previewMode);
 		settingsReloadCheckboxes();
 		settingsSetupNotePreview(optionsArray);
 
-		#if (TOUCH_CONTROLS || desktop)
-		addVirtualPad(LEFT_FULL, A_B_C);
-		addPadCamera();
-		#end
+		if (previewMode)
+		{
+			// Category view shows the complete settings page in a dimmed right-side window.
+			setupSettingsPreviewCamera();
+			setSettingsPreviewAlpha(0.18);
+		}
+		else
+		{
+			#if (TOUCH_CONTROLS || desktop)
+			addVirtualPad(LEFT_FULL, A_B_C);
+			addPadCamera();
+			#end
+		}
+	}
+
+	function setupSettingsPreviewCamera():Void
+	{
+		var camX:Int = 460;
+		var camW:Int = Std.int(FlxG.width - camX - 20);
+		if (camW <= 0) return;
+
+		// Scale the full settings page so it fits inside the right-side preview window.
+		var camZoom:Float = camW / FlxG.width;
+		previewCam = new flixel.FlxCamera(camX, 0, camW, FlxG.height, camZoom);
+		previewCam.bgColor.alpha = 0;
+		FlxG.cameras.add(previewCam, false);
+
+		for (s in settingsSprites)
+			if (s != null) s.cameras = [previewCam];
+		for (item in setGrpOptions.members)
+			if (item != null) item.cameras = [previewCam];
+		for (item in setGrpTexts.members)
+			if (item != null) item.cameras = [previewCam];
+		for (item in setCheckboxGroup.members)
+			if (item != null) item.cameras = [previewCam];
+		if (settingsNotes != null)
+			for (note in settingsNotes)
+				if (note != null) note.cameras = [previewCam];
+		if (setBoyfriend != null)
+			setBoyfriend.cameras = [previewCam];
+	}
+
+	function setSettingsPreviewAlpha(alpha:Float):Void
+	{
+		for (s in settingsSprites)
+			if (s != null) s.alpha = alpha;
+		for (item in setGrpOptions.members)
+			if (item != null) item.alpha = alpha;
+		for (item in setGrpTexts.members)
+			if (item != null) item.alpha = alpha;
+		for (item in setCheckboxGroup.members)
+			if (item != null) item.alpha = alpha;
+		if (settingsNotes != null)
+			for (note in settingsNotes)
+				if (note != null) note.alpha = alpha;
 	}
 
 	function destroySettingsSprites()
 	{
+		if (previewCam != null)
+		{
+			FlxG.cameras.remove(previewCam, true);
+			previewCam = null;
+		}
+
 		if (settingsSprites != null)
 		{
 			for (s in settingsSprites)
@@ -761,68 +855,50 @@ class OptionsState extends MusicBeatState
 
 	function updateSettingsView(elapsed:Float)
 	{
-		if (FlxG.mouse.wheel != 0)
-		{
-			changeSettingsSelection(-FlxG.mouse.wheel);
-			FlxG.sound.play(Paths.sound('scrollMenu'));
-		}
+		// Keyboard always wins on the frame it is used; mouse is ignored that frame.
+		var keyboardUsed:Bool = controls.UI_UP_P || controls.UI_DOWN_P
+			|| controls.ACCEPT || controls.BACK || controls.UI_LEFT_P || controls.UI_RIGHT_P
+			|| controls.RESET;
 
-		// 虚拟按键上点击不穿透到选项行, 避免同时触发按键动作和行点击造成双重判定
-		if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
+		if (!keyboardUsed)
 		{
-			for (checkbox in setCheckboxGroup)
+			if (FlxG.mouse.wheel != 0)
 			{
-				if (FlxG.mouse.overlaps(checkbox))
-				{
-					setCurSelected = checkbox.ID;
-					changeSettingsSelection(0);
-					FlxG.sound.play(Paths.sound('scrollMenu'));
-					setOptionsArray[checkbox.ID].setValue(!setOptionsArray[checkbox.ID].getValue());
-					setOptionsArray[checkbox.ID].change();
-					settingsReloadCheckboxes();
-					break;
-				}
+				changeSettingsSelection(-FlxG.mouse.wheel);
+				FlxG.sound.play(Paths.sound('scrollMenu'));
 			}
-			for (text in setGrpTexts)
+
+			// 虚拟按键上点击不穿透到选项行, 避免同时触发按键动作和行点击造成双重判定
+			if (FlxG.mouse.justPressed && !(virtualPad != null && virtualPad.isMouseOverAnyButton()))
 			{
-				if (FlxG.mouse.overlaps(text))
+				for (checkbox in setCheckboxGroup)
 				{
-					setCurSelected = text.ID;
-					changeSettingsSelection(0);
-
-					var option = setOptionsArray[text.ID];
-					if (option.type != 'bool')
+					if (FlxG.mouse.overlaps(checkbox))
 					{
-						var add:Dynamic = (option.type == 'string') ? 0 : option.changeValue;
-
-						switch (option.type)
-						{
-							case 'int' | 'float' | 'percent':
-								holdValue = option.getValue() + add;
-								if (holdValue < option.minValue) holdValue = option.minValue;
-								else if (holdValue > option.maxValue) holdValue = option.maxValue;
-
-								switch (option.type)
-								{
-									case 'int':
-										holdValue = Math.round(holdValue);
-										option.setValue(holdValue);
-									case 'float' | 'percent':
-										holdValue = FlxMath.roundDecimal(holdValue, option.decimals);
-										option.setValue(holdValue);
-								}
-
-							case 'string':
-								var num:Int = option.curOption + 1;
-								if (num >= option.options.length) num = 0;
-								option.curOption = num;
-								option.setValue(option.options[num]);
-						}
-						settingsUpdateText(option);
-						option.change();
+						setCurSelected = checkbox.ID;
+						changeSettingsSelection(0);
 						FlxG.sound.play(Paths.sound('scrollMenu'));
+						setOptionsArray[checkbox.ID].setValue(!setOptionsArray[checkbox.ID].getValue());
+						setOptionsArray[checkbox.ID].change();
+						settingsReloadCheckboxes();
+						break;
 					}
-					break;
+				}
+				for (text in setGrpTexts)
+				{
+					if (FlxG.mouse.overlaps(text))
+					{
+						setCurSelected = text.ID;
+						changeSettingsSelection(0);
+
+						var option = setOptionsArray[text.ID];
+						if (option.type == 'string' || option.type == 'int'
+							|| option.type == 'float' || option.type == 'percent')
+						{
+							openOptionPopup(option);
+						}
+						break;
+					}
 				}
 			}
 		}
@@ -854,6 +930,14 @@ class OptionsState extends MusicBeatState
 			}
 			else if (setCurOption != null)
 			{
+				if (controls.ACCEPT && (setCurOption.type == 'string'
+					|| setCurOption.type == 'int' || setCurOption.type == 'float'
+					|| setCurOption.type == 'percent'))
+				{
+					openOptionPopup(setCurOption);
+					return;
+				}
+
 				var isWindowMode:Bool = (setCurOption.variable == 'windowedmode');
 
 				if (controls.UI_LEFT || controls.UI_RIGHT)
@@ -981,7 +1065,19 @@ class OptionsState extends MusicBeatState
 		holdTime = 0;
 	}
 
-	function changeSettingsSelection(change:Int = 0)
+	function openOptionPopup(option:Option):Void
+	{
+		if (option == null) return;
+		optionPopupOpen = true;
+		#if (TOUCH_CONTROLS || desktop)
+		removeVirtualPad();
+		#end
+		openSubState(new OptionPopupSubState(option, function() {
+			settingsUpdateText(option);
+		}));
+	}
+
+	function changeSettingsSelection(change:Int = 0, ?playSound:Bool = true)
 	{
 		setCurSelected += change;
 		if (setCurSelected < 0) setCurSelected = setOptionsArray.length - 1;
@@ -1027,7 +1123,8 @@ class OptionsState extends MusicBeatState
 		}
 
 		setCurOption = setOptionsArray[setCurSelected];
-		FlxG.sound.play(Paths.sound('scrollMenu'));
+		if (playSound == true)
+			FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 
 	function settingsReloadBoyfriend()
@@ -1593,6 +1690,19 @@ class OptionsState extends MusicBeatState
 	{
 		super.closeSubState();
 		ClientPrefs.saveSettings();
+
+		if (optionPopupOpen)
+		{
+			// Closing the dropdown/slider popup should stay in the settings page,
+			// not bounce back to the category view.
+			optionPopupOpen = false;
+			transitioning = false;
+			#if (TOUCH_CONTROLS || desktop)
+			addVirtualPad(LEFT_FULL, A_B_C);
+			addPadCamera();
+			#end
+			return;
+		}
 
 		OptionLoader.reloadAll();
 

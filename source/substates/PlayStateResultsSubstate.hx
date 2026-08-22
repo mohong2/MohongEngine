@@ -7,6 +7,7 @@ import states.LoadingState;
 import states.MainMenuState;
 import backend.MusicBeatState;
 import backend.MusicBeatSubstate;
+import backend.UIScreen;
 import ClientPrefs;
 import Highscore;
 import Song;
@@ -67,6 +68,17 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	/** Dedicated screen-space camera, isolated from PlayState's scrolling cameras. */
 	var substateCam:flixel.FlxCamera;
 
+	/** Backdrop camera/state restoration (freeze + blur while results are open). */
+	var backdropCam:flixel.FlxCamera;
+	var backdropGame:PlayState = null;
+	var prevPersistentUpdate:Bool = true;
+	var prevCamFilters:Array<openfl.filters.BitmapFilter> = null;
+
+	var heroPanel:FlxSprite;
+	var heroTextGroup:FlxTypedGroup<FlxText>;
+	var scoreText:FlxText;
+	var accuracyText:FlxText;
+
 	var noteMs:Array<Float>;
 	var noteTime:Array<Float>;
 	var songLength:Float;
@@ -97,22 +109,33 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	{
 		super();
 
-		FlxG.camera.scroll.set(0, 0);
+		// [FIX] Do NOT reset camGame.scroll here: that would visually jump the
+		// gameplay backdrop to the world origin. We only stop following, and the
+		// freeze below keeps the current camera position static behind the UI.
 		FlxG.camera.target = null;
 
 		// [FIX] Create a dedicated static camera for the substate
 		// PlayState's game camera moves during gameplay, which would misalign mouse hit detection.
 		// Using a fresh camera with no scroll/zoom ensures buttons remain clickable at correct positions.
-		substateCam = new flixel.FlxCamera();
-		substateCam.bgColor.alpha = 0;
-		FlxG.cameras.add(substateCam, false);
+		substateCam = UIScreen.createScreenCamera();
 		cameras = [substateCam];
 
 		var game = PlayState.instance;
 		if (game == null) {
+			if (substateCam != null)
+				FlxG.cameras.remove(substateCam, true);
 			close();
 			return;
 		}
+
+		// [FIX] Freeze the gameplay update while results are shown so the camera
+		// can no longer keep panning/zooming behind the substate. Restored on close/destroy.
+		backdropGame = game;
+		backdropCam = FlxG.camera;
+		prevCamFilters = backdropCam.filters;
+		prevPersistentUpdate = game.persistentUpdate;
+		game.persistentUpdate = false;
+		UIScreen.applyBlur(backdropCam, 10);
 
 		// Hide all PlayState UI elements
 		game.camHUD.visible = false;
@@ -158,16 +181,23 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		titleUnderline.scale.x = 0;
 		add(titleUnderline);
 
-		// -- Panels (full-width layout) --
-		var panelY:Float = 135;
-		var leftW:Int = 580;
-		var leftH:Int = 470;
-		var rightX:Float = 620;
-		var rightW:Int = 640;
-		var graphH:Int = 255;
-		var statsH:Int = 180;
+		// -- Panels: hero score card on top, details left, graph + hit bars right --
+		var heroY:Float = 105;
+		var heroW:Int = 1200;
+		var heroH:Int = 125;
 
-		leftPanel = createRoundedPanel(20, panelY, leftW, leftH, panelBgColor);
+		var panelY:Float = 245;
+		var leftW:Int = 400;
+		var leftH:Int = 400;
+		var rightX:Float = 460;
+		var rightW:Int = 780;
+		var graphH:Int = 230;
+		var statsH:Int = 150;
+
+		heroPanel = createRoundedPanel(40, heroY, heroW, heroH, panelBgColor);
+		add(heroPanel);
+
+		leftPanel = createRoundedPanel(40, panelY, leftW, leftH, panelBgColor);
 		add(leftPanel);
 
 		graphPanel = createRoundedPanel(rightX, panelY, rightW, graphH, panelBgColor);
@@ -180,6 +210,10 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		leftTextGroup = new FlxTypedGroup<FlxText>();
 		add(leftTextGroup);
 		buildLeftInfo(game);
+
+		heroTextGroup = new FlxTypedGroup<FlxText>();
+		add(heroTextGroup);
+		buildHeroInfo(game);
 
 		// -- Graph note: note timing scatter plot --
 		graphNote = new FlxSprite(rightX + 10, panelY + 10).makeGraphic(rightW - 20, graphH - 20, FlxColor.TRANSPARENT);
@@ -197,8 +231,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		buildHitBars(game);
 
 		// -- Buttons --
-		var btnY:Float = panelY + leftH + 15;
-		continueBtn = createButton(320, btnY, 300, 52, accentColor);
+		var btnY:Float = panelY + leftH + 5;
+		continueBtn = createButton(320, btnY, 300, 48, accentColor);
 		continueBtn.alpha = 0;
 		add(continueBtn);
 
@@ -208,7 +242,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		add(continueTxt);
 		centerTextOnButton(continueTxt, continueBtn);
 
-		replayBtn = createButton(660, btnY, 300, 52, FlxColor.fromRGB(85, 90, 105));
+		replayBtn = createButton(660, btnY, 300, 48, FlxColor.fromRGB(85, 90, 105));
 		replayBtn.alpha = 0;
 		add(replayBtn);
 
@@ -219,7 +253,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		centerTextOnButton(replayTxt, replayBtn);
 
 		// -- Instructions --
-		var instructions = new FlxText(0, FlxG.height - 40, FlxG.width,
+		var instructions = new FlxText(0, FlxG.height - 20, FlxG.width,
 			Language.get("ResultsScreen.instructions", "ENTER / CLICK: Select  |  ARROWS: Switch  |  ESC: Continue"), 13);
 		instructions.setFormat(Paths.languageFont(), 13, FlxColor.GRAY, CENTER);
 		instructions.alpha = 0;
@@ -263,8 +297,14 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	 */
 	function overlapsInSubstateCam(btn:FlxSprite, pointX:Float, pointY:Float):Bool
 	{
-		return (pointX >= btn.x && pointX <= btn.x + btn.width
-			&& pointY >= btn.y && pointY <= btn.y + btn.height);
+		// Use the sprite's rendered screen bounds (honors scale/origin) on the
+		// dedicated static camera, so scaled hover/click hitboxes stay accurate.
+		var rect = flixel.math.FlxRect.get();
+		btn.getScreenBounds(rect, (substateCam != null) ? substateCam : FlxG.camera);
+		var hit = pointX >= rect.x && pointX <= rect.x + rect.width
+			&& pointY >= rect.y && pointY <= rect.y + rect.height;
+		rect.put();
+		return hit;
 	}
 
 	/**
@@ -302,9 +342,18 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		FlxTween.tween(titleUnderline.scale, {x: 1}, 0.6, {ease: FlxEase.quartOut, startDelay: 0.3});
 
 		// Panels: pop in with a jelly bounce
+		jellyPopIn(heroPanel, 0.20);
 		jellyPopIn(leftPanel, 0.25);
 		jellyPopIn(graphPanel, 0.30);
 		jellyPopIn(statsPanel, 0.35);
+
+		// Hero card texts: soft staggered lift-in
+		for (i in 0...heroTextGroup.members.length)
+		{
+			var t:FlxText = heroTextGroup.members[i];
+			t.y += 6;
+			FlxTween.tween(t, {y: t.y - 6, alpha: 1}, 0.3, {startDelay: 0.32 + i * 0.04, ease: FlxEase.sineOut});
+		}
 
 		FlxTween.tween(graphNote, {alpha: 1}, 0.4, {ease: FlxEase.quartOut, startDelay: 0.4});
 
@@ -360,8 +409,11 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	{
 		if (closeCheck) return;
 
-		var overC:Bool = overlapsInSubstateCam(continueBtn, FlxG.mouse.x, FlxG.mouse.y);
-		var overR:Bool = overlapsInSubstateCam(replayBtn, FlxG.mouse.x, FlxG.mouse.y);
+		var cam = (substateCam != null) ? substateCam : FlxG.camera;
+		var mousePt = FlxG.mouse.getWorldPosition(cam, flixel.math.FlxPoint.get());
+		var overC:Bool = overlapsInSubstateCam(continueBtn, mousePt.x, mousePt.y);
+		var overR:Bool = overlapsInSubstateCam(replayBtn, mousePt.x, mousePt.y);
+		mousePt.put();
 
 		if (overC != continueHovered)
 		{
@@ -381,8 +433,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 	function createRoundedPanel(x:Float, y:Float, width:Int, height:Int, color:FlxColor):FlxSprite
 	{
-		var panel = new FlxSprite(x, y).makeGraphic(width, height, FlxColor.TRANSPARENT);
-		FlxSpriteUtil.drawRoundRect(panel, 0, 0, width, height, 18, 18, color, {thickness: 0, color: FlxColor.TRANSPARENT});
+		var panel = UIScreen.makeGlassCard(x, y, width, height, 18, FlxColor.fromRGBFloat(0.07, 0.10, 0.18, 0.62));
 		panel.alpha = 0;
 		return panel;
 	}
@@ -424,9 +475,6 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 		var items:Array<{label:String, value:String, color:FlxColor}> = [];
 
-		items.push({label: Language.get("ResultsScreen.score", "Score"), value: "0", color: FlxColor.fromRGB(255, 215, 0)});
-		items.push({label: Language.get("ResultsScreen.accuracy", "Accuracy"), value: "0.00%", color: FlxColor.WHITE});
-		items.push({label: Language.get("ResultsScreen.grade", "Grade"), value: game.ratingName + (game.ratingFC != "" ? " - " + game.ratingFC : ""), color: getGradeColor(game.ratingName)});
 		items.push({label: Language.get("ResultsScreen.maxCombo", "Max Combo"), value: fmtDev(game.maxcombo, best != null ? best.maxCombo : 0), color: FlxColor.WHITE});
 		items.push({label: Language.get("ResultsScreen.hits", "Hits"), value: Std.string(game.songHits), color: FlxColor.WHITE});
 		items.push({label: Language.get("ResultsScreen.comboBreaks", "Combo Breaks"), value: Std.string(game.songMisses), color: FlxColor.fromRGB(255, 100, 100)});
@@ -468,7 +516,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		var statusY:Float = leftPanel.y + 14;
 
 		// --- Build left column text (dynamic label widths to prevent overlap across languages) ---
-		var lineH:Float = 22;
+		var lineH:Float = 20;
 		var labelX:Float = leftPanel.x + 18;
 		var startY:Float = statusY + statusCount * statusLineH + 12;
 
@@ -585,20 +633,89 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		}
 	}
 
+	function buildHeroInfo(game:PlayState)
+	{
+		if (heroPanel == null) return;
+
+		var labelColor:FlxColor = FlxColor.fromRGB(140, 150, 160);
+		var hx:Float = heroPanel.x + 36;
+		var hy:Float = heroPanel.y;
+
+		function heroLabel(x:Float, text:String, width:Int):FlxText
+		{
+			var t = new FlxText(x, hy + 20, width, text, 15);
+			t.setFormat(Paths.languageFont(), 15, labelColor, LEFT);
+			t.alpha = 0;
+			heroTextGroup.add(t);
+			return t;
+		}
+
+		function heroValue(x:Float, text:String, size:Int, color:FlxColor, width:Int):FlxText
+		{
+			var t = new FlxText(x, hy + 42, width, text, size);
+			t.setFormat(Paths.languageFont(), size, color, LEFT);
+			t.textField.wordWrap = false;
+			t.alpha = 0;
+			heroTextGroup.add(t);
+			return t;
+		}
+
+		heroLabel(hx, Language.get("ResultsScreen.score", "Score"), 180);
+		scoreText = heroValue(hx, "0", 52, FlxColor.fromRGB(255, 215, 0), 220);
+
+		heroLabel(hx + 260, Language.get("ResultsScreen.accuracy", "Accuracy"), 180);
+		accuracyText = heroValue(hx + 260, "0.00%", 36, FlxColor.WHITE, 220);
+
+		heroLabel(hx + 520, Language.get("ResultsScreen.grade", "Grade"), 180);
+		var gradeStr = game.ratingName + (game.ratingFC != "" ? " - " + game.ratingFC : "");
+		heroValue(hx + 520, gradeStr, 30, getGradeColor(game.ratingName), 260);
+
+		heroLabel(hx + 840, Language.get("ResultsScreen.maxCombo", "Max Combo"), 180);
+		heroValue(hx + 840, Std.string(game.maxcombo), 28, FlxColor.WHITE, 200);
+	}
+
 	function buildHitBars(game:PlayState)
 	{
-		var totalNotes = game.sicks + game.goods + game.bads + game.shits + game.songMisses;
+		var counts:Array<Int> = [];
+		var colors:Array<FlxColor> = [];
+		var labels:Array<String> = [];
+
+		// Marvelous is a first-class bucket when enabled, so the chart doesn't
+		// silently swallow the best judgement type.
+		if (ClientPrefs.data.marvelousRatings)
+		{
+			counts.push(game.marvelouses);
+			colors.push(FlxColor.fromRGB(255, 215, 0));
+			labels.push("marvelouses");
+		}
+		counts.push(game.sicks);
+		counts.push(game.goods);
+		counts.push(game.bads);
+		counts.push(game.shits);
+		counts.push(game.songMisses);
+		colors.push(hitColorArray[0]);
+		colors.push(hitColorArray[1]);
+		colors.push(hitColorArray[2]);
+		colors.push(hitColorArray[3]);
+		colors.push(hitColorArray[4]);
+		labels.push("sick");
+		labels.push("good");
+		labels.push("bad");
+		labels.push("shit");
+		labels.push("miss");
+
+		var totalNotes:Int = 0;
+		for (c in counts) totalNotes += c;
 		if (totalNotes <= 0) totalNotes = 1;
 
+		var rowCount:Int = counts.length;
 		var barMaxW:Int = Std.int(statsPanel.width - 175);
-		var barH:Int = 18;
+		var barH:Int = (rowCount > 5) ? 14 : 18;
 		var barX:Float = statsPanel.x + 18;
-		var startY:Float = statsPanel.y + 14;
-		var gap:Float = 10;
+		var startY:Float = statsPanel.y + 12;
+		var gap:Float = (rowCount > 5) ? 7 : 10;
 
-		var counts:Array<Int> = [game.sicks, game.goods, game.bads, game.shits, game.songMisses];
-
-		for (i in 0...5)
+		for (i in 0...rowCount)
 		{
 			var y:Float = startY + i * (barH + gap);
 
@@ -609,14 +726,14 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			var w:Int = Math.ceil(barMaxW * (counts[i] / totalNotes));
 			if (w < 2 && counts[i] > 0) w = 2;
 
-			var bar = new FlxSprite(barX, y).makeGraphic(w, barH, hitColorArray[i]);
+			var bar = new FlxSprite(barX, y).makeGraphic(w, barH, colors[i]);
 			bar.alpha = 0;
 			barGroup.add(bar);
 
 			var percent = Math.ceil(counts[i] / totalNotes * 10000) / 100;
-			var hitLabel = Language.get("ResultsScreen." + hitNames[i].toLowerCase(), hitNames[i]);
-			var barTxt = new FlxText(barX + barMaxW + 10, y - 1, 155, hitLabel + ": " + counts[i] + " (" + percent + "%)", 15);
-			barTxt.setFormat(Paths.languageFont(), 15, hitColorArray[i], LEFT);
+			var hitLabel = Language.get("ResultsScreen." + labels[i], labels[i].toUpperCase());
+			var barTxt = new FlxText(barX + barMaxW + 10, y - 1, 155, hitLabel + ": " + counts[i] + " (" + percent + "%)", 14);
+			barTxt.setFormat(Paths.languageFont(), 14, colors[i], LEFT);
 			barTxt.alpha = 0;
 			barTextGroup.add(barTxt);
 		}
@@ -674,8 +791,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			ratingIcon.loadGraphic(Paths.image("freeplayr/FALSE"));
 		ratingIcon.setGraphicSize(Std.int(ratingIcon.width * 0.6));
 		ratingIcon.updateHitbox();
-		ratingIcon.x = leftPanel.x + leftPanel.width - ratingIcon.width - 20;
-		ratingIcon.y = leftPanel.y + leftPanel.height - ratingIcon.height - 20;
+		ratingIcon.x = heroPanel.x + heroPanel.width - ratingIcon.width - 24;
+		ratingIcon.y = heroPanel.y + (heroPanel.height - ratingIcon.height) / 2;
 		ratingIcon.visible = true;
 		ratingIcon.alpha = 0;
 		ratingIconTween = FlxTween.tween(ratingIcon, {alpha: 1}, 0.5, {ease: FlxEase.backOut});
@@ -813,10 +930,10 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			else if (displayedAccuracy != targetAccuracy)
 				displayedAccuracy = targetAccuracy;
 
-			if (leftTextGroup.members.length > 1)
-				leftTextGroup.members[1].text = Std.string(displayedScore);
-			if (leftTextGroup.members.length > 3)
-				leftTextGroup.members[3].text = Highscore.floorDecimal(displayedAccuracy, 2) + "%";
+			if (scoreText != null)
+				scoreText.text = Std.string(displayedScore);
+			if (accuracyText != null)
+				accuracyText.text = Highscore.floorDecimal(displayedAccuracy, 2) + "%";
 
 			if (displayedScore == targetScore && Math.abs(displayedAccuracy - targetAccuracy) <= 0.01)
 			{
@@ -949,6 +1066,25 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		replayTxt.x = replayBtn.x + (replayBtn.width - replayTxt.width) / 2;
 	}
 
+	function restoreBackdrop():Void
+	{
+		if (backdropGame != null)
+			backdropGame.persistentUpdate = prevPersistentUpdate;
+		if (backdropCam != null && FlxG.cameras.list.indexOf(backdropCam) != -1)
+			backdropCam.filters = prevCamFilters;
+	}
+
+	override function destroy():Void
+	{
+		restoreBackdrop();
+		if (substateCam != null)
+		{
+			FlxG.cameras.remove(substateCam, true);
+			substateCam = null;
+		}
+		super.destroy();
+	}
+
 	function doContinue()
 	{
 		if (closeCheck) return;
@@ -966,6 +1102,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	function exitAndGo(replay:Bool)
 	{
 		FlxTween.tween(titleTxt, {alpha: 0}, 0.2);
+		FlxTween.tween(heroPanel, {alpha: 0}, 0.2);
 		FlxTween.tween(leftPanel, {alpha: 0}, 0.2);
 		FlxTween.tween(graphPanel, {alpha: 0}, 0.2);
 		FlxTween.tween(statsPanel, {alpha: 0}, 0.2);
@@ -978,6 +1115,8 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 		for (item in leftTextGroup.members)
 			FlxTween.tween(item, {alpha: 0}, 0.12);
+		for (item in heroTextGroup.members)
+			FlxTween.tween(item, {alpha: 0}, 0.12);
 		for (item in barBGGroup.members)
 			FlxTween.tween(item, {alpha: 0}, 0.12);
 		for (item in barGroup.members)
@@ -988,6 +1127,7 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		FlxG.sound.play(Paths.sound('cancelMenu'));
 
 		new FlxTimer().start(0.25, function(_) {
+			restoreBackdrop();
 			close();
 
 			var game = PlayState.instance;

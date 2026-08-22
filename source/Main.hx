@@ -131,7 +131,7 @@ class Main extends Sprite
         TraceManager.init();
         TraceManager.info('trace.systemInit', 'TraceManager initialized successfully.');
 
-        // Windows 桌面启动 TraceConsole 交互式面板
+        // Windows 桌面启动 TraceConsole 交互式面板（是否实际输出由 syncWithPrefs/开关决定）
         #if (desktop && !android)
         TraceConsole.start();
         #end

@@ -25,5 +25,6 @@
     "ScoreHistorySubstate.on" : "開",
     "ScoreHistorySubstate.off" : "關",
     "ScoreHistorySubstate.replayDifficultyLock" : "回放模式下不允許調整難度.",
-    "ScoreHistorySubstate.instructions": "上/下: 選擇  |  ENTER: 播放  |  RESET: 刪除  |  ESC: 返回"
+    "ScoreHistorySubstate.deleteConfirm" : "再次按 RESET 確認刪除  |  ESC 取消",
+    "ScoreHistorySubstate.instructions": "上/下/懸停: 選擇  |  ENTER/雙擊: 播放  |  RESET×2: 刪除  |  ESC: 返回"
 }

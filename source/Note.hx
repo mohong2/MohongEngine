@@ -51,6 +51,12 @@ typedef EventNote = {
     public var offsetX:Float = 0;
     public var offsetY:Float = 0;
     public var noteSplashDisabled:Bool = false;
+    /** 0.6.3 自定义 Note 兼容: 溅射皮肤/颜色在 PreloadedChartNote 上也可由 Lua 设置。
+     * 注意：只有 Lua 显式写过才覆盖（null 表示未设置），避免把普通 Note 的轨道色溅射覆盖成全零。 */
+    public var noteSplashTexture:String = null;
+    public var noteSplashHue:Null<Float> = null;
+    public var noteSplashSat:Null<Float> = null;
+    public var noteSplashBrt:Null<Float> = null;
     public var hitsoundDisabled:Bool = false;
 }
 
@@ -1023,6 +1029,16 @@ class Note extends FlxSprite {
         gfNote = chartNoteData.gfNote;
         lowPriority = chartNoteData.lowPriority;
         noteSplashDisabled = chartNoteData.noteSplashDisabled;
+        // 必须在 noteType setter 之后写入，避免 setter 用轨道色覆盖自定义溅射颜色。
+        // 只有 Lua 显式设置过才覆盖；未设置保持 noteType setter 算出的轨道色溅射。
+        if (chartNoteData.noteSplashTexture != null)
+            noteSplashTexture = chartNoteData.noteSplashTexture;
+        if (chartNoteData.noteSplashHue != null)
+            noteSplashHue = chartNoteData.noteSplashHue;
+        if (chartNoteData.noteSplashSat != null)
+            noteSplashSat = chartNoteData.noteSplashSat;
+        if (chartNoteData.noteSplashBrt != null)
+            noteSplashBrt = chartNoteData.noteSplashBrt;
 
         if(isSustainNote) {
             parentST = chartNoteData.parentST;

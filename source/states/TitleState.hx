@@ -182,6 +182,11 @@ class TitleState extends MusicBeatState
 		FlxG.save.bind('funkin', 'ninjamuffin99');
 		ClientPrefs.loadPrefs();
 
+		// Windows: Apply saved Trace Console preference (not before prefs are loaded).
+		#if windows
+		TraceManager.syncWithPrefs();
+		#end
+
 		super.create();
 
 		#if LUA_ALLOWED

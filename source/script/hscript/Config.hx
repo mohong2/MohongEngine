@@ -13,7 +13,6 @@ class Config
 {
 	/** 允许脚本访问（import）的包前缀。 */
 	public static final ALLOWED_IMPORT_PACKAGES:Array<String> = [
-		#if !DOCUMENTATION
 		"flixel",
 		"openfl",
 		"lime",
@@ -24,11 +23,7 @@ class Config
 		"backend",
 		"options",
 		"editors",
-		"mohong",
-		#if MODCHARTING_FEATURES
-		"modchart",
-		#end
-		#end
+		"mohong"
 	];
 
 	/** 运行时禁止 import 的完整模块名（例如黑名单上有问题的模块）。 */

@@ -5,6 +5,7 @@ import states.FreeplayState;
 import states.MainMenuState;
 
 import backend.MusicBeatState;
+import backend.UIScreen;
 import Allscore;
 import options.OptionsState;
 import Controls.Control;
@@ -57,6 +58,9 @@ class PauseSubState extends MusicBeatSubstate
 	var selectionIndicator:FlxSprite;
 	var slideGroup:FlxSpriteGroup;
 	var indicatorTween:FlxTween;
+	var substateCam:flixel.FlxCamera;
+	var backdropCam:flixel.FlxCamera;
+	var prevCamFilters:Array<openfl.filters.BitmapFilter> = null;
 	#if ONLINE_ALLOWED
 	var onlineNoticeText:FlxText;
 	#end
@@ -323,7 +327,13 @@ class PauseSubState extends MusicBeatSubstate
 		FlxTween.tween(slideGroup, {alpha: 1}, 0.4, {ease: FlxEase.sineOut});
 		FlxTween.tween(slideGroup.scale, {x: 1, y: 1}, 0.55, {ease: FlxEase.circOut});
 
-		cameras = [FlxG.cameras.list[FlxG.cameras.list.length - 1]];
+		// Dedicated static screen-space camera: keeps the pause UI and mouse hit
+		// testing independent from camGame/camHUD scroll and zoom.
+		substateCam = UIScreen.createScreenCamera();
+		cameras = [substateCam];
+		backdropCam = FlxG.camera;
+		prevCamFilters = backdropCam.filters;
+		UIScreen.applyBlur(backdropCam, 8);
 		#if ONLINE_ALLOWED
 		if (PlayState.seiunOnline)
 		{
@@ -682,9 +692,15 @@ class PauseSubState extends MusicBeatSubstate
 		var mx:Float = point.x;
 		var my:Float = point.y;
 
-		// Account for slideGroup transform offset (perspective effect)
+		// Account for slideGroup transform (offset + slight perspective scale)
 		var ox:Float = (slideGroup != null) ? slideGroup.x : 0;
 		var oy:Float = (slideGroup != null) ? slideGroup.y : 0;
+		var sx:Float = (slideGroup != null) ? slideGroup.scale.x : 1;
+		var sy:Float = (slideGroup != null) ? slideGroup.scale.y : 1;
+		var ogx:Float = (slideGroup != null) ? slideGroup.origin.x : 0;
+		var ogy:Float = (slideGroup != null) ? slideGroup.origin.y : 0;
+		var gx:Float = ox + ogx;
+		var gy:Float = oy + ogy;
 
 		for (i in 0...menuItemsGroup.members.length)
 		{
@@ -692,10 +708,12 @@ class PauseSubState extends MusicBeatSubstate
 			if (item == null || !item.visible) continue;
 
 			// Compute world-space position: item within menuItemsGroup within slideGroup
-			var ix:Float = item.x + menuItemsGroup.x + ox;
-			var iy:Float = item.y + menuItemsGroup.y + oy;
-			var iw:Float = item.width;
-			var ih:Float = item.height;
+			var localX:Float = item.x + menuItemsGroup.x;
+			var localY:Float = item.y + menuItemsGroup.y;
+			var ix:Float = gx + (localX - ogx) * sx;
+			var iy:Float = gy + (localY - ogy) * sy;
+			var iw:Float = item.width * sx;
+			var ih:Float = item.height * sy;
 			if (iw <= 0 || ih <= 0) continue;
 
 			if (mx >= ix && mx <= ix + iw && my >= iy && my <= iy + ih)
@@ -768,9 +786,9 @@ class PauseSubState extends MusicBeatSubstate
 		ny = Math.max(-1, Math.min(1, ny));
 
 		// --- Layer 1: Slide group (UI panels) — moderate offset + scale ---
-		var targetOffsetX:Float = nx * 16;
-		var targetOffsetY:Float = ny * 10;
-		var targetScale:Float = 1.0 - (Math.abs(nx) + Math.abs(ny)) * 0.008;
+		var targetOffsetX:Float = nx * 12;
+		var targetOffsetY:Float = ny * 8;
+		var targetScale:Float = 1.0 - (Math.abs(nx) + Math.abs(ny)) * 0.005;
 
 		var lerpSpeed:Float = Math.min(1, elapsed * 6);
 		perspOffsetX = FlxMath.lerp(perspOffsetX, targetOffsetX, lerpSpeed);
@@ -797,6 +815,7 @@ class PauseSubState extends MusicBeatSubstate
 	{
 		cantUnpause = 0.1;
 		FlxTween.tween(slideGroup, {y: FlxG.height}, 0.4, {ease: FlxEase.quartIn, onComplete: function(_) {
+			restoreBackdrop();
 			close();
 		}});
 		FlxTween.tween(bg, {alpha: 0}, 0.4, {ease: FlxEase.quartIn});
@@ -850,8 +869,20 @@ class PauseSubState extends MusicBeatSubstate
 		}
 	}
 
+	function restoreBackdrop():Void
+	{
+		if (backdropCam != null && FlxG.cameras.list.indexOf(backdropCam) != -1)
+			backdropCam.filters = prevCamFilters;
+	}
+
 	override function destroy()
 	{
+		restoreBackdrop();
+		if (substateCam != null)
+		{
+			FlxG.cameras.remove(substateCam, true);
+			substateCam = null;
+		}
 		if(pauseMusic != null) pauseMusic.destroy();
 		if(indicatorTween != null) indicatorTween.cancel();
 		super.destroy();

@@ -1230,6 +1230,7 @@ class PlayState extends MusicBeatState
 		else
 			add(iconP2);
 		reloadHealthBarColors();
+		forceHealthIconsAboveBar();
 
 		var scoreY:Float = (healthBarBG != null) ? (healthBarBG.y + 36) : (healthBar.y + 40);
 		scoreTxt = new FlxText(0, scoreY, FlxG.width, "", 20);
@@ -1902,6 +1903,28 @@ class PlayState extends MusicBeatState
 		var targetY:Float = healthBar.y - 75;
 		iconP1.y += (targetY - iconP1.y) * t;
 		iconP2.y += (targetY - iconP2.y) * t;
+	}
+
+
+	private function forceHealthIconsAboveBar():Void
+	{
+		if (!CompatEngine.isModern() || uiGroup == null || healthBar == null || iconP1 == null || iconP2 == null)
+			return;
+
+		var barIdx:Int = uiGroup.members.indexOf(healthBar);
+		uiGroup.remove(iconP1);
+		uiGroup.remove(iconP2);
+
+		if (barIdx >= 0)
+		{
+			uiGroup.insert(barIdx + 1, iconP1);
+			uiGroup.insert(barIdx + 2, iconP2);
+		}
+		else
+		{
+			uiGroup.add(iconP1);
+			uiGroup.add(iconP2);
+		}
 	}
 
 	function set_songSpeed(value:Float):Float
@@ -3180,6 +3203,7 @@ class PlayState extends MusicBeatState
 				var noteDataIdx:Int = rawData % noteAmmo;
 
 				var gottaHitNote:Bool = isNewVer ? (rawData < noteAmmo) : (rawData >= noteAmmo ? !mustHit : mustHit);
+				var isGFSide:Bool = gfSec && (gottaHitNote == mustHit);
 				if (playOpponent) gottaHitNote = !gottaHitNote;
 
 				var noteType:String = songNotes[3];
@@ -3191,7 +3215,7 @@ class PlayState extends MusicBeatState
 
 				var isAlt:Bool = (noteType == 'Alt Animation');
 				var isHurt:Bool = (noteType == 'Hurt Note');
-				var isGF:Bool = gfSec && (rawData < noteAmmo) || noteType == 'GF Sing';
+				var isGF:Bool = isGFSide || noteType == 'GF Sing';
 				var isNoAnim:Bool = (noteType == 'No Animation');
 				var isAltSuffix:String = isAlt ? '-alt' : '';
 
@@ -3228,6 +3252,10 @@ class PlayState extends MusicBeatState
 					parentSL: 0,
 					stepCrochet: stepCrochet,
 					noteSplashDisabled: false,
+					noteSplashTexture: null,
+					noteSplashHue: null,
+					noteSplashSat: null,
+					noteSplashBrt: null,
 					hitsoundDisabled: false
 				};
 				preloadedNotes.push(swagNote);
@@ -3273,6 +3301,10 @@ class PlayState extends MusicBeatState
 						offsetX: 0,
 						offsetY: 0,
 						noteSplashDisabled: false,
+						noteSplashTexture: null,
+						noteSplashHue: null,
+						noteSplashSat: null,
+						noteSplashBrt: null,
 						hitsoundDisabled: false
 					};
 					preloadedNotes.push(sustainNote);
@@ -4771,6 +4803,9 @@ class PlayState extends MusicBeatState
 							boyfriend = boyfriendMap.get(value2);
 							boyfriend.alpha = lastAlpha;
 							iconP1.changeIcon(boyfriend.healthIcon);
+							// 073/104 的 Bar 是 FlxSpriteGroup，部分自定义图标切图后会被
+							// 血条背景盖住；把图标重新放到 healthBar 之后，确保始终在血条上层。
+							forceHealthIconsAboveBar();
 						}
 						setOnScripts('boyfriendName', boyfriend.curCharacter);
 
@@ -4793,6 +4828,7 @@ class PlayState extends MusicBeatState
 							}
 							dad.alpha = lastAlpha;
 							iconP2.changeIcon(dad.healthIcon);
+							forceHealthIconsAboveBar();
 						}
 						setOnScripts('dadName', dad.curCharacter);
 

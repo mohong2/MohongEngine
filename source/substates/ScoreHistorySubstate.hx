@@ -26,6 +26,7 @@ import openfl.geom.Rectangle;
 import mohong.TraceManager;
 import CoolUtil;
 import SUtil;
+import backend.UIScreen;
 
 class ScoreHistorySubstate extends MusicBeatSubstate
 {
@@ -34,8 +35,24 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 	var titleUnderline:FlxSprite;
 
 	var dateListGroup:FlxTypedGroup<FlxText>;
+	var rowSubTexts:FlxTypedGroup<FlxText>;
+	var rowBGGroup:FlxTypedGroup<FlxSprite>;
+	var rowIconGroup:FlxTypedGroup<FlxSprite>;
 	var dateListBG:FlxSprite;
 	var selector:FlxSprite;
+
+	/** Dedicated static screen-space camera for correct mouse hit testing. */
+	var substateCam:flixel.FlxCamera;
+	var backdropCam:flixel.FlxCamera;
+	var prevCamFilters:Array<openfl.filters.BitmapFilter> = null;
+
+	var deleteConfirmPending:Bool = false;
+	var deleteConfirmTimer:FlxTimer = null;
+	var deleteConfirmTxt:FlxText;
+
+	var hoverRow:Int = -1;
+	var lastClickRow:Int = -1;
+	var lastClickTick:Int = 0;
 
 	var detailGroup:FlxTypedGroup<FlxText>;
 	var detailBG:FlxSprite;
@@ -49,9 +66,9 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 	var difficulty:Int;
 
 	var scrollOffset:Float = 0;
-	var itemHeight:Float = 40;
-	var listStartY:Float = 160;
-	var listVisibleHeight:Float = 400;
+	var itemHeight:Float = 58;
+	var listStartY:Float = 150;
+	var listVisibleHeight:Float = 390;
 
 	var isEmpty:Bool = false;
 	var emptyMsg:FlxText;
@@ -77,8 +94,15 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 	{
 		super();
 
+		// Dedicated static camera + blurred frozen menu behind the history screen.
+		substateCam = UIScreen.createScreenCamera();
+		cameras = [substateCam];
+		backdropCam = FlxG.camera;
+		prevCamFilters = backdropCam.filters;
+		UIScreen.applyBlur(backdropCam, 9);
+
 		bg = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
-		bg.alpha = 0.85;
+		bg.alpha = ClientPrefs.data.shaders ? 0.68 : 0.85;
 		add(bg);
 
 		this.songName = songName;
@@ -119,12 +143,18 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		graphBG = createRoundedPanel(440, 410, 820, 160, panelColor);
 		add(graphBG);
 
+		rowBGGroup = new FlxTypedGroup<FlxSprite>();
+		add(rowBGGroup);
 		dateListGroup = new FlxTypedGroup<FlxText>();
 		add(dateListGroup);
+		rowSubTexts = new FlxTypedGroup<FlxText>();
+		add(rowSubTexts);
+		rowIconGroup = new FlxTypedGroup<FlxSprite>();
+		add(rowIconGroup);
 		detailGroup = new FlxTypedGroup<FlxText>();
 		add(detailGroup);
 
-		selector = new FlxSprite().makeGraphic(370, 36, FlxColor.fromRGBFloat(0/255, 200/255, 220/255, 0.3));
+		selector = new FlxSprite().makeGraphic(360, 52, FlxColor.fromRGBFloat(0/255, 200/255, 220/255, 0.18));
 		selector.visible = false;
 		add(selector);
 
@@ -143,6 +173,12 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		instructionsTxt.setFormat(Paths.languageFont(), 14, FlxColor.GRAY, CENTER);
 		instructionsTxt.alpha = 0;
 		add(instructionsTxt);
+
+		deleteConfirmTxt = new FlxText(dateListBG.x + 12, dateListBG.y + dateListBG.height - 26,
+			dateListBG.width - 24, "", 14);
+		deleteConfirmTxt.setFormat(Paths.languageFont(), 14, FlxColor.fromRGB(255, 180, 100), CENTER);
+		deleteConfirmTxt.visible = false;
+		add(deleteConfirmTxt);
 
 		#if android
 		addVirtualPad(LEFT_FULL, SCORE_HISTORY_SUBSTATE);
@@ -179,12 +215,13 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		#if android
 		// 部分安卓设备上 FlxSpriteUtil.drawRoundRect 配合透明背景会导致崩溃，使用纯色矩形替代
 		var panel = new FlxSprite(x, y).makeGraphic(width, height, color);
-		#else
-		var panel = new FlxSprite(x, y).makeGraphic(width, height, FlxColor.TRANSPARENT);
-		FlxSpriteUtil.drawRoundRect(panel, 0, 0, width, height, 16, 16, color, {thickness: 0, color: FlxColor.TRANSPARENT});
-		#end
-		panel.alpha = 0.6;
+		panel.alpha = 0.72;
 		return panel;
+		#else
+		var panel = UIScreen.makeGlassCard(x, y, width, height, 16, FlxColor.fromRGBFloat(0.07, 0.10, 0.18, 0.62));
+		panel.alpha = 0.78;
+		return panel;
+		#end
 	}
 
 	override function create()
@@ -287,7 +324,11 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 	function refreshList()
 	{
 		dateListGroup.clear();
+		rowSubTexts.clear();
+		rowBGGroup.clear();
+		rowIconGroup.clear();
 		detailGroup.clear();
+		cancelDeleteConfirm();
 
 		if (emptyMsg != null)
 		{
@@ -316,12 +357,55 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			var dateParts = e.date.split(" ");
 			var dateStr = dateParts.length > 1 ? dateParts[0] : e.date;
 			var timeStr = dateParts.length > 1 ? dateParts[1] : "";
-			var fullText = dateStr + "  " + timeStr + "  -  " + e.score + "pts";
 
-			var dateText = new FlxText(40, 0, 360, fullText, 16);
-			dateText.setFormat(Paths.languageFont(), 16, (i == curSelected) ? FlxColor.WHITE : FlxColor.fromRGB(180, 200, 210), LEFT);
+			// Row background pill
+			#if android
+			var rowBG = new FlxSprite(30, 0).makeGraphic(360, 52, FlxColor.fromRGBFloat(1, 1, 1, 0.06));
+			#else
+			var rowBG = new FlxSprite(30, 0).makeGraphic(360, 52, FlxColor.TRANSPARENT);
+			FlxSpriteUtil.drawRoundRect(rowBG, 0, 0, 360, 52, 14, 14,
+				FlxColor.fromRGBFloat(1, 1, 1, 0.06),
+				{thickness: 0, color: FlxColor.TRANSPARENT});
+			#end
+			rowBG.alpha = 0;
+			rowBGGroup.add(rowBG);
+
+			var fullText = dateStr + "  " + timeStr + "  -  " + e.score + "pts";
+			var dateText = new FlxText(46, 0, 300, fullText, 15);
+			dateText.setFormat(Paths.languageFont(), 15, (i == curSelected) ? FlxColor.WHITE : FlxColor.fromRGB(180, 200, 210), LEFT);
 			dateText.alpha = 0;
 			dateListGroup.add(dateText);
+
+			// Detailed secondary line: accuracy / grade / FC / max combo / misses / replay marker
+			var accStr:String = Highscore.floorDecimal((e.ratingPercent >= 0 ? e.ratingPercent : 0) * 100, 2) + "%";
+			var subStr:String = accStr + "  " + e.ratingName;
+			if (e.ratingFC != null && e.ratingFC.length > 0)
+				subStr += " (" + e.ratingFC + ")";
+			subStr += "  " + Language.get("ScoreHistorySubstate.maxCombo", "Max Combo") + " " + e.maxCombo;
+			subStr += "  " + Language.get("ScoreHistorySubstate.misses", "Misses") + " " + e.misses;
+			if (Allscore.hasReplayData(e))
+				subStr += "  ●";
+
+			var subText = new FlxText(46, 24, 300, subStr, 12);
+			subText.setFormat(Paths.languageFont(), 12, FlxColor.fromRGB(150, 165, 180), LEFT);
+			subText.alpha = 0;
+			rowSubTexts.add(subText);
+
+			// Small rating icon on the right edge of the row
+			try
+			{
+				var iconName:String = getRatingIconName(e);
+				if (Paths.fileExists('images/freeplayr/$iconName.png', IMAGE))
+				{
+					var icon = new FlxSprite();
+					icon.loadGraphic(Paths.image('freeplayr/$iconName'));
+					icon.setGraphicSize(26);
+					icon.updateHitbox();
+					icon.alpha = 0;
+					rowIconGroup.add(icon);
+				}
+			}
+			catch (_:Dynamic) {}
 		}
 
 		scrollOffset = 0;
@@ -329,6 +413,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		adjustScrollToSelected();
 		updateSelectorPosition();
 		updateDetails();
+		updateSelectionColors();
 
 		for (i in 0...dateListGroup.members.length)
 		{
@@ -336,6 +421,27 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			item.alpha = 0;
 			item.x -= 8;
 			FlxTween.tween(item, {x: item.x + 8, alpha: 1}, 0.28, {startDelay: i * 0.04, ease: FlxEase.sineOut});
+		}
+		for (i in 0...rowSubTexts.members.length)
+		{
+			var item = rowSubTexts.members[i];
+			item.alpha = 0;
+			item.x -= 8;
+			FlxTween.tween(item, {x: item.x + 8, alpha: 1}, 0.28, {startDelay: i * 0.04, ease: FlxEase.sineOut});
+		}
+		for (i in 0...rowBGGroup.members.length)
+		{
+			var item = rowBGGroup.members[i];
+			item.alpha = 0;
+			var targetAlpha:Float = (i == curSelected) ? 1.0 : 0.45;
+			FlxTween.tween(item, {alpha: targetAlpha}, 0.3, {startDelay: i * 0.04, ease: FlxEase.sineOut});
+		}
+		for (i in 0...rowIconGroup.members.length)
+		{
+			var item = rowIconGroup.members[i];
+			item.alpha = 0;
+			var targetAlpha:Float = (i == curSelected) ? 1.0 : 0.55;
+			FlxTween.tween(item, {alpha: targetAlpha}, 0.3, {startDelay: i * 0.04, ease: FlxEase.sineOut});
 		}
 	}
 
@@ -345,7 +451,20 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		var i = 0;
 		for (text in dateListGroup.members)
 		{
-			text.y = listStartY + i * itemHeight - scrollOffset;
+			var y:Float = listStartY + i * itemHeight - scrollOffset;
+			text.y = y;
+			if (i < rowSubTexts.members.length) rowSubTexts.members[i].y = y + 25;
+			if (i < rowBGGroup.members.length)
+			{
+				var bg = rowBGGroup.members[i];
+				bg.y = y - 3;
+			}
+			if (i < rowIconGroup.members.length)
+			{
+				var icon = rowIconGroup.members[i];
+				icon.y = y + (itemHeight - icon.height) / 2;
+				icon.x = dateListBG.x + dateListBG.width - icon.width - 44;
+			}
 			i++;
 		}
 	}
@@ -366,8 +485,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		var maxScroll = Math.max(0, entries.length * itemHeight - listVisibleHeight);
 		scrollOffset = FlxMath.bound(scrollOffset, 0, maxScroll);
 
-		for (i in 0...dateListGroup.members.length)
-			dateListGroup.members[i].y = listStartY + i * itemHeight - scrollOffset;
+		updateListPositions();
 	}
 
 	function updateSelectorPosition()
@@ -378,7 +496,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			return;
 		}
 
-		var targetY = listStartY + curSelected * itemHeight - scrollOffset + 2;
+		var targetY = listStartY + curSelected * itemHeight - scrollOffset - 3;
 		selector.y = FlxMath.lerp(selector.y, targetY, 0.3);
 		selector.x = 30;
 		selector.visible = true;
@@ -390,7 +508,14 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		for (i in 0...dateListGroup.members.length)
 		{
 			var item = dateListGroup.members[i];
-			item.color = (i == curSelected) ? FlxColor.WHITE : FlxColor.fromRGB(180, 200, 210);
+			var selected:Bool = (i == curSelected);
+			item.color = selected ? FlxColor.WHITE : FlxColor.fromRGB(180, 200, 210);
+			if (i < rowSubTexts.members.length)
+				rowSubTexts.members[i].color = selected ? FlxColor.fromRGB(220, 235, 250) : FlxColor.fromRGB(150, 165, 180);
+			if (i < rowBGGroup.members.length)
+				rowBGGroup.members[i].alpha = selected ? 1.0 : 0.45;
+			if (i < rowIconGroup.members.length)
+				rowIconGroup.members[i].alpha = selected ? 1.0 : 0.55;
 		}
 	}
 
@@ -746,9 +871,11 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		}
 	}
 
-	function changeSelection(change:Int)
+	function changeSelection(change:Int, playSound:Bool = true)
 	{
 		if (isEmpty) return;
+		if (deleteConfirmPending)
+			cancelDeleteConfirm();
 
 		var previousSelected = curSelected;
 		curSelected += change;
@@ -761,11 +888,12 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		updateSelectionColors();
 		adjustScrollToSelected();
 
-		var targetY = listStartY + curSelected * itemHeight - scrollOffset + 2;
+		var targetY = listStartY + curSelected * itemHeight - scrollOffset - 3;
 		FlxTween.tween(selector, {y: targetY}, 0.35, {ease: FlxEase.backOut});
 
 		updateDetails();
-		FlxG.sound.play(Paths.sound('scrollMenu'));
+		if (playSound)
+			FlxG.sound.play(Paths.sound('scrollMenu'));
 	}
 
 	function playReplay(entry:ScoreEntry)
@@ -879,6 +1007,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			// 成功后不还原 prevModDir：PlayState 需要继续用该 mod 目录解析音频/图片。
 			Replay.dbgLog('[DEBUG-rpl] playReplay loaded song=' + (PlayState.SONG != null ? PlayState.SONG.song : 'NULL'));
 			PlayState.changedDifficulty = false;
+			restoreBackdrop();
 			close();
 			Replay.dbgLog('[DEBUG-rpl] playReplay switching to PlayState');
 			LoadingState.loadAndSwitchState(new PlayState());
@@ -930,13 +1059,25 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		if (!isEmpty && selector.visible)
 			updateSelectorPosition();
 
+		if (!isEmpty)
+			updateMouseInteraction();
+
 		if (isEmpty)
 		{
 			if (controls.BACK) exitSubstate();
 			return;
 		}
 
-		if (controls.BACK) exitSubstate();
+		if (controls.BACK)
+		{
+			if (deleteConfirmPending)
+				cancelDeleteConfirm();
+			else
+			{
+				exitSubstate();
+				return;
+			}
+		}
 
 		if (controls.ACCEPT)
 		{
@@ -971,18 +1112,125 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 
 		if (controls.RESET #if android || virtualPad.buttonC.justPressed #end)
 		{
-			FlxG.sound.play(Paths.sound('cancelMenu'));
-			Allscore.deleteEntry(songName, difficulty, curSelected);
-			entries = Allscore.getHistory(songName, difficulty);
-
-			if (entries.length == 0) curSelected = 0;
+			if (deleteConfirmPending)
+				doDeleteSelected();
 			else
-			{
-				if (curSelected >= entries.length) curSelected = entries.length - 1;
-				if (curSelected < 0) curSelected = 0;
-			}
-			refreshList();
+				startDeleteConfirm();
 		}
+	}
+
+	function getRowIndexAt(mx:Float, my:Float):Int
+	{
+		if (isEmpty || dateListGroup.members.length == 0) return -1;
+		var left:Float = dateListBG.x + 8;
+		var right:Float = dateListBG.x + dateListBG.width - 8;
+		if (mx < left || mx > right) return -1;
+
+		for (i in 0...dateListGroup.members.length)
+		{
+			var y:Float = dateListGroup.members[i].y;
+			if (my >= y - 4 && my <= y + itemHeight - 4)
+				return i;
+		}
+		return -1;
+	}
+
+	function updateMouseInteraction():Void
+	{
+		if (FlxG.mouse == null) return;
+
+		var cam:flixel.FlxCamera = (substateCam != null) ? substateCam : FlxG.camera;
+		var mousePt = FlxG.mouse.getWorldPosition(cam, flixel.math.FlxPoint.get());
+		var row:Int = getRowIndexAt(mousePt.x, mousePt.y);
+		mousePt.put();
+
+		// Hover auto-select (no sound spam while moving the cursor)
+		if (row >= 0 && row != curSelected)
+			changeSelection(row - curSelected, false);
+
+		if (FlxG.mouse.justPressed)
+		{
+			if (row >= 0)
+			{
+				if (row != curSelected)
+					changeSelection(row - curSelected, false);
+
+				// Double-click plays if a replay exists (or shakes the detail card otherwise)
+				if (row == curSelected && row == lastClickRow && (FlxG.game.ticks - lastClickTick) < 400)
+				{
+					var selected = entries[curSelected];
+					if (selected != null)
+					{
+						if (Allscore.hasReplayData(selected))
+							playReplay(selected);
+						else
+						{
+							var origX = detailBG.x;
+							FlxTween.tween(detailBG, {x: origX - 5}, 0.05, {
+								onComplete: function(_)
+								{
+									FlxTween.tween(detailBG, {x: origX + 5}, 0.05, {
+										onComplete: function(_)
+										{
+											FlxTween.tween(detailBG, {x: origX}, 0.05);
+										}
+									});
+								}
+							});
+						}
+					}
+					lastClickRow = -1;
+				}
+				else
+				{
+					lastClickRow = row;
+					lastClickTick = FlxG.game.ticks;
+				}
+			}
+		}
+	}
+
+	function startDeleteConfirm():Void
+	{
+		if (deleteConfirmPending) return;
+		deleteConfirmPending = true;
+		if (deleteConfirmTxt != null)
+		{
+			deleteConfirmTxt.text = Language.get("ScoreHistorySubstate.deleteConfirm",
+				"Press RESET again to confirm delete  |  ESC to cancel");
+			deleteConfirmTxt.visible = true;
+		}
+		FlxG.sound.play(Paths.sound('scrollMenu'), 0.6);
+		if (deleteConfirmTimer != null) deleteConfirmTimer.cancel();
+		deleteConfirmTimer = new FlxTimer().start(2.5, function(_) cancelDeleteConfirm());
+	}
+
+	function cancelDeleteConfirm():Void
+	{
+		deleteConfirmPending = false;
+		if (deleteConfirmTimer != null)
+		{
+			deleteConfirmTimer.cancel();
+			deleteConfirmTimer = null;
+		}
+		if (deleteConfirmTxt != null)
+			deleteConfirmTxt.visible = false;
+	}
+
+	function doDeleteSelected():Void
+	{
+		cancelDeleteConfirm();
+		FlxG.sound.play(Paths.sound('cancelMenu'));
+		Allscore.deleteEntry(songName, difficulty, curSelected);
+		entries = Allscore.getHistory(songName, difficulty);
+
+		if (entries.length == 0) curSelected = 0;
+		else
+		{
+			if (curSelected >= entries.length) curSelected = entries.length - 1;
+			if (curSelected < 0) curSelected = 0;
+		}
+		refreshList();
 	}
 
 	function exitSubstate()
@@ -997,13 +1245,37 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 
 		for (item in dateListGroup.members)
 			FlxTween.tween(item, {alpha: 0}, 0.15);
+		for (item in rowSubTexts.members)
+			FlxTween.tween(item, {alpha: 0}, 0.15);
+		for (item in rowBGGroup.members)
+			FlxTween.tween(item, {alpha: 0}, 0.15);
+		for (item in rowIconGroup.members)
+			FlxTween.tween(item, {alpha: 0}, 0.15);
 		for (item in detailGroup.members)
 			FlxTween.tween(item, {alpha: 0}, 0.15);
 
 		new FlxTimer().start(0.2, function(tmr) {
+			restoreBackdrop();
 			close();
 			FreeplayState.instance.canInput = true;
 		});
 		FlxG.sound.play(Paths.sound('cancelMenu'), 1);
+	}
+
+	function restoreBackdrop():Void
+	{
+		if (backdropCam != null && FlxG.cameras.list.indexOf(backdropCam) != -1)
+			backdropCam.filters = prevCamFilters;
+	}
+
+	override function destroy():Void
+	{
+		restoreBackdrop();
+		if (substateCam != null)
+		{
+			FlxG.cameras.remove(substateCam, true);
+			substateCam = null;
+		}
+		super.destroy();
 	}
 }
