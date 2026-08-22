@@ -72,21 +72,39 @@ jobs:
           fi
           ls -la
 
+      - name: Prepare release body
+        run: |
+          # Default release notes: CHANGELOG_SeiunEngine.md (repo-root changelog).
+          # Falls back to a generated placeholder only if the file is absent so
+          # the release still succeeds.
+          if [ -f CHANGELOG_SeiunEngine.md ]; then
+            cp CHANGELOG_SeiunEngine.md release_body.md
+          else
+            : > release_body.md
+          fi
+          cat >> release_body.md <<'EOF'
+
+          ---
+
+          ## Build Info
+
+          Automated alpha pre-release from Build workflow run ${{ env.RUN_ID }}.
+
+          Artifacts:
+          - Linux x64
+          - Windows x64
+          - macOS x64
+          - macOS arm64 (experimental)
+          - Android (APK)
+          - iOS Device (IPA)
+
+          Checksums are included in `SHA256SUMS.txt`.
+          EOF
+
       - uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2.6.2
         with:
           tag_name: v${{ env.APP_VERSION }}-alpha.${{ env.RUN_ID }}
           name: Alpha v${{ env.APP_VERSION }} (build ${{ env.RUN_ID }})
           prerelease: true
-          body: |
-            Automated alpha pre-release from Build workflow run ${{ env.RUN_ID }}.
-
-            Artifacts:
-            - Linux x64
-            - Windows x64
-            - macOS x64
-            - macOS arm64 (experimental)
-            - Android (APK)
-            - iOS Device (IPA)
-
-            Checksums are included in `SHA256SUMS.txt`.
+          body_path: release_body.md
           files: dist/*
