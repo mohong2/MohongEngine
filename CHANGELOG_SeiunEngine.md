@@ -276,10 +276,6 @@
 - 修复 Hurt Note 长条在经过判定区（ARROWS）时即便未按下也会消失的问题：长条裁剪（clip）条件不再把 ignoreNote（Hurt）音符当作“已命中”而提前裁剪；只有必须按的轨道在真正命中（wasGoodHit）后才裁剪，与 0.6.3 原版行为一致。
 - 修复“虚空按下”/幻按（未触碰屏幕却显示按键按下）：在释放轮询中增加反卡键复位——若某轨道当前确实未按住（多绑定/触摸释放丢失）但 strum 仍停在 'pressed'，则强制回 'static'；仅在确实未按住时才复位，因此不误伤长按/真按住。⚠ 尚未在安卓设备上验证，待实测确认。
 
-##### 已知未修复（记录）
-
-- Hurt Note 长条位于 TAP 左侧、未水平对齐：定位代码与普通 Note 一致（offsetX 净零、按 strum.x 居中），推测为 HURT 皮肤素材帧本身未水平居中所致，属纹理/素材层面问题，需提供素材帧或精确偏移量后方可修复。
-
 ---
 
 ### 鸣谢
@@ -559,21 +555,6 @@
 - Android sub-pixel seam guard for downscroll sustains: each non-pixel hold segment gets ~2px extra length at construction so adjacent segments (incl. the TAP↔sustain start) always overlap, avoiding hairline seams from fractional `scale.y` + non-AA on GLES. Frame-independent, no per-frame cost (conservative guard — keep only if still needed on Android).
 - Fixed Hurt Note sustains disappearing as they pass through the receptors even when not pressed: the clip condition no longer treats `ignoreNote` (Hurt) notes as already-hit and clipping them early; a mustPress sustain is only clipped after it is actually hit (`wasGoodHit`), matching 0.6.3.
 - Fixed a "phantom/virtual press" (a key showing as pressed with no touch): added an anti-stuck reset in the release poll — if a lane is genuinely not held (lost release from multi-binding/touch) but its strum is still `'pressed'`, it is forced back to `'static'`; it only fires when the lane truly is not held, so real holds are unaffected. ⚠ Not yet verified on device; awaiting an Android test.
-
-##### Known unresolved (recorded)
-
-- Hurt Note sustain sits to the LEFT of the TAP / is not horizontally centered: the positioning code is identical to normal notes (net-zero `offsetX`, centered on `strum.x`), so this is almost certainly the HURT skin texture frame not being horizontally centered. Requires the texture frame or the exact offset to fix.
-
----
-
-### Unreleased / 未发布
-
-#### 谱面编辑器（source/editors/NewChartingState.hx）
-
-- 新增“仅事件文件 (PE063)”保存格式：在 Save Chart As... 格式列表中新增 `Events Only (PE063)`，保存为旧版 0.6.3 的 `{"song":{"events":[...]}}` 事件文件结构（不带 `format` 字段，文件名仍为 `events.json`）。
-- 新增“包含事件 (Psych/Legacy)”导出选项（默认勾选）：在 Save Chart As... 弹窗中可控制 Psych Engine v1.0 / v0.x (Legacy) 谱面导出时是否包含 `events`；取消勾选后导出的谱面中 `events` 保留为空数组，编辑器内存中的事件不受影响。
-- 上述“包含事件”选项只影响 Psych Engine v1.0 / v0.x (Legacy) 谱面导出；Events Only、Events Only (PE063)、CNE、V-Slice、osu!mania、Malody 导出不受影响，Ctrl+S 快速保存也保持原行为。
-- 补充三语（英文/简中/繁中）语言文件：`assets/lang/English/newchartEditor.json`、`assets/lang/ChineseSimplified/newchartEditor.json`、`assets/lang/ChineseTraditional/newchartEditor.json`。
 
 ---
 
