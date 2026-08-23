@@ -35,9 +35,68 @@ jobs:
         run: |
           echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
-  linux-x64:
-    name: Linux Build
+  linux-deps:
+    name: Linux · ① 依赖
     needs: prepare
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/linux
+          key: seiu-export-linux-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update \
+            -o Acquire::Retries=3 \
+            -o Acquire::http::Timeout=10 \
+            -o Acquire::https::Timeout=10 \
+            -o Acquire::Languages=none || true
+          sudo apt-get install -y --no-install-recommends libvlc-dev libvlccore-dev \
+            libgl1-mesa-dev libglu1-mesa-dev libx11-dev \
+            libasound2-dev libxext-dev libxi-dev libxrandr-dev libxinerama-dev \
+            libpulse-dev
+
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+  linux-build:
+    name: Linux · ② 编译
+    needs: linux-deps
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -70,9 +129,59 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  windows-x64:
-    name: Windows Build
+  windows-deps:
+    name: Windows · ① 依赖
     needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/windows
+          key: seiu-export-windows-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+  windows-build:
+    name: Windows · ② 编译
+    needs: windows-deps
     runs-on: windows-latest
     timeout-minutes: 45
     steps:
@@ -105,9 +214,76 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  macos:
-    name: macOS Build (${{ matrix.target }})
+  macos-deps:
+    name: macOS · ① 依赖 (${{ matrix.target }})
     needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: macos-x64
+          - runner: macos-14
+            target: macos-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/macos
+          key: seiu-export-${{ matrix.target }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Patch hxcpp zlib for modern macOS SDK
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+
+      - name: Silence unused -stdlib warning
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' \
+            -exec perl -0pi -e 's{(<flag value="-stdlib=libc\+\+" unless="STDLIBCPP" />)}{$1\n  <flag value="-Wno-unused-command-line-argument" if="HXCPP_CLANG" />}' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' -exec grep -q 'Wno-unused-command-line-argument' {} \;
+
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+  macos-build:
+    name: macOS · ② 编译 (${{ matrix.target }})
+    needs: macos-deps
     strategy:
       fail-fast: false
       matrix:
@@ -156,9 +332,86 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  android:
-    name: Android Build (${{ matrix.abi }})
+  android-deps:
+    name: Android · ① 依赖 (${{ matrix.abi }})
     needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64
+            arch: "-arm64"
+          - abi: armv7
+            arch: "-armv7"
+    defaults:
+      run:
+        shell: pwsh
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4.9.1
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/android
+          key: seiu-export-android-${{ matrix.abi }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          $GH_PAT = $env:GH_PAT -replace "[\r\n]", ""
+          if ($GH_PAT) {
+            $b64 = [Convert]::ToBase64String([Text.Encoding]::UTF8.GetBytes("x-access-token:$GH_PAT"))
+            git config --local --unset-all http.https://github.com/.extraheader 2>$null
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic $b64"
+            Write-Output 'git auth configured (GH_PAT found)'
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+            if ($LASTEXITCODE -ne 0) { exit 1 }
+          } else {
+            Write-Output '::warning::GH_PAT not set - private deps will fail'
+          }
+
+      - name: Install Android SDK components
+        run: |
+          $SDKMANAGER = "$env:ANDROID_HOME\cmdline-tools\latest\bin\sdkmanager.bat"
+          1..20 | ForEach-Object { "y" } | & $SDKMANAGER --licenses 2>$null | Out-Null
+          & $SDKMANAGER "platforms;android-33" "build-tools;34.0.0" "platform-tools" "ndk;21.4.7075529"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          Add-Content -Path $env:GITHUB_ENV -Value "ANDROID_SDK=$env:ANDROID_HOME"
+          Add-Content -Path $env:GITHUB_ENV -Value "ANDROID_NDK_ROOT=$env:ANDROID_HOME\ndk\21.4.7075529"
+          Add-Content -Path $env:GITHUB_ENV -Value "ANDROID_SETUP=true"
+
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup "$HOME/haxelib"
+          haxe -cp ./setup -main Main --interp
+
+      - name: Init discord_rpc submodules
+        run: |
+          cd "$HOME/haxelib/discord_rpc/git"
+          git submodule update --init --recursive
+
+      - name: Read app version
+        run: |
+          $xml = Get-Content -Raw Project.xml
+          $v = [regex]::Match($xml, '<app[^>]*version="([0-9][0-9.]*)"').Groups[1].Value
+          Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$v"
+
+  android-build:
+    name: Android · ② 编译 (${{ matrix.abi }})
+    needs: android-deps
     runs-on: windows-latest
     timeout-minutes: 45
     strategy:
@@ -204,9 +457,74 @@ jobs:
           if-no-files-found: error
           retention-days: 14
 
-  ios-device:
-    name: iOS Build
+  ios-deps:
+    name: iOS · ① 依赖
     needs: prepare
+    runs-on: macos-15-intel
+    timeout-minutes: 15
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: ${{ env.HAXE_VERSION }}
+          cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/ios
+          key: seiu-export-ios-arm64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - name: Auth private haxelib deps
+        env:
+          GH_PAT: ${{ secrets.GH_PAT }}
+        run: |
+          GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+          if [ -n "$GH_PAT" ]; then
+            B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+            git config --local --unset-all http.https://github.com/.extraheader || true
+            git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+            git ls-remote https://github.com/mohong2/flixel.git HEAD
+          else
+            echo '::warning::GH_PAT not set - private deps will fail'
+          fi
+
+      - name: Install haxelib dependencies
+        run: |
+          haxelib setup ~/haxelib
+          haxe -cp ./setup -main Main --interp
+
+      - name: Init discord_rpc submodules
+        run: |
+          cd ~/haxelib/discord_rpc/git
+          git submodule update --init --recursive
+
+      - name: Patch hxcpp zlib for iOS 18 SDK
+        run: |
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+          find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+          ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+
+      - name: Configure ad-hoc iOS signing
+        run: |
+          CONF="$HOME/.lime/config.xml"
+          mkdir -p "$HOME/.lime"
+          if [ ! -f "$CONF" ]; then printf '<?xml version="1.0" encoding="utf-8"?>\n<config>\n</config>\n' > "$CONF"; fi
+          sed -i '' '/<set name="ios.identity"/d' "$CONF"
+          sed -i '' 's#</config>#<set name="ios.identity" value="-" /></config>#' "$CONF"
+          cat "$CONF"
+
+      - name: Read app version
+        run: |
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+  ios-build:
+    name: iOS · ② 编译
+    needs: ios-deps
     runs-on: macos-15-intel
     timeout-minutes: 45
     defaults:
@@ -239,7 +557,7 @@ jobs:
 
   create-release:
     name: Create Release
-    needs: [linux-x64, windows-x64, macos, android, ios-device]
+    needs: [linux-build, windows-build, macos-build, android-build, ios-build]
     if: github.event.inputs.publish != 'none'
     runs-on: ubuntu-latest
     timeout-minutes: 15
