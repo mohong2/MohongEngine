@@ -42,6 +42,8 @@ jobs:
         with:
           path: export/release/macos
           key: seiu-export-${{ matrix.target }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+          restore-keys: |
+            seiu-export-${{ matrix.target }}-v1-
 
       - uses: ./.github/actions/build-desktop
         with:

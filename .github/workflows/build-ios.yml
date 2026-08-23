@@ -29,6 +29,8 @@ jobs:
         with:
           path: export/release/ios
           key: seiu-export-ios-arm64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+          restore-keys: |
+            seiu-export-ios-arm64-v1-
 
       - uses: ./.github/actions/build-ios
         with:

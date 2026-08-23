@@ -26,6 +26,8 @@ jobs:
         with:
           path: export/release/windows
           key: seiu-export-windows-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+          restore-keys: |
+            seiu-export-windows-x64-v1-
 
       - uses: ./.github/actions/build-desktop
         with:

@@ -26,6 +26,8 @@ jobs:
         with:
           path: export/release/linux
           key: seiu-export-linux-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+          restore-keys: |
+            seiu-export-linux-x64-v1-
 
       - uses: ./.github/actions/build-desktop
         with:
