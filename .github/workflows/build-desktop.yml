@@ -36,11 +36,6 @@ jobs:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
 
-      # hxcpp incremental build cache: restores the previous run's export dir
-      # so only changed Haxe modules recompile. Key deliberately covers ONLY
-      # Project.xml + hmm.json (build flags / dependency versions) - source
-      # changes must NOT invalidate the cache. Bump -v1- when the rebuild/build
-      # command lines in the build-desktop composite action change.
       - name: Restore hxcpp build cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:

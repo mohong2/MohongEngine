@@ -1,0 +1,95 @@
+name: Build iOS Target
+description: Build the iOS app (device, arm64) - shared pipeline steps.
+
+inputs:
+  gh-pat:
+    description: 'Optional GitHub PAT for private haxelib dependencies'
+    required: false
+    default: ''
+
+runs:
+  using: composite
+  steps:
+    - name: Auth private haxelib deps
+      shell: bash
+      env:
+        GH_PAT: ${{ inputs.gh-pat }}
+      run: |
+        GH_PAT="$(printf '%s' "$GH_PAT" | tr -d '\r\n')"
+        if [ -n "$GH_PAT" ]; then
+          B64="$(printf '%s' "x-access-token:${GH_PAT}" | base64 | tr -d '\r\n')"
+          git config --local --unset-all http.https://github.com/.extraheader || true
+          git config --global http.https://github.com/.extraheader "AUTHORIZATION: basic ${B64}"
+          git ls-remote https://github.com/mohong2/flixel.git HEAD
+        else
+          echo '::warning::GH_PAT not set - private deps will fail'
+        fi
+
+    - name: Install haxelib dependencies
+      shell: bash
+      run: |
+        haxelib setup ~/haxelib
+        haxe -cp ./setup -main Main --interp
+
+    - name: Patch hxcpp zlib for iOS 18 SDK
+      shell: bash
+      run: |
+        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+        ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+
+    - name: Init discord_rpc submodules
+      shell: bash
+      run: |
+        cd ~/haxelib/discord_rpc/git
+        git submodule update --init --recursive
+
+    - name: Apply iOS template patches
+      shell: bash
+      run: |
+        LT="$HOME/haxelib/lime/git/templates/ios/template"
+        cp "templates/ios/template/{{app.file}}/{{app.file}}-Info.plist" "$LT/{{app.file}}/{{app.file}}-Info.plist"
+        PBX="$LT/{{app.file}}.xcodeproj/project.pbxproj"
+        perl -0pi -e 's/("CODE_SIGN_IDENTITY\[sdk=iphoneos\*\]" = "::config\.ios\.identity::";)/$1\n\tCODE_SIGNING_ALLOWED = NO;\n\tCODE_SIGNING_REQUIRED = NO;/g' "$PBX"
+        grep -c 'CODE_SIGNING_ALLOWED = NO' "$PBX"
+
+    - name: Read app version
+      shell: bash
+      run: |
+        echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+
+    - name: Configure ad-hoc iOS signing
+      shell: bash
+      run: |
+        CONF="$HOME/.lime/config.xml"
+        mkdir -p "$HOME/.lime"
+        if [ ! -f "$CONF" ]; then printf '<?xml version="1.0" encoding="utf-8"?>\n<config>\n</config>\n' > "$CONF"; fi
+        sed -i '' '/<set name="ios.identity"/d' "$CONF"
+        sed -i '' 's#</config>#<set name="ios.identity" value="-" /></config>#' "$CONF"
+        cat "$CONF"
+
+    - name: Rebuild Lime iOS ndll
+      shell: bash
+      run: haxelib run lime rebuild ios -arm64 -release
+
+    - name: Compile iOS (device, arm64)
+      shell: bash
+      run: haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}"
+
+    - name: Package IPA
+      shell: bash
+      run: |
+        set -euo pipefail
+        APP_PATH="export/release/ios/build/Release-iphoneos/SeiunEngine.app"
+        if [ ! -d "$APP_PATH" ]; then
+          APP_PATH="$(find export/release/ios/build/Release-iphoneos -maxdepth 1 -name '*.app' | head -n1)"
+        fi
+        if [ -z "$APP_PATH" ] || [ ! -d "$APP_PATH" ]; then
+          echo "::error::Could not find .app bundle under export/release/ios/build/Release-iphoneos"
+          exit 1
+        fi
+        rm -rf Payload
+        mkdir -p Payload
+        cp -R "$APP_PATH" Payload/
+        ditto -c -k --sequesterRsrc --keepParent Payload "SeiunEngine-ios-device-$APP_VERSION.ipa"
+        ls -lh "SeiunEngine-ios-device-$APP_VERSION.ipa"
