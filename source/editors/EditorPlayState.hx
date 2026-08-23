@@ -447,14 +447,9 @@ class EditorPlayState extends MusicBeatState
 					} else {
 						daNote.y = (strumY - 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed * Note.getManiaScale(daNote.mania));
 
-						// Upscroll: 0.6.3 原版定位。
-						if (daNote.isSustainNote) {
-							var maniaScale:Float = Note.getManiaScale(daNote.mania);
-							if (PlayState.isPixelStage)
-								daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
-							else
-								daNote.y += 55 * maniaScale;
-						}
+						// Upscroll: 0.6.3 原版定位 (对长条不做额外偏移, 仅靠 distance 摆放),
+						// 已由 vanilla 在双端(含安卓)验证为正常。
+						// (曾加的 +55 / daPixelZoom*9.5 会造成 TAP↔长条头部 空隙, 故移除对齐原版。)
 
 						if(daNote.mustPress || !daNote.ignoreNote)
 						{

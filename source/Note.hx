@@ -548,6 +548,10 @@ class Note extends FlxSprite {
                 if(PlayState.isPixelStage) {
                     prevNote.scale.y *= 1.19;
                     prevNote.scale.y *= (6 / prevNote.frameHeight);
+                } else {
+                    // Android 亚像素缝隙防护: 非像素长条每段额外加 ~2px 长度, 使相邻段(含 TAP↔长条起始)
+                    // 必然重叠, 消除 scale.y 为分数 + 非AA 时 GLES 上出现的细分缝。帧无关, 无逐帧开销。
+                    prevNote.scale.y += (2.0 / prevNote.frameHeight);
                 }
                 prevNote.updateHitbox();
             }

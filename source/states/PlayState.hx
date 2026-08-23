@@ -4311,19 +4311,12 @@ class PlayState extends MusicBeatState
 									daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
 									daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
 								}
-								else
-								{
-									if (PlayState.isPixelStage)
-										daNote.y += (PlayState.daPixelZoom * 9.5) * maniaScale;
-									else
-										daNote.y += 55 * maniaScale;
-								}
 							}
 						}
 
 	var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
 					if (strum.sustainReduce && daNote.isSustainNote
-						&& (!daNote.mustPress || daNote.wasGoodHit || daNote.ignoreNote))
+						&& (!daNote.mustPress || daNote.wasGoodHit))
 					{
 						// Use the real drawn bottom/top for the receptor clip. The old
 						// y - offset.y*scale.y formula triggers hundreds of pixels early
@@ -6624,9 +6617,13 @@ class PlayState extends MusicBeatState
 				// osu! 尾判/按键释放回调: 桌面轮询路径也走 keyReleased (之前只有移动端/回放会触发)
 				//if (releaseArray[i])
 				//	keyReleased(i, time);
-				if (releaseArray[i] || strumsBlocked[i] == true)
+				var spr:StrumNote = playerStrums.members[i];
+				// 反卡键 (多绑定/触摸释放丢失的幻按): 该轨道当前确实没有按住, 但 strum 仍停在 'pressed',
+				// 说明释放事件被吞, 强制回 'static'。只在"确实未按住"时才复位, 因此不误伤长按/真按住。
+				var stuckPressed:Bool = (spr != null && !holdArray[i]
+					&& spr.animation.curAnim != null && spr.animation.curAnim.name == 'pressed');
+				if (releaseArray[i] || strumsBlocked[i] == true || stuckPressed)
 				{
-					var spr:StrumNote = playerStrums.members[i];
 					if (spr != null)
 					{
 						spr.playAnim('static');

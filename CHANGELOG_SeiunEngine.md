@@ -269,6 +269,17 @@
 - 修复切换控件模式/Reset/退出时未清理拖动状态的问题，并增加异常触点/失效拖动残留的自动清理。
 - AndroidControls 读取/写入自定义按钮位置时增加空值与长度兼容，避免旧存档或按钮数量变化导致异常；切换控件时清理残留的 virtualPad/hitbox 引用。
 
+#### 音符与长条修复（2026-08-23 补充）
+
+- 修复上滚（upscroll）时 TAP 与长条头部之间的空隙：移除非原版的上滚专用偏移（+55 / daPixelZoom*9.5），使上滚与 0.6.3 原版一致——原版对上滚长条不做额外偏移（仅靠 distance 摆放），已在 PC 与安卓双端验证正常。修复同步到游戏内（PlayState）与编辑器试玩（EditorPlayState）。
+- 安卓下滚长条的亚像素接缝防护：非像素长条每段在构造时额外加约 2px 长度，使相邻段（含 TAP↔长条起始）必然重叠，避免分数 scale.y + 非 AA 时 GLES 上出现的细分缝；帧无关、无逐帧开销（保守防护，以安卓实测决定是否保留）。
+- 修复 Hurt Note 长条在经过判定区（ARROWS）时即便未按下也会消失的问题：长条裁剪（clip）条件不再把 ignoreNote（Hurt）音符当作“已命中”而提前裁剪；只有必须按的轨道在真正命中（wasGoodHit）后才裁剪，与 0.6.3 原版行为一致。
+- 修复“虚空按下”/幻按（未触碰屏幕却显示按键按下）：在释放轮询中增加反卡键复位——若某轨道当前确实未按住（多绑定/触摸释放丢失）但 strum 仍停在 'pressed'，则强制回 'static'；仅在确实未按住时才复位，因此不误伤长按/真按住。⚠ 尚未在安卓设备上验证，待实测确认。
+
+##### 已知未修复（记录）
+
+- Hurt Note 长条位于 TAP 左侧、未水平对齐：定位代码与普通 Note 一致（offsetX 净零、按 strum.x 居中），推测为 HURT 皮肤素材帧本身未水平居中所致，属纹理/素材层面问题，需提供素材帧或精确偏移量后方可修复。
+
 ---
 
 ### 鸣谢
@@ -541,6 +552,17 @@
 - Fixed buttons being draggable off screen: drag and saved-position loading are now clamped to the visible screen bounds.
 - Fixed drag state not being cleared when switching control modes, Reset, or exiting; added stale-touch cleanup and safer handling of old/incomplete saved button arrays.
 - Cleaned up leftover virtual pad / hitbox references when switching controls.
+
+#### Note & Sustain Fixes (2026-08-23 follow-up)
+
+- Fixed a gap between the TAP and the sustain head in upscroll: removed the non-vanilla upscroll-only offset (`+55` / `daPixelZoom*9.5`) so upscroll now matches 0.6.3 — vanilla applies no extra offset to upscroll sustains (positioned purely by `distance`) and is verified clean on both PC and Android. Applied to both gameplay (`PlayState`) and editor preview (`EditorPlayState`).
+- Android sub-pixel seam guard for downscroll sustains: each non-pixel hold segment gets ~2px extra length at construction so adjacent segments (incl. the TAP↔sustain start) always overlap, avoiding hairline seams from fractional `scale.y` + non-AA on GLES. Frame-independent, no per-frame cost (conservative guard — keep only if still needed on Android).
+- Fixed Hurt Note sustains disappearing as they pass through the receptors even when not pressed: the clip condition no longer treats `ignoreNote` (Hurt) notes as already-hit and clipping them early; a mustPress sustain is only clipped after it is actually hit (`wasGoodHit`), matching 0.6.3.
+- Fixed a "phantom/virtual press" (a key showing as pressed with no touch): added an anti-stuck reset in the release poll — if a lane is genuinely not held (lost release from multi-binding/touch) but its strum is still `'pressed'`, it is forced back to `'static'`; it only fires when the lane truly is not held, so real holds are unaffected. ⚠ Not yet verified on device; awaiting an Android test.
+
+##### Known unresolved (recorded)
+
+- Hurt Note sustain sits to the LEFT of the TAP / is not horizontally centered: the positioning code is identical to normal notes (net-zero `offsetX`, centered on `strum.x`), so this is almost certainly the HURT skin texture frame not being horizontally centered. Requires the texture frame or the exact offset to fix.
 
 ---
 
