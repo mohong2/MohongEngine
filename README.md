@@ -76,7 +76,15 @@ Drop mods into `mods/`. See `Modding.md`.
 
 - ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development
 
-- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process
+- ![MuXue](assets/preload/images/credits/muxue.png) **MuXue** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process
+
+- ![Pico](assets/preload/images/credits/pico.png) **Pico** (not the FNF character Pico) — Has supported the engine's development since the MohongEngine era and provided valuable bug feedback
+
+- ![Wolf Yeying](assets/preload/images/credits/xiaolangyeying.jpg) **Wolf Yeying** — Found and reported several bugs, contributing to the engine's stable operation
+
+- ![一只可爱的bf呀](assets/preload/images/credits/bfya.png) **一只可爱的bf呀** — Provided moral support and some ideas lol
+
+- ![Bonus-XK](assets/preload/images/credits/bonusxk.png) **Bonus-XK** — An engine developer who co-developed another engine ([FNF-MeteoricEngine](https://github.com/Bonus-XK/FNF-MeteoricEngine)) with the SeiunEngine author, and offered valuable moral support and encouragement throughout development
 
 ### Psych Engine Team (Base Engine)
 

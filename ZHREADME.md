@@ -62,7 +62,15 @@ lime build windows
 
 - ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — 为引擎提供了部分脚本设计方案，并在开发引擎的这一段时间内一直提供支持
 
-- ![慕雪](assets/preload/images/credits/muxue.png) **慕雪** — 为引擎找到了数不尽的 bug，为引擎的稳定性做出了重要贡献，并在开发引擎的这一段时间内一直提供支持
+- ![MuXue](assets/preload/images/credits/muxue.png) **MuXue** — 为引擎找到了数不尽的 bug，为引擎的稳定性做出了重要贡献，并在开发引擎的这一段时间内一直提供支持
+
+- ![Pico](assets/preload/images/credits/pico.png) **Pico（非 FNF 角色 Pico）** — 自 MohongEngine 时期起便持续支持本引擎的制作，并为引擎提供了若干宝贵的 Bug 反馈
+
+- ![Wolf Yeying](assets/preload/images/credits/xiaolangyeying.jpg) **小狼夜瑛** — 为引擎发现了若干 Bug，为引擎的稳定运行作出了贡献
+
+- ![一只可爱的bf呀](assets/preload/images/credits/bfya.png) **一只可爱的bf呀** — 提供了精神支持和一些想法 lol
+
+- ![Bonus-XK](assets/preload/images/credits/bonusxk.png) **Bonus-XK** — 与 SeiunEngine 作者共同开发另一款引擎（[FNF-MeteoricEngine](https://github.com/Bonus-XK/FNF-MeteoricEngine)）的引擎作者，在引擎开发期间给予了重要的精神支持与鼓励
 
 ### Psych Engine 团队（基础引擎）
 
