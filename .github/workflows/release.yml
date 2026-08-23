@@ -28,7 +28,7 @@ jobs:
             RUN_ID=""
           fi
           if [ -z "$RUN_ID" ]; then
-            RUN_ID="$(gh run list --workflow main.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')"
+            RUN_ID="$(gh run list --workflow build-all.yml --branch main --limit 1 --json databaseId --jq '.[0].databaseId')"
           fi
           echo "RUN_ID=$RUN_ID" >> "$GITHUB_ENV"
           echo "using build run: $RUN_ID"

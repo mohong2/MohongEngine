@@ -1,0 +1,60 @@
+name: macOS Build
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write
+
+jobs:
+  macos:
+    name: macOS Build
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-15-intel
+            target: macos-x64
+            rebuild: haxelib run lime rebuild mac -64 -release -Dlime-sdl3
+            build: haxelib run lime build mac --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+            artifact: SeiunEngine-mac-x64
+          - runner: macos-14
+            target: macos-arm64
+            rebuild: haxelib run lime rebuild mac -arm64 -release -Dlime-sdl3
+            build: haxelib run lime build mac -arm64 --app-version="$APP_VERSION-$GITHUB_RUN_ID"
+            artifact: SeiunEngine-mac-arm64
+            experimental: true
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: ${{ matrix.target == 'macos-arm64' && 60 || 45 }}
+    continue-on-error: ${{ matrix.experimental == true }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+
+      - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
+        with:
+          haxe-version: 4.2.5
+          cache-dependency-path: hmm.json
+
+      - name: Restore build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/macos
+          key: seiu-export-${{ matrix.target }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+
+      - uses: ./.github/actions/build-desktop
+        with:
+          target: ${{ matrix.target }}
+          rebuild: ${{ matrix.rebuild }}
+          build: ${{ matrix.build }}
+          artifact: ${{ matrix.artifact }}
+          path: export/release/macos/bin
+          gh-pat: ${{ secrets.GH_PAT }}
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: ${{ matrix.artifact }}
+          path: export/release/macos/bin
+          if-no-files-found: error
+          retention-days: 14
