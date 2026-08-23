@@ -68,23 +68,23 @@ Drop mods into `mods/`. See `Modding.md`.
 
 ## Credits
 
-- ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — Lead developer and maintainer, responsible for extensive engine modifications, performance optimizations, bug fixes, and Chinese localization. Also dove into countless pointers and low-level debugging to keep everything stable and running smoothly lol
+- ![mo_hong](assets/preload/images/credits/mohong.png) **mo_hong** — Lead developer and maintainer, responsible for extensive engine modifications, performance optimizations, bug fixes, and Chinese localization. Also dove into countless pointers and low-level debugging to keep everything stable and running smoothly lol · [Bilibili](https://space.bilibili.com/672029688)
 
-- ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — Old engine icon (MohongEngine)
+- ![Li.tmc](assets/preload/images/credits/Li.tmc.png) **Li.tmc** — Old engine icon (MohongEngine) · [Bilibili](https://space.bilibili.com/3537117498051255)
 
 ### SeiunEngine Acknowledgements
 
-- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development
+- ![CitriSnow](assets/preload/images/credits/CitriSnow.png) **CitriSnow** — Provided some scripting design solutions and offered continuous support throughout the engine's development · [Bilibili](https://space.bilibili.com/1951803423)
 
-- ![MuXue](assets/preload/images/credits/muxue.png) **MuXue** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process
+- ![MuXue](assets/preload/images/credits/muxue.png) **MuXue** — Identified countless bugs, made significant contributions to the engine's stability and quality, and provided continuous support throughout the development process · [Bilibili](https://space.bilibili.com/3493084289566971)
 
-- ![Pico](assets/preload/images/credits/pico.png) **Pico** (not the FNF character Pico) — Has supported the engine's development since the MohongEngine era and provided valuable bug feedback
+- ![Pico](assets/preload/images/credits/pico.png) **Pico** (not the FNF character Pico) — Has supported the engine's development since the MohongEngine era and provided valuable bug feedback · [Bilibili](https://space.bilibili.com/3546752359598592)
 
-- ![Wolf Yeying](assets/preload/images/credits/xiaolangyeying.jpg) **Wolf Yeying** — Found and reported several bugs, contributing to the engine's stable operation
+- ![Wolf Yeying](assets/preload/images/credits/xiaolangyeying.jpg) **Wolf Yeying** — Found and reported several bugs, contributing to the engine's stable operation · [Bilibili](https://space.bilibili.com/3493115727972533)
 
-- ![一只可爱的bf呀](assets/preload/images/credits/bfya.png) **一只可爱的bf呀** — Provided moral support and some ideas lol
+- ![一只可爱的bf呀](assets/preload/images/credits/bfya.png) **一只可爱的bf呀** — Provided moral support and some ideas lol · [Bilibili](https://space.bilibili.com/3546642993122123)
 
-- ![Bonus-XK](assets/preload/images/credits/bonusxk.png) **Bonus-XK** — An engine developer who co-developed another engine ([FNF-MeteoricEngine](https://github.com/Bonus-XK/FNF-MeteoricEngine)) with the SeiunEngine author, and offered valuable moral support and encouragement throughout development
+- ![Bonus-XK](assets/preload/images/credits/bonusxk.png) **Bonus-XK** — The developer of another engine ([FNF-MeteoricEngine](https://github.com/Bonus-XK/FNF-MeteoricEngine)), who regularly exchanges ideas with the SeiunEngine author and offered valuable moral support and encouragement throughout development · [Bilibili](https://space.bilibili.com/3461572190013717)
 
 ### Psych Engine Team (Base Engine)
 

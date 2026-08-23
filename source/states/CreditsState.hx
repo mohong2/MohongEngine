@@ -208,7 +208,7 @@ class CreditsState extends MusicBeatState
 			['Pico（非 FNF 角色 Pico）', 'pico', '自 MohongEngine 时期起便持续支持本引擎的制作，并为引擎提供了若干宝贵的 Bug 反馈', 'https://space.bilibili.com/3546752359598592', '97A2F2'],
 			['Wolf Yeying', 'xiaolangyeying', '为引擎发现了若干 Bug，为引擎的稳定运行作出了贡献', 'https://space.bilibili.com/3493115727972533', '88B6D8'],
 			['一只可爱的bf呀', 'bfya', '提供了精神支持和一些想法 lol', 'https://space.bilibili.com/3546642993122123', '67DFFF'],
-			['Bonus-XK', 'bonusxk', '与 SeiunEngine 作者共同开发另一款引擎（FNF-MeteoricEngine）的引擎作者，在引擎开发期间给予了重要的精神支持与鼓励', 'https://space.bilibili.com/3461572190013717', '00FF1A']
+			['Bonus-XK', 'bonusxk', '另一款引擎（FNF-MeteoricEngine）的作者，与 SeiunEngine 作者时常交流，并在引擎开发期间给予了重要的精神支持与鼓励', 'https://space.bilibili.com/3461572190013717', '00FF1A']
 		];
 
 		thanksGrpOptions = new FlxTypedGroup<FlxTextMenuItem>();
