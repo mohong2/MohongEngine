@@ -78,6 +78,11 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 	var heroTextGroup:FlxTypedGroup<FlxText>;
 	var scoreText:FlxText;
 	var accuracyText:FlxText;
+	var replayDeviationText:FlxText = null;
+	var liveAccuracyText:FlxText = null;
+
+	/** Original saved score entry when viewing results from a replay. */
+	var replayEntry:ScoreEntry = null;
 
 	var noteMs:Array<Float>;
 	var noteTime:Array<Float>;
@@ -155,9 +160,31 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		noteTime = game.NoteTime;
 		songLength = game.songLength;
 
-		targetScore = game.songScore;
-		// [CRASH FIX] ratingPercent might be NaN on some devices; handle gracefully
-		targetAccuracy = (Math.isNaN(game.ratingPercent) || game.ratingPercent < 0) ? 0 : game.ratingPercent * 100;
+		if (PlayState.replayMode && PauseSubState.entries != null)
+			replayEntry = PauseSubState.entries;
+
+		// Replays can re-judge slightly differently, so show the original saved
+		// score/accuracy instead of the live replayed run's values.
+		if (replayEntry != null)
+		{
+			targetScore = replayEntry.score;
+			targetAccuracy = normalizeAccuracy(replayEntry.ratingPercent);
+		}
+		else
+		{
+			targetScore = game.songScore;
+			// [CRASH FIX] ratingPercent might be NaN on some devices; handle gracefully
+			targetAccuracy = normalizeAccuracy(game.ratingPercent);
+		}
+
+		// Small anti-cheat display: botplay is shown as 99.9 instead of a fake 100%.
+		var botplaySource:Bool = false;
+		if (replayEntry != null && replayEntry.details != null && replayEntry.details.length > 15)
+			botplaySource = (replayEntry.details[15] == true);
+		else if (replayEntry == null)
+			botplaySource = game.cpuControlled;
+		if (botplaySource && targetAccuracy >= 99.99)
+			targetAccuracy = 99.9;
 
 		// -- Acrylic-style background (full screen) --
 		bg = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.fromRGBFloat(0.06, 0.08, 0.14, 0.85));
@@ -473,50 +500,69 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			return current + " (" + sign + diff + ")";
 		}
 
+		// Replays are judged again live, which can drift from the saved result.
+		// Prefer the original ScoreEntry when viewing a replay.
+		function hasDetails():Bool
+			return replayEntry != null && replayEntry.details != null && replayEntry.details.length > 3;
+		function det(idx:Int, fallback:Dynamic):Dynamic
+			return hasDetails() ? replayEntry.details[idx] : fallback;
+
 		var items:Array<{label:String, value:String, color:FlxColor}> = [];
 
-		items.push({label: Language.get("ResultsScreen.maxCombo", "Max Combo"), value: fmtDev(game.maxcombo, best != null ? best.maxCombo : 0), color: FlxColor.WHITE});
-		items.push({label: Language.get("ResultsScreen.hits", "Hits"), value: Std.string(game.songHits), color: FlxColor.WHITE});
-		items.push({label: Language.get("ResultsScreen.comboBreaks", "Combo Breaks"), value: Std.string(game.songMisses), color: FlxColor.fromRGB(255, 100, 100)});
+		var hitsVal:Dynamic = det(3, game.songHits);
+		var missesVal:Int = (replayEntry != null) ? replayEntry.misses : game.songMisses;
+		items.push({label: Language.get("ResultsScreen.hits", "Hits"), value: Std.string(hitsVal), color: FlxColor.WHITE});
+		items.push({label: Language.get("ResultsScreen.comboBreaks", "Combo Breaks"), value: Std.string(missesVal), color: FlxColor.fromRGB(255, 100, 100)});
 
 		items.push({label: "", value: "", color: FlxColor.WHITE});
+
+		var marvelVal:Int = (replayEntry != null && replayEntry.marvelouses != null) ? replayEntry.marvelouses : game.marvelouses;
+		var sickVal:Int = (replayEntry != null) ? replayEntry.sicks : game.sicks;
+		var goodVal:Int = (replayEntry != null) ? replayEntry.goods : game.goods;
+		var badVal:Int = (replayEntry != null) ? replayEntry.bads : game.bads;
+		var shitVal:Int = (replayEntry != null) ? replayEntry.shits : game.shits;
 
 		if (ClientPrefs.data.marvelousRatings)
-			items.push({label: Language.get("ResultsScreen.marvelouses", "Marvelouses"), value: fmtDev(game.marvelouses, best != null ? (best.marvelouses != null ? best.marvelouses : 0) : 0), color: FlxColor.fromRGB(255, 215, 0)});
-		items.push({label: Language.get("ResultsScreen.sicks", "Sicks"), value: fmtDev(game.sicks, best != null ? best.sicks : 0), color: FlxColor.fromRGB(0, 255, 255)});
-		items.push({label: Language.get("ResultsScreen.goods", "Goods"), value: fmtDev(game.goods, best != null ? best.goods : 0), color: FlxColor.WHITE});
-		items.push({label: Language.get("ResultsScreen.bads", "Bads"), value: fmtDev(game.bads, best != null ? best.bads : 0), color: FlxColor.GRAY});
-		items.push({label: Language.get("ResultsScreen.shits", "Shits"), value: fmtDev(game.shits, best != null ? best.shits : 0), color: FlxColor.GRAY});
-		items.push({label: Language.get("ResultsScreen.misses", "Misses"), value: fmtDev(game.songMisses, best != null ? best.misses : 0), color: FlxColor.fromRGB(255, 100, 100)});
+			items.push({label: Language.get("ResultsScreen.marvelouses", "Marvelouses"), value: fmtDev(marvelVal, best != null ? (best.marvelouses != null ? best.marvelouses : 0) : 0), color: FlxColor.fromRGB(255, 215, 0)});
+		items.push({label: Language.get("ResultsScreen.sicks", "Sicks"), value: fmtDev(sickVal, best != null ? best.sicks : 0), color: FlxColor.fromRGB(0, 255, 255)});
+		items.push({label: Language.get("ResultsScreen.goods", "Goods"), value: fmtDev(goodVal, best != null ? best.goods : 0), color: FlxColor.WHITE});
+		items.push({label: Language.get("ResultsScreen.bads", "Bads"), value: fmtDev(badVal, best != null ? best.bads : 0), color: FlxColor.GRAY});
+		items.push({label: Language.get("ResultsScreen.shits", "Shits"), value: fmtDev(shitVal, best != null ? best.shits : 0), color: FlxColor.GRAY});
+		items.push({label: Language.get("ResultsScreen.misses", "Misses"), value: fmtDev(missesVal, best != null ? best.misses : 0), color: FlxColor.fromRGB(255, 100, 100)});
 
 		items.push({label: "", value: "", color: FlxColor.WHITE});
 
-		items.push({label: Language.get("ResultsScreen.songSpeed", "Song Speed"), value: Std.string(game.songSpeed), color: FlxColor.fromRGB(200, 200, 200)});
-		items.push({label: Language.get("ResultsScreen.playbackRate", "Playback Rate"), value: "x" + game.playbackRate, color: FlxColor.fromRGB(200, 200, 200)});
+		var songSpeedVal:Float = (replayEntry != null) ? replayEntry.songSpeed : game.songSpeed;
+		var playbackVal:Float = (replayEntry != null) ? replayEntry.playbackRate : game.playbackRate;
+		items.push({label: Language.get("ResultsScreen.songSpeed", "Song Speed"), value: Std.string(songSpeedVal), color: FlxColor.fromRGB(200, 200, 200)});
+		items.push({label: Language.get("ResultsScreen.playbackRate", "Playback Rate"), value: "x" + playbackVal, color: FlxColor.fromRGB(200, 200, 200)});
 
-		var botplayStr = game.cpuControlled
+		var botplayOn:Bool = (det(15, game.cpuControlled) == true);
+		var practiceOn:Bool = (det(16, game.practiceMode) == true);
+		var instakillOn:Bool = (det(17, game.instakillOnMiss) == true);
+		var botplayStr = botplayOn
 			? Language.get("ResultsScreen.on", "ON")
 			: Language.get("ResultsScreen.off", "OFF");
-		var practiceStr = game.practiceMode
+		var practiceStr = practiceOn
 			? Language.get("ResultsScreen.on", "ON")
 			: Language.get("ResultsScreen.off", "OFF");
-		var instakillStr = game.instakillOnMiss
+		var instakillStr = instakillOn
 			? Language.get("ResultsScreen.on", "ON")
 			: Language.get("ResultsScreen.off", "OFF");
 
-		items.push({label: Language.get("ResultsScreen.botplay", "Botplay"), value: botplayStr, color: game.cpuControlled ? FlxColor.fromRGB(255, 165, 0) : FlxColor.GRAY});
-		items.push({label: Language.get("ResultsScreen.practice", "Practice"), value: practiceStr, color: game.practiceMode ? FlxColor.GREEN : FlxColor.GRAY});
-		items.push({label: Language.get("ResultsScreen.instakill", "Instakill"), value: instakillStr, color: game.instakillOnMiss ? FlxColor.RED : FlxColor.GRAY});
+		items.push({label: Language.get("ResultsScreen.botplay", "Botplay"), value: botplayStr, color: botplayOn ? FlxColor.fromRGB(255, 165, 0) : FlxColor.GRAY});
+		items.push({label: Language.get("ResultsScreen.practice", "Practice"), value: practiceStr, color: practiceOn ? FlxColor.GREEN : FlxColor.GRAY});
+		items.push({label: Language.get("ResultsScreen.instakill", "Instakill"), value: instakillStr, color: instakillOn ? FlxColor.RED : FlxColor.GRAY});
 
 		// --- Status header (moved to the top so it never overlaps the rating icon) ---
-		var statusLineH:Float = 15;
-		var statusCount:Int = 4 + (isReplay ? 1 : 0) + (best != null ? 1 : 0);
+		var statusLineH:Float = 13;
+		var statusCount:Int = 4 + (isReplay ? 1 : 0) + ((replayEntry != null || best != null) ? 1 : 0);
 		// LeatherEngine 移植: 回放判定被还原时多一行提示
 		if (isReplay && game.replayExam != null && game.replayExam.judgementRestoredDifferent) statusCount++;
 		var statusY:Float = leftPanel.y + 14;
 
 		// --- Build left column text (dynamic label widths to prevent overlap across languages) ---
-		var lineH:Float = 20;
+		var lineH:Float = 19;
 		var labelX:Float = leftPanel.x + 18;
 		var startY:Float = statusY + statusCount * statusLineH + 12;
 
@@ -577,12 +623,12 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		var judgePresetName:String = ClientPrefs.data.judgementPreset;
 		if (judgePresetName == null || judgePresetName.length == 0)
 			judgePresetName = backend.Ratings.presetNameForTimings(ClientPrefs.data.judgementTimings);
-		var judgeInfo = Language.get("ResultsScreen.judgeWindows", "Judge") + ": " + judgePresetName + " (";
+		var judgeInfo = Language.get("ResultsScreen.judge", "Judge") + ": " + judgePresetName + " (";
 		if (ClientPrefs.data.marvelousRatings)
-			judgeInfo += Std.string(ClientPrefs.data.marvelousWindow) + " / ";
-		judgeInfo += Std.string(ClientPrefs.data.sickWindow) + " / "
-			+ Std.string(ClientPrefs.data.goodWindow) + " / "
-			+ Std.string(ClientPrefs.data.badWindow) + ") / "
+			judgeInfo += Std.string(ClientPrefs.data.marvelousWindow) + "/";
+		judgeInfo += Std.string(ClientPrefs.data.sickWindow) + "/"
+			+ Std.string(ClientPrefs.data.goodWindow) + "/"
+			+ Std.string(ClientPrefs.data.badWindow) + ") "
 			+ Std.string(ClientPrefs.data.safeFrames) + "f";
 		addStatusLine(si++, judgeInfo, FlxColor.fromRGB(180, 180, 200));
 
@@ -619,18 +665,40 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			}
 		}
 
-		if (best != null)
+		// Show the re-judgement drift compared to the original saved replay result.
+		if (replayEntry != null)
 		{
-			var scoreDiff = game.songScore - best.score;
-			var curAcc:Float = (Math.isNaN(game.ratingPercent) || game.ratingPercent < 0) ? 0 : game.ratingPercent;
-			var bestAcc:Float = (Math.isNaN(best.ratingPercent) || best.ratingPercent < 0) ? 0 : best.ratingPercent;
-			var accDiff = (curAcc * 100) - (bestAcc * 100);
+			var scoreDiff = game.songScore - replayEntry.score;
+			var curAccPct:Float = normalizeAccuracy(game.ratingPercent);
+			var savedAccPct:Float = normalizeAccuracy(replayEntry.ratingPercent);
+			var accDiff = curAccPct - savedAccPct;
 			var scoreSign = (scoreDiff >= 0) ? "+" : "";
 			var accSign = (accDiff >= 0) ? "+" : "";
 			addStatusLine(si++, Language.get("ResultsScreen.overallDeviation", "Diff") + ": "
 				+ scoreSign + scoreDiff + "pts / " + accSign + Highscore.floorDecimal(accDiff, 2) + "%",
 				(scoreDiff >= 0) ? FlxColor.GREEN : FlxColor.RED);
 		}
+		else if (best != null)
+		{
+			var scoreDiff = game.songScore - best.score;
+			var curAccPct:Float = normalizeAccuracy(game.ratingPercent);
+			var bestAccPct:Float = normalizeAccuracy(best.ratingPercent);
+			var accDiff = curAccPct - bestAccPct;
+			var scoreSign = (scoreDiff >= 0) ? "+" : "";
+			var accSign = (accDiff >= 0) ? "+" : "";
+			addStatusLine(si++, Language.get("ResultsScreen.overallDeviation", "Diff") + ": "
+				+ scoreSign + scoreDiff + "pts / " + accSign + Highscore.floorDecimal(accDiff, 2) + "%",
+				(scoreDiff >= 0) ? FlxColor.GREEN : FlxColor.RED);
+		}
+	}
+
+	function normalizeAccuracy(percent:Float):Float
+	{
+		if (Math.isNaN(percent) || percent < 0) return 0;
+		var pct:Float = percent * 100;
+		// Floating-point/save rounding can turn a true 100% into 99.99.
+		if (pct >= 99.99) return 100;
+		return pct;
 	}
 
 	function buildHeroInfo(game:PlayState)
@@ -666,12 +734,41 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		heroLabel(hx + 260, Language.get("ResultsScreen.accuracy", "Accuracy"), 180);
 		accuracyText = heroValue(hx + 260, "0.00%", 36, FlxColor.WHITE, 220);
 
+		// Show replay judgement drift directly under the accuracy number.
+		if (replayEntry != null)
+		{
+			var liveAccPct:Float = normalizeAccuracy(game.ratingPercent);
+			var savedAccPct:Float = normalizeAccuracy(replayEntry.ratingPercent);
+			var scoreDiff:Int = game.songScore - replayEntry.score;
+			var accDiff:Float = liveAccPct - savedAccPct;
+			var scoreSign:String = (scoreDiff >= 0) ? "+" : "";
+			var accSign:String = (accDiff >= 0) ? "+" : "";
+			var devColor:FlxColor = (scoreDiff >= 0) ? FlxColor.GREEN : FlxColor.RED;
+
+			replayDeviationText = new FlxText(hx + 260, hy + 82, 260,
+				Language.get("ResultsScreen.overallDeviation", "Diff") + ": "
+				+ scoreSign + scoreDiff + "pts / " + accSign + Highscore.floorDecimal(accDiff, 2) + "%", 14);
+			replayDeviationText.setFormat(Paths.languageFont(), 14, devColor, LEFT);
+			replayDeviationText.alpha = 0;
+			heroTextGroup.add(replayDeviationText);
+
+			// Also show the live/replayed accuracy so every number is visible.
+			liveAccuracyText = new FlxText(hx + 260, hy + 102, 260,
+				Language.get("ResultsScreen.liveAccuracy", "Live Accuracy") + ": "
+				+ Highscore.floorDecimal(liveAccPct, 2) + "%", 14);
+			liveAccuracyText.setFormat(Paths.languageFont(), 14, FlxColor.fromRGB(200, 210, 230), LEFT);
+			liveAccuracyText.alpha = 0;
+			heroTextGroup.add(liveAccuracyText);
+		}
+
 		heroLabel(hx + 520, Language.get("ResultsScreen.grade", "Grade"), 180);
-		var gradeStr = game.ratingName + (game.ratingFC != "" ? " - " + game.ratingFC : "");
-		heroValue(hx + 520, gradeStr, 30, getGradeColor(game.ratingName), 260);
+		var ratingName:String = (replayEntry != null) ? replayEntry.ratingName : game.ratingName;
+		var ratingFC:String = (replayEntry != null) ? replayEntry.ratingFC : game.ratingFC;
+		var gradeStr = ratingName + (ratingFC != "" ? " - " + ratingFC : "");
+		heroValue(hx + 520, gradeStr, 30, getGradeColor(ratingName), 260);
 
 		heroLabel(hx + 840, Language.get("ResultsScreen.maxCombo", "Max Combo"), 180);
-		heroValue(hx + 840, Std.string(game.maxcombo), 28, FlxColor.WHITE, 200);
+		heroValue(hx + 840, Std.string((replayEntry != null) ? replayEntry.maxCombo : game.maxcombo), 28, FlxColor.WHITE, 200);
 	}
 
 	function buildHitBars(game:PlayState)
@@ -682,17 +779,24 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 
 		// Marvelous is a first-class bucket when enabled, so the chart doesn't
 		// silently swallow the best judgement type.
+		var marvelVal:Int = (replayEntry != null && replayEntry.marvelouses != null) ? replayEntry.marvelouses : game.marvelouses;
+		var sickVal:Int = (replayEntry != null) ? replayEntry.sicks : game.sicks;
+		var goodVal:Int = (replayEntry != null) ? replayEntry.goods : game.goods;
+		var badVal:Int = (replayEntry != null) ? replayEntry.bads : game.bads;
+		var shitVal:Int = (replayEntry != null) ? replayEntry.shits : game.shits;
+		var missVal:Int = (replayEntry != null) ? replayEntry.misses : game.songMisses;
+
 		if (ClientPrefs.data.marvelousRatings)
 		{
-			counts.push(game.marvelouses);
+			counts.push(marvelVal);
 			colors.push(FlxColor.fromRGB(255, 215, 0));
 			labels.push("marvelouses");
 		}
-		counts.push(game.sicks);
-		counts.push(game.goods);
-		counts.push(game.bads);
-		counts.push(game.shits);
-		counts.push(game.songMisses);
+		counts.push(sickVal);
+		counts.push(goodVal);
+		counts.push(badVal);
+		counts.push(shitVal);
+		counts.push(missVal);
 		colors.push(hitColorArray[0]);
 		colors.push(hitColorArray[1]);
 		colors.push(hitColorArray[2]);
@@ -782,9 +886,35 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 		var game = PlayState.instance;
 		if (game == null) return;
 
-		// [CRASH FIX] Guard against NaN ratingPercent
-		var safePercent:Float = (Math.isNaN(game.ratingPercent) || game.ratingPercent < 0) ? 0 : game.ratingPercent;
-		var iconName = getRatingIconName(safePercent, game.ratingFC, game.sicks, game.goods, game.bads, game.shits, game.songMisses);
+		// [CRASH FIX] Guard against NaN ratingPercent; prefer original replay stats.
+		var safePercent:Float;
+		var ratingFC:String;
+		var sickCount:Int;
+		var goodCount:Int;
+		var badCount:Int;
+		var shitCount:Int;
+		var missCount:Int;
+		if (replayEntry != null)
+		{
+			safePercent = (Math.isNaN(replayEntry.ratingPercent) || replayEntry.ratingPercent < 0) ? 0 : replayEntry.ratingPercent;
+			ratingFC = replayEntry.ratingFC;
+			sickCount = replayEntry.sicks;
+			goodCount = replayEntry.goods;
+			badCount = replayEntry.bads;
+			shitCount = replayEntry.shits;
+			missCount = replayEntry.misses;
+		}
+		else
+		{
+			safePercent = (Math.isNaN(game.ratingPercent) || game.ratingPercent < 0) ? 0 : game.ratingPercent;
+			ratingFC = game.ratingFC;
+			sickCount = game.sicks;
+			goodCount = game.goods;
+			badCount = game.bads;
+			shitCount = game.shits;
+			missCount = game.songMisses;
+		}
+		var iconName = getRatingIconName(safePercent, ratingFC, sickCount, goodCount, badCount, shitCount, missCount);
 		if (Paths.fileExists("images/freeplayr/" + iconName + ".png", IMAGE))
 			ratingIcon.loadGraphic(Paths.image("freeplayr/" + iconName));
 		else
@@ -933,7 +1063,10 @@ class PlayStateResultsSubstate extends MusicBeatSubstate
 			if (scoreText != null)
 				scoreText.text = Std.string(displayedScore);
 			if (accuracyText != null)
-				accuracyText.text = Highscore.floorDecimal(displayedAccuracy, 2) + "%";
+			{
+				var accDisplay:Float = (targetAccuracy >= 99.99) ? 100 : displayedAccuracy;
+				accuracyText.text = Highscore.floorDecimal(accDisplay, 2) + "%";
+			}
 
 			if (displayedScore == targetScore && Math.abs(displayedAccuracy - targetAccuracy) <= 0.01)
 			{

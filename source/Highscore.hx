@@ -59,7 +59,7 @@ class Highscore
 		{
 			tempMult *= 10;
 		}
-		var newValue:Float = Math.floor(value * tempMult);
+		var newValue:Float = Math.floor(value * tempMult + 0.0000001);
 		return newValue / tempMult;
 	}
 

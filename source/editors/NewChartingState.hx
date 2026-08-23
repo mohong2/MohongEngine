@@ -907,6 +907,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 	var fileDialog:FileDialogHandler = new FileDialogHandler();
 	var _exportKeyMode:Int = 0; // 0 = auto (4K/8K), 4 = force 4K, 8 = force 8K
+	var _exportCreator:String = ''; // optional author/creator override for osu!/Malody export
 	var lastFocus:PsychUIInputText;
 
 	var autoSaveTime:Float = 0;
@@ -6700,7 +6701,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			PlayState.SONG.events.push(event.songData);
 	}
 
-	function saveChart()
+	function saveChart(includeEvents:Bool = true)
 	{
 		updateChartData();
 		// 多k: 4K 谱面可选择是否导出 mania 字段; 非 4K 必须导出 (锁死)
@@ -6719,7 +6720,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 						Language.get('newchartEditor_save_btn', 'Save'), function()
 						{
 							state.close();
-							haxe.Timer.delay(function() { doSaveChart(check.checked); }, 200);
+							haxe.Timer.delay(function() { doSaveChart(check.checked, includeEvents); }, 200);
 						});
 					saveBtn.screenCenter(X);
 					saveBtn.x -= 80;
@@ -6737,15 +6738,16 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				}));
 			return;
 		}
-		doSaveChart(true);
+		doSaveChart(true, includeEvents);
 	}
 
-	function doSaveChart(includeManiaField:Bool)
+	function doSaveChart(includeManiaField:Bool, includeEvents:Bool = true)
 	{
 		var songCopy:Dynamic = {};
 		for (f in Reflect.fields(PlayState.SONG))
 			Reflect.setField(songCopy, f, Reflect.field(PlayState.SONG, f));
 		if (!includeManiaField) Reflect.deleteField(songCopy, 'mania');
+		if (!includeEvents) Reflect.setField(songCopy, 'events', []);
 		var chartData:String = PsychJsonPrinter.print(songCopy, ['sectionNotes', 'events']);
 
 		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.json';
@@ -6784,6 +6786,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			Language.get('newchartEditor_format_cne', 'Codename Engine (CNE)'),
 			Language.get('newchartEditor_format_vslice', 'V-Slice'),
 			Language.get('newchartEditor_format_events', 'Events Only'),
+			Language.get('newchartEditor_format_events_pe063', 'Events Only (PE063)'),
 			Language.get('newchartEditor_format_osu', 'osu!mania (.osu)'),
 			Language.get('newchartEditor_format_malody', 'Malody (.mc)')
 		];
@@ -6799,7 +6802,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		var keyGrp:PsychUIRadioGroup = new PsychUIRadioGroup(0, 0, keyNames, 24, 5, true, 100);
 		keyGrp.checked = 0;
 
-		var promptHeight:Float = 100 + formatNames.length * 35 + 70 + 45;
+		var promptHeight:Float = 100 + formatNames.length * 35 + 70 + 85 + 40;
 		openSubState(new BasePrompt(420, promptHeight,
 			Language.get('newchartEditor_save_format_title', 'Save Chart As...'),
 			function(state:BasePrompt)
@@ -6819,23 +6822,43 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 				keyGrp.cameras = state.cameras;
 				state.add(keyGrp);
 
+				// Optional author/creator override for osu!/Malody export.
+				_exportCreator = (PlayState.SONG.chartCreator != null) ? PlayState.SONG.chartCreator : '';
+				var creatorTxt:EditorsText = new EditorsText(state.bg.x + 30, keyGrp.y + 32, 260,
+					Language.get('newchartEditor_creator', 'Author/Creator (optional):'));
+				creatorTxt.cameras = state.cameras;
+				state.add(creatorTxt);
+
+				var creatorInput:PsychUIInputText = new PsychUIInputText(state.bg.x + 30, creatorTxt.y + 18, 220, _exportCreator, 8);
+				creatorInput.cameras = state.cameras;
+				state.add(creatorInput);
+
+				var includeEventsCheck:PsychUICheckBox = new PsychUICheckBox(state.bg.x + 30, creatorInput.y + 30,
+					Language.get('newchartEditor_include_events', 'Include events (Psych/Legacy)'), 260);
+				includeEventsCheck.checked = true;
+				includeEventsCheck.cameras = state.cameras;
+				state.add(includeEventsCheck);
+
 				var btnY:Float = state.bg.y + state.bg.height - 45;
 				var saveBtn:PsychUIButton = new PsychUIButton(0, btnY, Language.get('newchartEditor_save_btn', 'Save'), function()
 				{
 					var choice:Int = radioGrp.checked;
+					var includeEvents:Bool = includeEventsCheck.checked;
 					_exportKeyMode = switch(keyGrp.checked) { case 1: 4; case 2: 8; default: 0; }
+					_exportCreator = StringTools.trim(creatorInput.text);
 					state.close();
 					// Delay to ensure prompt closes before file dialog opens
 					haxe.Timer.delay(function() {
 						switch(choice)
 						{
-							case 0: saveChart();
-							case 1: saveAsOldFormat();
+							case 0: saveChart(includeEvents);
+							case 1: saveAsOldFormat(includeEvents);
 							case 2: saveAsCne();
 							case 3: saveAsVslice();
 							case 4: saveEventsOnly();
-							case 5: saveAsOsu();
-							case 6: saveAsMalody();
+							case 5: saveEventsOnly063();
+							case 6: saveAsOsu();
+							case 7: saveAsMalody();
 						}
 					}, 200);
 				});
@@ -6858,10 +6881,11 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		));
 	}
 
-	function saveAsOldFormat()
+	function saveAsOldFormat(includeEvents:Bool = true)
 	{
 		updateChartData();
 		var oldFormatSong:SwagSong = convertToOldFormat(PlayState.SONG);
+		if(!includeEvents) oldFormatSong.events = [];
 
 		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.json';
 		if(Song.chartPath != null)
@@ -6915,6 +6939,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		var audioRef:String = null;
 		if (audioInfo != null)
 			audioRef = Paths.formatToSongPath(PlayState.SONG.song) + '.' + audioInfo.ext;
+		if (_exportCreator.length > 0)
+			PlayState.SONG.chartCreator = _exportCreator;
 		var osuText:String = OsuMalodyConvert.psychToOsu(PlayState.SONG, _exportKeyMode, audioRef);
 
 		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.osu';
@@ -6974,6 +7000,8 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			audioWavBytes = OsuMalodyConvert.audioBytesToWav(Paths.ramInstBytes.get(songKey));
 		}
 
+		if (_exportCreator.length > 0)
+			PlayState.SONG.chartCreator = _exportCreator;
 		var malodyText:String = OsuMalodyConvert.psychToMalody(PlayState.SONG, _exportKeyMode, audioRef);
 
 		var chartName:String = Paths.formatToSongPath(PlayState.SONG.song) + '.mc';
@@ -7092,6 +7120,15 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		updateChartData();
 		fileDialog.save('events.json', PsychJsonPrinter.print({events: PlayState.SONG.events, format: 'psych_v1'}, ['events']),
 			function() showOutput('newchartEditor_events_saved', false, [fileDialog.path]), null,
+			function() showOutput('newchartEditor_error_save_events', true));
+	}
+
+	function saveEventsOnly063()
+	{
+		updateChartData();
+		var eventsFile:String = Json.stringify({song: {events: PlayState.SONG.events}}, "\t");
+		fileDialog.save('events.json', eventsFile.trim(),
+			function() showOutput('newchartEditor_events_pe063_saved', false, [fileDialog.path]), null,
 			function() showOutput('newchartEditor_error_save_events', true));
 	}
 	

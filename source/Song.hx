@@ -35,6 +35,16 @@ typedef SwagSong =
 	@:optional var arrowSkin:String;
 	@:optional var splashSkin:String;
 	@:optional var difficultyName:String; // original chart difficulty (osu Version / Malody meta.version)
+
+	/** Original chart creator/mapper carried over on osu!/Malody import. */
+	@:optional var chartCreator:String;
+	/** Original music artist carried over on osu!/Malody import. */
+	@:optional var chartArtist:String;
+	/** Original source string carried over on osu!/Malody import. */
+	@:optional var chartSource:String;
+	/** Original tags string carried over on osu!/Malody import. */
+	@:optional var chartTags:String;
+
 	public var validScore:Null<Bool>;
 }
 

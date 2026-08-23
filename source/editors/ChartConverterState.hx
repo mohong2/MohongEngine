@@ -34,6 +34,7 @@ class ChartConverterState extends MusicBeatState
 	var fileDialog:FileDialogHandler;
 	var statusTxt:FlxText;
 	var folderInput:PsychUIInputText;
+	var authorInput:PsychUIInputText;
 	var offsetStepper:PsychUINumericStepper;
 	var outputModeGrp:PsychUIRadioGroup;
 	var _direction:Int = 0; // 0 = osu! -> Malody, 1 = Malody -> osu!
@@ -92,21 +93,30 @@ class ChartConverterState extends MusicBeatState
 		folderInput.cameras = cameras;
 		add(folderInput);
 
-		var offsetTxt:EditorsText = new EditorsText(FlxG.width / 2 - 260, 450, 200,
+		var authorTxt:EditorsText = new EditorsText(FlxG.width / 2 - 260, 450, 300,
+			Language.get('chartConverter_author', 'Author/Creator (optional):'));
+		authorTxt.cameras = cameras;
+		add(authorTxt);
+
+		authorInput = new PsychUIInputText(FlxG.width / 2 - 130, 448, 300, '', 8);
+		authorInput.cameras = cameras;
+		add(authorInput);
+
+		var offsetTxt:EditorsText = new EditorsText(FlxG.width / 2 - 260, 490, 200,
 			Language.get('chartConverter_offset', 'Global offset (ms):'));
 		offsetTxt.cameras = cameras;
 		add(offsetTxt);
 
-		offsetStepper = new PsychUINumericStepper(FlxG.width / 2 - 100, 448, 1, 0, -1000, 1000, 0, 80);
+		offsetStepper = new PsychUINumericStepper(FlxG.width / 2 - 100, 488, 1, 0, -1000, 1000, 0, 80);
 		offsetStepper.cameras = cameras;
 		add(offsetStepper);
 
-		var modeTxt:EditorsText = new EditorsText(FlxG.width / 2 - 260, 500, 200,
+		var modeTxt:EditorsText = new EditorsText(FlxG.width / 2 - 260, 540, 200,
 			Language.get('chartConverter_output_mode', 'Output mode:'));
 		modeTxt.cameras = cameras;
 		add(modeTxt);
 
-		outputModeGrp = new PsychUIRadioGroup(FlxG.width / 2 - 60, 498,
+		outputModeGrp = new PsychUIRadioGroup(FlxG.width / 2 - 60, 538,
 			[
 				Language.get('chartConverter_mode_pack', 'Package (.mcz/.osz)'),
 				Language.get('chartConverter_mode_loose', 'Loose files'),
@@ -116,7 +126,7 @@ class ChartConverterState extends MusicBeatState
 		outputModeGrp.cameras = cameras;
 		add(outputModeGrp);
 
-		statusTxt = new FlxText(0, 545, FlxG.width - 100, '', 14);
+		statusTxt = new FlxText(0, 585, FlxG.width - 100, '', 14);
 		statusTxt.setFormat(Paths.font('vcr.ttf'), 14, FlxColor.WHITE, CENTER);
 		statusTxt.screenCenter(X);
 		statusTxt.scrollFactor.set();
@@ -396,6 +406,14 @@ class ChartConverterState extends MusicBeatState
 							if (n != null && n.length > 0) n[0] = n[0] + offMs;
 			}
 
+			// 作者/谱师手动覆盖: 留空则沿用原谱 Creator / meta.creator。
+			if (authorInput != null)
+			{
+				var customAuthor:String = (authorInput.text != null) ? StringTools.trim(authorInput.text) : '';
+				if (customAuthor.length > 0)
+					song.chartCreator = customAuthor;
+			}
+
 			// ---- audio ----
 			var audioBytes:Bytes = null;
 			var audioOutName:String = audioName;
@@ -413,6 +431,9 @@ class ChartConverterState extends MusicBeatState
 				var adj:String = OsuMalodyConvert.findAdjacentAudio(srcPath, audioName);
 				if (adj != null) audioOutName = adj.substr(adj.lastIndexOf('/') + 1);
 			}
+			// Keep chart-internal audio references in sync with the final package entry name.
+			if (audioOutName != null && audioOutName.length > 0)
+				audioOutName = OsuMalodyConvert.sanitizePackageFileName(audioOutName);
 
 			// ---- background ----
 			var bgName:String = (format == 0)
@@ -437,10 +458,13 @@ class ChartConverterState extends MusicBeatState
 					if (bgAdj != null) bgOutName = bgAdj.substr(bgAdj.lastIndexOf('/') + 1);
 				}
 			}
+			if (bgOutName != null && bgOutName.length > 0)
+				bgOutName = OsuMalodyConvert.sanitizePackageFileName(bgOutName);
 
 			var safeTitle:String = sanitizeFileName(title != null && title.length > 0 ? title : (song.song != null ? song.song : 'chart'));
 			var safeVersion:String = sanitizeFileName(version != null && version.length > 0 ? version : (song.difficultyName != null ? song.difficultyName : 'FNF'));
 			var baseName:String = safeTitle + ' [' + safeVersion + ']';
+			var safeBaseName:String = OsuMalodyConvert.sanitizePackageFileName(baseName);
 
 			#if ONLINE_ALLOWED
 			// ---- 联机可加载副本：写入 mods/data 与 mods/songs，模组同步会分发给其他玩家 ----
@@ -490,8 +514,8 @@ class ChartConverterState extends MusicBeatState
 			var chartExt:String;
 			if (format == 0) { chartText = OsuMalodyConvert.psychToMalody(song, 0, audioOutName, bgOutName); chartExt = '.mc'; }
 			else { chartText = OsuMalodyConvert.psychToOsu(song, 0, audioOutName, bgOutName); chartExt = '.osu'; }
-			if (writeLoose) File.saveContent('$outDir/$baseName$chartExt', chartText);
-			packEntries.push({fileName: baseName + chartExt, data: Bytes.ofString(chartText)});
+			if (writeLoose) File.saveContent('$outDir/$safeBaseName$chartExt', chartText);
+			packEntries.push({fileName: safeBaseName + chartExt, data: Bytes.ofString(chartText)});
 
 			// write audio + background next to the chart
 			if (audioBytes != null && audioOutName != null && audioOutName.length > 0)
@@ -529,10 +553,16 @@ class ChartConverterState extends MusicBeatState
 		// 自动打包: osu! -> Malody 输出 .mcz, Malody -> osu! 输出 .osz
 		var archivePath:String = '';
 		var firstFormat:Int = (chartList.length > 0 && chartList[0] != null) ? chartList[0].format : 0;
-		var pkgName:String = sanitizeFileName(chartList[0] != null && chartList[0].title != null ? chartList[0].title : 'chart');
+		var pkgName:String = OsuMalodyConvert.sanitizePackageFileName(
+			sanitizeFileName(chartList[0] != null && chartList[0].title != null ? chartList[0].title : 'chart'));
 		archivePath = '$outDir/$pkgName.' + ((firstFormat == 0) ? 'mcz' : 'osz');
-		if (doPack) OsuMalodyConvert.packZip(packEntries, archivePath);
-		else archivePath = outDir;
+		if (doPack)
+		{
+			if (!OsuMalodyConvert.packZip(packEntries, archivePath))
+				throw new Exception('Failed to write chart package: ' + archivePath);
+		}
+		else
+			archivePath = outDir;
 		return {count: count, archive: archivePath, songName: firstModSong, songDiff: firstModDiff};
 		#else
 		return null;

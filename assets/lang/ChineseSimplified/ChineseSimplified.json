@@ -81,6 +81,7 @@
     "chartConverter_pick_out": "选择输出文件夹",
     "chartConverter_output_is": "输出文件夹: {1}",
     "chartConverter_offset": "全局偏移 (ms):",
+    "chartConverter_author": "作者/谱师 (可选):",
     "chartConverter_done_pack": "完成！已转换 %s 张谱面，打包: %s",
     "chartConverter_output_mode": "输出方式:",
     "chartConverter_mode_pack": "打包 (.mcz/.osz)",

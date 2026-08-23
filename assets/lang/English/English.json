@@ -81,6 +81,7 @@
     "chartConverter_pick_out": "Choose Output Folder",
     "chartConverter_output_is": "Output folder: {1}",
     "chartConverter_offset": "Global offset (ms):",
+    "chartConverter_author": "Author/Creator (optional):",
     "chartConverter_done_pack": "Done! Converted %s chart(s), package: %s",
     "chartConverter_output_mode": "Output mode:",
     "chartConverter_mode_pack": "Package (.mcz/.osz)",

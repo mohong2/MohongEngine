@@ -230,7 +230,7 @@ class OsuMalodyConvert
 		return events;
 	}
 
-	static function makePsychSong(songName:String, sections:Array<SwagSection>, bpm:Float, events:Array<Dynamic>, speed:Float, ?difficultyName:String = null, ?mania:Null<Int> = null):SwagSong
+	static function makePsychSong(songName:String, sections:Array<SwagSection>, bpm:Float, events:Array<Dynamic>, speed:Float, ?difficultyName:String = null, ?mania:Null<Int> = null, ?creator:String = null, ?artist:String = null, ?source:String = null, ?tags:String = null):SwagSong
 	{
 		var result:SwagSong = {
 			song: songName,
@@ -249,6 +249,10 @@ class OsuMalodyConvert
 			mania: (mania != null) ? EKData.clampMania(mania) : null,
 			validScore: true
 		};
+		if (creator != null && StringTools.trim(creator).length > 0) result.chartCreator = StringTools.trim(creator);
+		if (artist != null && StringTools.trim(artist).length > 0) result.chartArtist = StringTools.trim(artist);
+		if (source != null && StringTools.trim(source).length > 0) result.chartSource = StringTools.trim(source);
+		if (tags != null && StringTools.trim(tags).length > 0) result.chartTags = StringTools.trim(tags);
 		return result;
 	}
 
@@ -415,6 +419,21 @@ class OsuMalodyConvert
 		if (diffName == null) diffName = '';
 		diffName = StringTools.trim(diffName);
 		if (diffName.length == 0) diffName = null;
+
+		var creator:String = metadata.get('Creator');
+		if (creator != null) creator = StringTools.trim(creator);
+		if (creator != null && creator.length == 0) creator = null;
+		var artist:String = metadata.get('ArtistUnicode');
+		if (artist == null || StringTools.trim(artist).length == 0) artist = metadata.get('Artist');
+		if (artist != null) artist = StringTools.trim(artist);
+		if (artist != null && artist.length == 0) artist = null;
+		var source:String = metadata.get('Source');
+		if (source != null) source = StringTools.trim(source);
+		if (source != null && source.length == 0) source = null;
+		var tags:String = metadata.get('Tags');
+		if (tags != null) tags = StringTools.trim(tags);
+		if (tags != null && tags.length == 0) tags = null;
+
 		var targetMania:Int = importColumnToLane(0, keys, mode, customKeys).mania;
 
 		// ---- timing points ----
@@ -478,7 +497,7 @@ class OsuMalodyConvert
 
 		var events:Array<Dynamic> = buildPsychEvents(svPoints);
 		var sections:Array<SwagSection> = buildSections(flatNotes, bpmChanges, baseBpm);
-		return makePsychSong(title, sections, baseBpm, events, 1, diffName, targetMania);
+		return makePsychSong(title, sections, baseBpm, events, 1, diffName, targetMania, creator, artist, source, tags);
 	}
 
 	// ========================================================================
@@ -515,16 +534,24 @@ class OsuMalodyConvert
 		sb.add('TimelineZoom: 2.4\n\n');
 
 		var title:String = sanitizeLine(Std.string(data.songName));
+		var artist:String = (song.chartArtist != null && StringTools.trim(song.chartArtist).length > 0)
+			? sanitizeLine(song.chartArtist) : "Friday Night Funkin'";
+		var creator:String = (song.chartCreator != null && StringTools.trim(song.chartCreator).length > 0)
+			? sanitizeLine(song.chartCreator) : 'SeiunEngine Chart Editor';
+		var source:String = (song.chartSource != null && StringTools.trim(song.chartSource).length > 0)
+			? sanitizeLine(song.chartSource) : "Friday Night Funkin'";
+		var tags:String = (song.chartTags != null && StringTools.trim(song.chartTags).length > 0)
+			? sanitizeLine(song.chartTags) : 'SeiunEngine FNF PsychEngine';
 		sb.add('[Metadata]\n');
 		sb.add('Title:' + title + '\n');
 		sb.add('TitleUnicode:' + title + '\n');
-		sb.add('Artist:Friday Night Funkin\'\n');
-		sb.add('ArtistUnicode:Friday Night Funkin\'\n');
-		sb.add('Creator:SeiunEngine Chart Editor\n');
+		sb.add('Artist:' + artist + '\n');
+		sb.add('ArtistUnicode:' + artist + '\n');
+		sb.add('Creator:' + creator + '\n');
 		var diffName:String = (song.difficultyName != null && StringTools.trim(song.difficultyName).length > 0) ? sanitizeLine(song.difficultyName) : 'FNF';
 		sb.add('Version:' + diffName + '\n');
-		sb.add('Source:Friday Night Funkin\'\n');
-		sb.add('Tags:SeiunEngine FNF PsychEngine\n');
+		sb.add('Source:' + source + '\n');
+		sb.add('Tags:' + tags + '\n');
 		sb.add('BeatmapID:0\n');
 		sb.add('BeatmapSetID:-1\n\n');
 
@@ -609,6 +636,16 @@ class OsuMalodyConvert
 		var title:String = (meta.song != null && meta.song.title != null) ? Std.string(meta.song.title) : 'Unknown Song';
 		var diffName:String = (meta.version != null) ? StringTools.trim(Std.string(meta.version)) : '';
 		if (diffName.length == 0) diffName = null;
+
+		var creator:String = (meta.creator != null) ? StringTools.trim(Std.string(meta.creator)) : null;
+		if (creator != null && creator.length == 0) creator = null;
+		var artist:String = (meta.song != null && meta.song.artist != null) ? StringTools.trim(Std.string(meta.song.artist)) : null;
+		if (artist != null && artist.length == 0) artist = null;
+		var source:String = (meta.song != null && meta.song.source != null) ? StringTools.trim(Std.string(meta.song.source)) : null;
+		if (source != null && source.length == 0) source = null;
+		var tags:String = (meta.song != null && meta.song.tags != null) ? StringTools.trim(Std.string(meta.song.tags)) : null;
+		if (tags != null && tags.length == 0) tags = null;
+
 		var targetMania:Int = importColumnToLane(0, keys, mode, customKeys).mania;
 
 		// ---- BPM timeline (in absolute beat space) ----
@@ -704,7 +741,7 @@ class OsuMalodyConvert
 		}
 
 		var sections:Array<SwagSection> = buildSections(flatNotes, bpmChanges, baseBpm);
-		return makePsychSong(title, sections, baseBpm, events, 1, diffName, targetMania);
+		return makePsychSong(title, sections, baseBpm, events, 1, diffName, targetMania, creator, artist, source, tags);
 	}
 
 	static function beatValue(beat:Array<Int>):Float
@@ -818,21 +855,35 @@ class OsuMalodyConvert
 			type: 1
 		});
 
+		var creator:String = (song.chartCreator != null && StringTools.trim(song.chartCreator).length > 0)
+			? StringTools.trim(song.chartCreator) : 'SeiunEngine Chart Editor';
+		var artist:String = (song.chartArtist != null && StringTools.trim(song.chartArtist).length > 0)
+			? StringTools.trim(song.chartArtist) : "Friday Night Funkin'";
+		var source:String = (song.chartSource != null && StringTools.trim(song.chartSource).length > 0)
+			? StringTools.trim(song.chartSource) : '';
+		var tags:String = (song.chartTags != null && StringTools.trim(song.chartTags).length > 0)
+			? StringTools.trim(song.chartTags) : '';
+		// Malody has no standard Source/Tags fields, but we store them as extra
+		// song metadata so osu! -> Malody -> osu! round-trips keep them.
+		var songMeta:Dynamic = {
+			title: songName,
+			artist: artist,
+			id: 0
+		};
+		if (source.length > 0) songMeta.source = source;
+		if (tags.length > 0) songMeta.tags = tags;
+
 		var chart:Dynamic = {
 			meta: {
 				'$ver': 1,
-				creator: 'SeiunEngine Chart Editor',
+				creator: creator,
 				background: (backgroundRef != null && backgroundRef.length > 0) ? backgroundRef.split('\\').join('/').split('/').pop() : '',
 				version: (song.difficultyName != null && StringTools.trim(song.difficultyName).length > 0) ? song.difficultyName : 'FNF',
 				preview: 0,
 				id: 0,
 				mode: 0,
 				time: Std.int(Date.now().getTime() / 1000),
-				song: {
-					title: songName,
-					artist: 'Friday Night Funkin\'',
-					id: 0
-				},
+				song: songMeta,
 				mode_ext: {
 					column: keys,
 					bar_begin: 0
@@ -1104,39 +1155,235 @@ class OsuMalodyConvert
 	}
 
 	/**
+	 * Makes a package entry name safe for common zip consumers while
+	 * preserving non-ASCII (UTF-8) characters. Only characters that are
+	 * illegal in file paths or commonly break osu!/Malody are replaced.
+	 */
+	public static function sanitizePackageFileName(name:String):String
+	{
+		if (name == null) return '';
+		var out:StringBuf = new StringBuf();
+		for (i in 0...name.length)
+		{
+			var ch:String = name.charAt(i);
+			var code:Int = name.charCodeAt(i);
+			if (code < 32 || ch == '\\' || ch == '/' || ch == ':' || ch == '*' || ch == '?' || ch == '"' || ch == '<' || ch == '>' || ch == '|')
+				out.add('_');
+			else
+				out.add(ch);
+		}
+		var result:String = StringTools.trim(out.toString());
+		if (result.length == 0 || result == '.' || result == '..') return 'unnamed';
+		return result;
+	}
+
+	static function writeZipDate(out:haxe.io.Output, date:Date):Void
+	{
+		var hour:Int = date.getHours();
+		var min:Int = date.getMinutes();
+		var sec:Int = date.getSeconds() >> 1;
+		out.writeUInt16((hour << 11) | (min << 5) | sec);
+
+		var year:Int = date.getFullYear() - 1980;
+		var month:Int = date.getMonth() + 1;
+		var day:Int = date.getDate();
+		out.writeUInt16((year << 9) | (month << 5) | day);
+	}
+
+	/**
 	 * Packs files into a zip archive (.osz / .mcz).
+	 *
+	 * This is a custom STORED zip writer. Haxe's own haxe.zip.Writer writes
+	 * filename lengths as String.length (UTF-16 characters) instead of UTF-8
+	 * bytes, which corrupts archives containing non-ASCII filenames. We write
+	 * the local headers, central directory and EOCD manually and set the UTF-8
+	 * flag so osu!/Malody can open packages with Chinese/Japanese names.
+	 *
 	 * entries: Array<{ fileName:String, data:haxe.io.Bytes }>.
 	 */
 	public static function packZip(entries:Array<Dynamic>, outPath:String):Bool
 	{
 		#if sys
+		var output:haxe.io.Output = null;
 		try
 		{
-			var output:haxe.io.Output = File.write(outPath, true);
-			var writer = new haxe.zip.Writer(output);
-			var list = new haxe.ds.List<haxe.zip.Entry>();
+			// sanitize + dedupe (same audio/background appears once per chart)
+			var clean:Array<Dynamic> = [];
+			var seen:Map<String, Bool> = new Map<String, Bool>();
 			for (e in entries)
 			{
 				if (e == null || e.fileName == null || e.data == null) continue;
-				var raw:haxe.io.Bytes = e.data;
-				// 使用 STORED (不压缩) 条目: haxe.zip.Compress 输出的是 raw deflate,
-				// 标准 zip 读取器 (Malody/osu!/.NET) 期望 zlib 封装, 会导致打不开。
-				// 存储模式 100% 兼容, 音频/图片本身已是压缩格式, 体积影响可忽略。
-				list.push({
-					fileName: e.fileName,
-					fileSize: raw.length,
-					fileTime: Date.now(),
-					compressed: false,
-					dataSize: raw.length,
-					data: raw,
-					crc32: haxe.crypto.Crc32.make(raw)
-				});
+				var name:String = sanitizePackageFileName(e.fileName);
+				if (name.length == 0) continue;
+				if (seen.exists(name)) continue;
+				seen.set(name, true);
+				clean.push({fileName: name, data: e.data});
 			}
-			writer.write(list);
+			if (clean.length == 0) return false;
+
+			output = File.write(outPath, true);
+
+			// ---- local file headers + file data ----
+			var central:Array<Dynamic> = [];
+			var offset:Int = 0;
+			for (e in clean)
+			{
+				var nameBytes:haxe.io.Bytes = haxe.io.Bytes.ofString(e.fileName);
+				var data:haxe.io.Bytes = e.data;
+				var crc:Int = haxe.crypto.Crc32.make(data);
+				central.push({
+					nameBytes: nameBytes,
+					dataSize: data.length,
+					crc: crc,
+					offset: offset
+				});
+
+				output.writeInt32(0x04034B50); // local file header signature
+				output.writeUInt16(20);         // version needed
+				output.writeUInt16(0x0800);     // UTF-8 filename flag
+				output.writeUInt16(0);          // method: stored
+				writeZipDate(output, Date.now());
+				output.writeInt32(crc);
+				output.writeInt32(data.length); // compressed size
+				output.writeInt32(data.length); // uncompressed size
+				output.writeUInt16(nameBytes.length);
+				output.writeUInt16(0);          // extra field length
+				output.write(nameBytes);
+				output.write(data);
+
+				offset += 30 + nameBytes.length + data.length;
+			}
+
+			// ---- central directory ----
+			var cdStart:Int = offset;
+			var cdSize:Int = 0;
+			for (c in central)
+			{
+				output.writeInt32(0x02014B50); // central directory header
+				output.writeUInt16(20);         // version made by
+				output.writeUInt16(20);         // version needed
+				output.writeUInt16(0x0800);     // UTF-8 filename flag
+				output.writeUInt16(0);          // method: stored
+				writeZipDate(output, Date.now());
+				output.writeInt32(c.crc);
+				output.writeInt32(c.dataSize);
+				output.writeInt32(c.dataSize);
+				output.writeUInt16(c.nameBytes.length);
+				output.writeUInt16(0);          // extra field length
+				output.writeUInt16(0);          // comment length
+				output.writeUInt16(0);          // disk number start
+				output.writeUInt16(0);          // internal attributes
+				output.writeInt32(0);           // external attributes
+				output.writeInt32(c.offset);    // local header offset
+				output.write(c.nameBytes);
+				cdSize += 46 + c.nameBytes.length;
+			}
+
+			// ---- end of central directory ----
+			output.writeInt32(0x06054B50);
+			output.writeUInt16(0);
+			output.writeUInt16(0);
+			output.writeUInt16(central.length);
+			output.writeUInt16(central.length);
+			output.writeInt32(cdSize);
+			output.writeInt32(cdStart);
+			output.writeUInt16(0);
 			output.close();
+			output = null;
+
+			// Post-write validation: refuse to leave a corrupt package behind.
+			if (!validateZipArchive(outPath))
+			{
+				if (FileSystem.exists(outPath)) FileSystem.deleteFile(outPath);
+				return false;
+			}
 			return FileSystem.exists(outPath);
 		}
-		catch (e:Dynamic) return false;
+		catch (e:Dynamic)
+		{
+			if (output != null)
+			{
+				try { output.close(); } catch (_:Dynamic) {}
+			}
+			if (FileSystem.exists(outPath))
+			{
+				try { FileSystem.deleteFile(outPath); } catch (_:Dynamic) {}
+			}
+			return false;
+		}
+		#else
+		return false;
+		#end
+	}
+
+	/**
+	 * Reads a freshly written package back with the standard Haxe zip reader
+	 * to verify structure, per-entry CRC and central directory offsets before
+	 * returning success.
+	 */
+	static function validateZipArchive(path:String):Bool
+	{
+		#if sys
+		var input:sys.io.FileInput = null;
+		var end:sys.io.FileInput = null;
+		var cd:sys.io.FileInput = null;
+		try
+		{
+			input = File.read(path, true);
+			var list:haxe.ds.List<haxe.zip.Entry> = haxe.zip.Reader.readZip(input);
+			input.close();
+			input = null;
+			var count:Int = 0;
+			for (e in list)
+			{
+				if (e == null || e.fileName == null) continue;
+				var data:haxe.io.Bytes = haxe.zip.Reader.unzip(e);
+				if (data == null) return false;
+				if (e.crc32 != null && haxe.crypto.Crc32.make(data) != e.crc32) return false;
+				count++;
+			}
+			if (count == 0) return false;
+
+			// Central directory sanity check: EOCD must point back to a valid
+			// central directory whose end lines up with the EOCD record.
+			var fileSize:Int = Std.int(FileSystem.stat(path).size);
+			if (fileSize < 22) return false;
+
+			end = File.read(path, true);
+			end.seek(fileSize - 22, sys.io.FileSeek.SeekBegin);
+			var eocd:Int = end.readInt32();
+			if (eocd != 0x06054B50)
+			{
+				end.close();
+				end = null;
+				return false;
+			}
+			end.readUInt16(); // disk number
+			end.readUInt16(); // disk with CD
+			end.readUInt16(); // entries on this disk
+			end.readUInt16(); // total entries
+			var cdSize:Int = end.readInt32();
+			var cdOffset:Int = end.readInt32();
+			var commentLen:Int = end.readUInt16();
+			end.close();
+			end = null;
+
+			if (commentLen != 0 || cdOffset + cdSize != fileSize - 22) return false;
+
+			cd = File.read(path, true);
+			cd.seek(cdOffset, sys.io.FileSeek.SeekBegin);
+			var cdSig:Int = cd.readInt32();
+			cd.close();
+			cd = null;
+			return cdSig == 0x02014B50;
+		}
+		catch (e:Dynamic)
+		{
+			if (input != null) { try { input.close(); } catch (_:Dynamic) {} }
+			if (end != null) { try { end.close(); } catch (_:Dynamic) {} }
+			if (cd != null) { try { cd.close(); } catch (_:Dynamic) {} }
+			return false;
+		}
 		#else
 		return false;
 		#end

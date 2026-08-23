@@ -130,7 +130,7 @@ class CoolUtil
 		if(decimals < 1)
 			return Math.floor(value);
 
-		return Math.floor(value * Math.pow(10, decimals)) / Math.pow(10, decimals);
+		return Math.floor(value * Math.pow(10, decimals) + 0.0000001) / Math.pow(10, decimals);
 	}
 
 	inline public static function dominantColor(sprite:flixel.FlxSprite):Int

@@ -566,6 +566,17 @@
 
 ---
 
+### Unreleased / 未发布
+
+#### 谱面编辑器（source/editors/NewChartingState.hx）
+
+- 新增“仅事件文件 (PE063)”保存格式：在 Save Chart As... 格式列表中新增 `Events Only (PE063)`，保存为旧版 0.6.3 的 `{"song":{"events":[...]}}` 事件文件结构（不带 `format` 字段，文件名仍为 `events.json`）。
+- 新增“包含事件 (Psych/Legacy)”导出选项（默认勾选）：在 Save Chart As... 弹窗中可控制 Psych Engine v1.0 / v0.x (Legacy) 谱面导出时是否包含 `events`；取消勾选后导出的谱面中 `events` 保留为空数组，编辑器内存中的事件不受影响。
+- 上述“包含事件”选项只影响 Psych Engine v1.0 / v0.x (Legacy) 谱面导出；Events Only、Events Only (PE063)、CNE、V-Slice、osu!mania、Malody 导出不受影响，Ctrl+S 快速保存也保持原行为。
+- 补充三语（英文/简中/繁中）语言文件：`assets/lang/English/newchartEditor.json`、`assets/lang/ChineseSimplified/newchartEditor.json`、`assets/lang/ChineseTraditional/newchartEditor.json`。
+
+---
+
 ### Acknowledgments
 
 A huge thank you to all testers — your feedback has been invaluable in shaping SeiunEngine into what it is today.

@@ -36,5 +36,6 @@
     "ResultsScreen.replayMode": "回放",
     "ResultsScreen.overallDeviation": "總體偏差",
 	"ResultsScreen.instructions": "ENTER / 點擊: 選擇  |  方向鍵: 切換  |  ESC: 繼續",
-	"ResultsScreen.tailJudgement": "尾判"
+	"ResultsScreen.tailJudgement": "尾判",
+	"ResultsScreen.liveAccuracy": "本局準確率"
 }

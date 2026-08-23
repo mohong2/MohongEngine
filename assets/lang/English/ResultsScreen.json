@@ -37,5 +37,6 @@
     "ResultsScreen.overallDeviation": "Overall Diff",
 	"ResultsScreen.instructions": "ENTER / CLICK: Select  |  ARROWS: Switch  |  ESC: Continue",
 "ResultsScreen.judge": "Judge",
-"ResultsScreen.tailJudgement": "Tail Judgement"
+"ResultsScreen.tailJudgement": "Tail Judgement",
+"ResultsScreen.liveAccuracy": "Live Accuracy"
 }

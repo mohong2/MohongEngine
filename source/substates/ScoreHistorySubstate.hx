@@ -377,7 +377,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			dateListGroup.add(dateText);
 
 			// Detailed secondary line: accuracy / grade / FC / max combo / misses / replay marker
-			var accStr:String = Highscore.floorDecimal((e.ratingPercent >= 0 ? e.ratingPercent : 0) * 100, 2) + "%";
+			var accStr:String = Highscore.floorDecimal(normalizeAccuracy((e.ratingPercent >= 0 ? e.ratingPercent : 0)), 2) + "%";
 			var subStr:String = accStr + "  " + e.ratingName;
 			if (e.ratingFC != null && e.ratingFC.length > 0)
 				subStr += " (" + e.ratingFC + ")";
@@ -535,7 +535,7 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 		var lineH:Float = 22;
 
 		targetScore = e.score;
-		targetAccuracy = (e.ratingPercent >= 0) ? e.ratingPercent * 100 : 0;
+		targetAccuracy = normalizeAccuracy(e.ratingPercent);
 		if (lastSelected != curSelected)
 		{
 			displayedScore = 0;
@@ -857,6 +857,14 @@ class ScoreHistorySubstate extends MusicBeatSubstate
 			TraceManager.error('trace.scoreHistory.renderGraph', 'ScoreHistorySubstate - Failed to render graph: {}', [e]);
 			graphNote.alpha = 0;
 		}
+	}
+
+	function normalizeAccuracy(percent:Float):Float
+	{
+		if (Math.isNaN(percent) || percent < 0) return 0;
+		var pct:Float = percent * 100;
+		if (pct >= 99.99) return 100;
+		return pct;
 	}
 
 	function getGradeColor(rating:String):FlxColor
