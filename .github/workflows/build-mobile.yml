@@ -24,9 +24,20 @@ env:
 
 jobs:
   android:
-    name: Android
+    name: Android (${{ matrix.abi }})
     if: inputs.platforms == 'all' || contains(inputs.platforms, 'android')
     runs-on: windows-latest
+    timeout-minutes: 45
+    # One job per ABI so the two hxcpp compiles run in PARALLEL instead of
+    # sequentially. Each job produces a single-ABI APK artifact.
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - abi: arm64
+            arch: "-arm64"
+          - abi: armv7
+            arch: "-armv7"
     defaults:
       run:
         shell: pwsh
@@ -42,6 +53,15 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      # hxcpp incremental build cache, per ABI (each ABI writes its own objects
+      # into export/release/android/obj, so keep the keys separate to avoid
+      # cross-ABI pollution). See build-desktop.yml for key-design notes.
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/android
+          key: seiu-export-android-${{ matrix.abi }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - name: Auth private haxelib deps
         env:
@@ -103,12 +123,12 @@ jobs:
           Add-Content -Path $env:GITHUB_ENV -Value "APP_VERSION=$v"
 
       - name: Rebuild Lime Android ndll (SDL3)
-        run: haxelib run lime rebuild android -release -Dlime-sdl3
+        run: haxelib run lime rebuild android ${{ matrix.arch }} -release -Dlime-sdl3
 
       - name: Compile Android
         env:
           _JAVA_OPTIONS: "-Xmx5g -XX:MaxMetaspaceSize=1g"
-        run: haxelib run lime build android --app-version="$env:APP_VERSION-${{ github.run_id }}"
+        run: haxelib run lime build android ${{ matrix.arch }} --app-version="$env:APP_VERSION-${{ github.run_id }}"
 
       - name: Prepare APK artifact
         run: |
@@ -117,14 +137,14 @@ jobs:
             Write-Error "No APK found under export/release/android/bin/app/build/outputs/apk/release/"
             exit 1
           }
-          Copy-Item $apk.FullName "SeiunEngine-android-$env:APP_VERSION.apk" -Force
-          Get-Item "SeiunEngine-android-$env:APP_VERSION.apk" | Select-Object Name, Length
+          Copy-Item $apk.FullName "SeiunEngine-android-${{ matrix.abi }}-$env:APP_VERSION.apk" -Force
+          Get-Item "SeiunEngine-android-${{ matrix.abi }}-$env:APP_VERSION.apk" | Select-Object Name, Length
 
       - name: Upload APK artifact
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: SeiunEngine-android
-          path: SeiunEngine-android-${{ env.APP_VERSION }}.apk
+          name: SeiunEngine-android-${{ matrix.abi }}
+          path: SeiunEngine-android-${{ matrix.abi }}-${{ env.APP_VERSION }}.apk
           if-no-files-found: error
           retention-days: 14
 
@@ -132,6 +152,7 @@ jobs:
     name: iOS Device (arm64)
     if: inputs.platforms == 'all' || contains(inputs.platforms, 'ios')
     runs-on: macos-15-intel
+    timeout-minutes: 45
     defaults:
       run:
         shell: bash
@@ -142,6 +163,12 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/ios
+          key: seiu-export-ios-arm64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - name: Auth private haxelib deps
         env:

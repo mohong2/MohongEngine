@@ -27,6 +27,7 @@ jobs:
     name: Linux x64
     if: inputs.targets == 'all' || contains(inputs.targets, 'linux')
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -34,6 +35,17 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      # hxcpp incremental build cache: restores the previous run's export dir
+      # so only changed Haxe modules recompile. Key deliberately covers ONLY
+      # Project.xml + hmm.json (build flags / dependency versions) - source
+      # changes must NOT invalidate the cache. Bump -v1- when the rebuild/build
+      # command lines in the build-desktop composite action change.
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/linux
+          key: seiu-export-linux-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - uses: ./.github/actions/build-desktop
         with:
@@ -55,6 +67,7 @@ jobs:
     name: Windows x64
     if: inputs.targets == 'all' || contains(inputs.targets, 'windows')
     runs-on: windows-latest
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -62,6 +75,12 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/windows
+          key: seiu-export-windows-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - uses: ./.github/actions/build-desktop
         with:
@@ -83,6 +102,7 @@ jobs:
     name: macOS x64 (Intel)
     if: inputs.targets == 'all' || inputs.targets == 'macos' || contains(inputs.targets, 'macos-x64')
     runs-on: macos-15-intel
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
 
@@ -90,6 +110,12 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/macos
+          key: seiu-export-macos-x64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - uses: ./.github/actions/build-desktop
         with:
@@ -111,6 +137,7 @@ jobs:
     name: macOS arm64 (Apple Silicon, experimental)
     if: inputs.targets == 'all' || inputs.targets == 'macos' || contains(inputs.targets, 'macos-arm64')
     runs-on: macos-14
+    timeout-minutes: 60
     continue-on-error: true
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
@@ -119,6 +146,12 @@ jobs:
         with:
           haxe-version: ${{ env.HAXE_VERSION }}
           cache-dependency-path: hmm.json
+
+      - name: Restore hxcpp build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: export/release/macos
+          key: seiu-export-macos-arm64-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
 
       - uses: ./.github/actions/build-desktop
         with:
