@@ -1,7 +1,7 @@
 # SeiunEngine 更新日志 · Changelog
 
-> 完整记录 2026年6月19日 至 8月22日 的所有改进、修复与突破
-> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 22, 2026.
+> 完整记录 2026年6月19日 至 8月23日 的所有改进、修复与突破
+> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 23, 2026.
 
 ---
 
@@ -259,6 +259,15 @@
 
 - Config.hx：导入白名单格式简化（去掉 #if !DOCUMENTATION 与 MODCHARTING_FEATURES 条件包裹），统一列出允许 import 的包前缀。
 - 多语言：ScoreHistorySubstate 新增 deleteConfirm 文案，instructions 更新为“上/下/悬停选择、ENTER/双击播放、RESET×2 删除”。
+
+---
+
+### 2026年8月23日
+
+- 修复安卓 Pad-Custom 按键自定义拖拽粘手/脱不掉的问题：将全局单点拖动状态重构为按触点（touch point）独立跟踪，支持多指同时拖动多个按键；只有发起拖动的触点释放才结束拖动，其他触点不再抢占。
+- 修复拖动时按键可被拖出屏幕外导致丢失的问题：拖动与读取旧存档位置时均限制在屏幕范围内。
+- 修复切换控件模式/Reset/退出时未清理拖动状态的问题，并增加异常触点/失效拖动残留的自动清理。
+- AndroidControls 读取/写入自定义按钮位置时增加空值与长度兼容，避免旧存档或按钮数量变化导致异常；切换控件时清理残留的 virtualPad/hitbox 引用。
 
 ---
 
@@ -526,11 +535,20 @@
 
 ---
 
+### August 23, 2026
+
+- Fixed Android Pad-Custom key dragging getting stuck to a finger / unable to drop: rewrote the global single-button drag state into per-touch tracking (`Map<touch ID, FlxButton>`), so multiple buttons can be dragged simultaneously with multiple fingers, and a drag only ends when the touch that started it is released.
+- Fixed buttons being draggable off screen: drag and saved-position loading are now clamped to the visible screen bounds.
+- Fixed drag state not being cleared when switching control modes, Reset, or exiting; added stale-touch cleanup and safer handling of old/incomplete saved button arrays.
+- Cleaned up leftover virtual pad / hitbox references when switching controls.
+
+---
+
 ### Acknowledgments
 
 A huge thank you to all testers — your feedback has been invaluable in shaping SeiunEngine into what it is today.
 
 ---
 
-*本日志覆盖 SeiunEngine 自 6.19 至 8.22 全部主要变动。*
-*This changelog covers all significant changes from June 19 to August 22, 2026.*
+*本日志覆盖 SeiunEngine 自 6.19 至 8.23 全部主要变动。*
+*This changelog covers all significant changes from June 19 to August 23, 2026.*

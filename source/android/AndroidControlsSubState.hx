@@ -31,8 +31,10 @@ class AndroidControlsSubState extends FlxSubState
 	private var leftArrow:FlxSprite;
 	private var rightArrow:FlxSprite;
 	private var curSelected:Int = 0;
-	private var buttonBinded:Bool = false;
-	private var bindButton:FlxButton;
+	private var dragMap:Map<Int, FlxButton> = new Map();
+	#if desktop
+	private static inline var MOUSE_DRAG_ID:Int = -999;
+	#end
 	private var resetButton:FlxButton;
 
 	override function create()
@@ -54,6 +56,7 @@ class AndroidControlsSubState extends FlxSubState
 			if (controlsItems[Math.floor(curSelected)] == 'Pad-Custom')
 				AndroidControls.customVirtualPad = virtualPad;
 
+			clearDragState();
 			FlxTransitionableState.skipNextTransOut = true;
 			FlxG.resetState();
 		});
@@ -66,6 +69,7 @@ class AndroidControlsSubState extends FlxSubState
 		{
 			if (controlsItems[Math.floor(curSelected)] == 'Pad-Custom' && resetButton.visible)
 			{
+				clearDragState();
 				AndroidControls.customVirtualPad = new FlxVirtualPad(RIGHT_FULL, NONE, ClientPrefs.data.mobileCEx);
 				reloadAndroidControls('Pad-Custom');
 			}
@@ -149,7 +153,7 @@ override function update(elapsed:Float)
         else if (touch.overlaps(rightArrow) && touch.justPressed)
             changeSelection(1);
 
-        handlePadCustomDrag(touch, touch.x, touch.y);
+        handlePadCustomDrag(touch, touch.x, touch.y, touch.touchPointID);
     }
 
     // 桌面端触屏支持: 鼠标也当作触摸处理
@@ -161,9 +165,11 @@ override function update(elapsed:Float)
         else if (FlxG.mouse.overlaps(rightArrow) && FlxG.mouse.justPressed)
             changeSelection(1);
 
-        handlePadCustomDrag(FlxG.mouse, FlxG.mouse.x, FlxG.mouse.y);
+        handlePadCustomDrag(FlxG.mouse, FlxG.mouse.x, FlxG.mouse.y, MOUSE_DRAG_ID);
     }
     #end
+
+    cleanupDragMap();
 
     if (virtualPad != null && controlsItems[Math.floor(curSelected)] == 'Pad-Custom')
     {
@@ -184,71 +190,141 @@ override function update(elapsed:Float)
     }
 }
 
-	/** Pad-Custom 模式下用指针 (触摸/鼠标) 拖动按钮。 */
-	private function handlePadCustomDrag(input:Dynamic, px:Float, py:Float):Void
+	/** Pad-Custom 模式下按触点（触摸/鼠标）拖动按钮，每个触点独立跟踪一个按键。 */
+	private function handlePadCustomDrag(input:Dynamic, px:Float, py:Float, inputId:Int):Void
 	{
-		if (controlsItems[Math.floor(curSelected)] != 'Pad-Custom')
+		if (controlsItems[Math.floor(curSelected)] != 'Pad-Custom' || virtualPad == null)
 			return;
 
-		if (buttonBinded)
+		// 发起拖动的触点释放时，只结束该触点自己的拖动，避免其他指头误伤。
+		if (input.justReleased)
 		{
-			if (input.justReleased)
-			{
-				bindButton = null;
-				buttonBinded = false;
-			}
-			else
-				moveButton(px, py, bindButton);
-		}
-		else
-		{
-			virtualPad.forEachAlive((button:FlxButton) ->
-			{
-				if (button.justPressed)
-					moveButton(px, py, button);
-			});
+			dragMap.remove(inputId);
+			return;
 		}
 
-		snapBindButton();
+		var draggedButton:FlxButton = dragMap.get(inputId);
+		if (draggedButton != null)
+		{
+			moveButton(px, py, draggedButton);
+			snapDragButton(draggedButton);
+			return;
+		}
+
+		// 当前触点没有在拖，尝试拾起一个按键（支持多指同时拖多个按键）。
+		var pickedUp:Bool = false;
+		virtualPad.forEachAlive((button:FlxButton) ->
+		{
+			if (!pickedUp && button.justPressed && !isButtonDragged(button))
+			{
+				dragMap.set(inputId, button);
+				moveButton(px, py, button);
+				snapDragButton(button);
+				pickedUp = true;
+			}
+		});
 	}
 
 	/** 让被拖动的按钮吸附到其他按钮旁边, 方便对齐。 */
-	private function snapBindButton():Void
+	private function snapDragButton(dragButton:FlxButton):Void
 	{
+		if (dragButton == null || virtualPad == null)
+			return;
+
 		virtualPad.forEachAlive((button:FlxButton) ->
 		{
-			if (button != bindButton && buttonBinded)
+			if (button != dragButton && !isButtonDragged(button))
 			{
 				var snapDistance = 15;
 
-				if (Math.abs(bindButton.y - button.y) < snapDistance)
+				if (Math.abs(dragButton.y - button.y) < snapDistance)
 				{
-					bindButton.y = button.y;
+					dragButton.y = button.y;
 				}
 
-				if (Math.abs(bindButton.x - button.x) < snapDistance)
+				if (Math.abs(dragButton.x - button.x) < snapDistance)
 				{
-					bindButton.x = button.x;
+					dragButton.x = button.x;
 				}
 
-				if (Math.abs(bindButton.x - (button.x - bindButton.width - 5)) < snapDistance)
+				if (Math.abs(dragButton.x - (button.x - dragButton.width - 5)) < snapDistance)
 				{
-					bindButton.x = button.x - bindButton.width - 5;
+					dragButton.x = button.x - dragButton.width - 5;
 				}
-				if (Math.abs(bindButton.x - (button.x + button.width + 5)) < snapDistance)
+				if (Math.abs(dragButton.x - (button.x + button.width + 5)) < snapDistance)
 				{
-					bindButton.x = button.x + button.width + 5;
+					dragButton.x = button.x + button.width + 5;
 				}
-				if (Math.abs(bindButton.y - (button.y - bindButton.height - 5)) < snapDistance)
+				if (Math.abs(dragButton.y - (button.y - dragButton.height - 5)) < snapDistance)
 				{
-					bindButton.y = button.y - bindButton.height - 5;
+					dragButton.y = button.y - dragButton.height - 5;
 				}
-				if (Math.abs(bindButton.y - (button.y + button.height + 5)) < snapDistance)
+				if (Math.abs(dragButton.y - (button.y + button.height + 5)) < snapDistance)
 				{
-					bindButton.y = button.y + button.height + 5;
+					dragButton.y = button.y + button.height + 5;
 				}
 			}
 		});
+
+		clampButton(dragButton);
+	}
+
+	/** 该按键是否已被其他触点拖动。 */
+	private function isButtonDragged(button:FlxButton):Bool
+	{
+		for (id in dragMap.keys())
+			if (dragMap.get(id) == button)
+				return true;
+		return false;
+	}
+
+	/** 清理失效触点/切换模式时残留的拖动状态。 */
+	private function clearDragState():Void
+	{
+		dragMap = new Map();
+	}
+
+	/** 清理已不在当前触点列表里的拖动记录（例如焦点丢失/异常取消）。 */
+	private function cleanupDragMap():Void
+	{
+		var activeIds:Array<Int> = [];
+		for (touch in FlxG.touches.list)
+			activeIds.push(touch.touchPointID);
+
+		#if desktop
+		if (FlxG.mouse != null && FlxG.mouse.pressed)
+			activeIds.push(MOUSE_DRAG_ID);
+		#end
+
+		var staleIds:Array<Int> = [];
+		for (id in dragMap.keys())
+			if (activeIds.indexOf(id) == -1)
+				staleIds.push(id);
+
+		for (id in staleIds)
+			dragMap.remove(id);
+	}
+
+	/** 把按键限制在屏幕范围内，避免拖出屏幕后找不到。 */
+	private function clampButton(button:FlxButton):Void
+	{
+		if (button == null)
+			return;
+
+		var maxX:Float = FlxG.width - button.width;
+		var maxY:Float = FlxG.height - button.height;
+		if (maxX < 0) maxX = 0;
+		if (maxY < 0) maxY = 0;
+
+		if (button.x < 0)
+			button.x = 0;
+		else if (button.x > maxX)
+			button.x = maxX;
+
+		if (button.y < 0)
+			button.y = 0;
+		else if (button.y > maxY)
+			button.y = maxY;
 	}
 
 	private function changeSelection(change:Int = 0):Void
@@ -281,16 +357,15 @@ override function update(elapsed:Float)
 
 	private function moveButton(px:Float, py:Float, button:FlxButton):Void
 	{
-		bindButton = button;
-		bindButton.x = px - Std.int(bindButton.width / 2);
-		bindButton.y = py - Std.int(bindButton.height / 2);
-
-		if (!buttonBinded)
-			buttonBinded = true;
+		button.x = px - Std.int(button.width / 2);
+		button.y = py - Std.int(button.height / 2);
+		clampButton(button);
 	}
 
 	private function reloadAndroidControls(daChoice:String):Void
 	{
+		clearDragState();
+
 		switch (daChoice)
 		{
 			case 'Pad-Right':
@@ -323,9 +398,15 @@ override function update(elapsed:Float)
 	private function removeControls():Void
 	{
 		if (virtualPad != null)
+		{
 			remove(virtualPad);
+			virtualPad = null;
+		}
 
 		if (hitbox != null)
+		{
 			remove(hitbox);
+			hitbox = null;
+		}
 	}
 }

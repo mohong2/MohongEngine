@@ -161,10 +161,21 @@ class AndroidControls extends FlxSpriteGroup
 			return virtualPad;
 
 		var tempCount:Int = 0;
+		var savedButtons:Dynamic = FlxG.save.data.buttons;
+		if (savedButtons == null)
+			return virtualPad;
+
 		for (buttons in virtualPad)
 		{
-			buttons.x = FlxG.save.data.buttons[tempCount].x;
-			buttons.y = FlxG.save.data.buttons[tempCount].y;
+			var saved:Dynamic = savedButtons[tempCount];
+			var savedX:Float = (saved == null) ? buttons.x : saved.x;
+			var savedY:Float = (saved == null) ? buttons.y : saved.y;
+			var maxX:Float = FlxG.width - buttons.width;
+			var maxY:Float = FlxG.height - buttons.height;
+			if (maxX < 0) maxX = 0;
+			if (maxY < 0) maxY = 0;
+			buttons.x = Math.max(0, Math.min(savedX, maxX));
+			buttons.y = Math.max(0, Math.min(savedY, maxY));
 			tempCount++;
 		}
 
@@ -188,6 +199,9 @@ class AndroidControls extends FlxSpriteGroup
 			var tempCount:Int = 0;
 			for (buttons in virtualPad)
 			{
+				while (FlxG.save.data.buttons.length <= tempCount)
+					FlxG.save.data.buttons.push(FlxPoint.get(buttons.x, buttons.y));
+
 				FlxG.save.data.buttons[tempCount] = FlxPoint.get(buttons.x, buttons.y);
 				FlxG.save.flush();
 				tempCount++;
