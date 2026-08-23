@@ -27,7 +27,7 @@ jobs:
             artifact: SeiunEngine-mac-arm64
             experimental: true
     runs-on: ${{ matrix.runner }}
-    timeout-minutes: ${{ matrix.target == 'macos-arm64' && 60 || 45 }}
+    timeout-minutes: ${{ matrix.target == 'macos-arm64' && 120 || 240 }}
     continue-on-error: ${{ matrix.experimental == true }}
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
