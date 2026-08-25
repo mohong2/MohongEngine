@@ -22,6 +22,28 @@ class Ratings
 		if (judges == null || judges.length < 4)
 			judges = [25, 50, 70, 100];
 
+		// 万级 NPS 降阶: 原实现每次命中都分配 Array<Array<Dynamic>> 字面量再逐项
+		// 比较 (GC 压力 + Dynamic 装箱); 判定逻辑是纯窗口比较, 展开为直接判断即可,
+		// 结果与原实现完全一致:
+		//   marvelous(需开启) → sick → good → bad 依次取第一个命中的窗口, 否则 shit。
+		if (ClientPrefs.data.marvelousRatings && time <= judges[0])
+			return "marvelous";
+		if (time <= judges[1])
+			return "sick";
+		if (time <= judges[2])
+			return "good";
+		if (time <= judges[3])
+			return "bad";
+		return "shit";
+	}
+
+	/** 旧实现的等价展开 (保留给需要对照语义的场景)。 */
+	static function getRatingLegacy(time:Float):String
+	{
+		var judges:Array<Int> = ClientPrefs.data.judgementTimings;
+		if (judges == null || judges.length < 4)
+			judges = [25, 50, 70, 100];
+
 		var timings:Array<Array<Dynamic>> = [
 			[judges[0], "marvelous"],
 			[judges[1], "sick"],

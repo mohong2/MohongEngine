@@ -98,6 +98,17 @@ class NoteSplash extends FlxSprite
 	public static var configs:Map<String, NoteSplashConfig> = [];
 
 	/**
+	 * 当前"存活"(动画播放中)的溅射总数。
+	 * 高 NPS 手动谱面下每击一个溅射、动画 ~0.5s, 无上限时对象池会膨胀到数千个
+	 * (每个自带 ColorSwap/PixelSplashShaderRef, 且 FlxTypedGroup.add/recycle 都是 O(n)),
+	 * PlayState.spawnNoteSplash 用它做硬上限兜底。
+	 */
+	public static var liveCount:Int = 0;
+
+	/** 本实例是否已计入 liveCount (kill/destroy 幂等去重)。 */
+	var _liveTracked:Bool = false;
+
+	/**
 	 * 默认溅射路径:
 	 * 0.7.3/1.0.4 → noteSplashes/noteSplashes (带 txt/json 配置);
 	 * 0.6.3       → noteSplashes (flat, 引擎原生行为)。
@@ -144,6 +155,7 @@ class NoteSplash extends FlxSprite
 		setPosition(x - Note.swagWidth * 0.95 * posScale, y - Note.swagWidth * posScale);
 		alpha = ClientPrefs.data.splashAlpha;
 		aliveTime = 0;
+		if (!_liveTracked) { _liveTracked = true; liveCount++; }
 		// 池化复用: 清掉上一次的溅射缩放 (setGraphicSize 只改 scale, 不碰 offset/origin)
 		scale.set(1, 1);
 		width = frameWidth;
@@ -531,6 +543,19 @@ class NoteSplash extends FlxSprite
 
 		configs.set(skin, cfg);
 		return cfg;
+	}
+
+	override public function kill():Void
+	{
+		// 池化复用 + 自杀式回收 (update 里动画结束即 kill), 这里同步递减存活计数
+		if (_liveTracked) { _liveTracked = false; if (liveCount > 0) liveCount--; }
+		super.kill();
+	}
+
+	override public function destroy():Void
+	{
+		if (_liveTracked) { _liveTracked = false; if (liveCount > 0) liveCount--; }
+		super.destroy();
 	}
 
 	override function update(elapsed:Float) {

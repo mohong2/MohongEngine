@@ -132,5 +132,54 @@
 		"decimals": 2,
 		"scrollSpeed": 0.8,
 		"platform": "desktop"
+	},
+	{
+		"nameKey": "option.perfMode",
+		"defaultName": "Performance Mode",
+		"descKey": "option.perfMode.desc",
+		"defaultDesc": "Master switch for extreme-chart optimizations (bulk skip, popup/splash\nmerging, spawn budgets). When off, gameplay is identical to the stock engine;\nonly enable it for absurd-NPS charts.",
+		"variable": "perfMode",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.bulkSkip",
+		"defaultName": "Bulk Skip Old Notes",
+		"descKey": "option.bulkSkip.desc",
+		"defaultDesc": "H-Slice style bulk skipping of already expired chart notes.\nAvoids spawn->instant miss churn on extreme NPS charts.\nRequires Performance Mode; auto-disabled while Lua/HScript/replay/online is active.",
+		"variable": "bulkSkip",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.fastSort",
+		"defaultName": "Fast Note Sorting",
+		"descKey": "option.fastSort.desc",
+		"defaultDesc": "H-Slice style faster sort: only visible/alive notes are sorted every frame.\nImproves frame time on dense charts; turn off if a mod depends on the full group order.",
+		"variable": "fastSort",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
+		"nameKey": "option.limitNotes",
+		"defaultName": "Max Simultaneous Notes",
+		"descKey": "option.limitNotes.desc",
+		"defaultDesc": "Maximum materialized notes at once. 0 means unlimited (only for high-end machines).\nHigher values render more notes but cost more CPU/GPU and memory.",
+		"variable": "limitNotes",
+		"type": "int",
+		"defaultValue": 0,
+		"minValue": 0,
+		"maxValue": 100000,
+		"scrollSpeed": 50,
+		"displayFormat": "%v"
+	},
+	{
+		"nameKey": "option.disableGC",
+		"defaultName": "Disable GC During Song",
+		"descKey": "option.disableGC.desc",
+		"defaultDesc": "Disables hxcpp garbage collection while playing.\nTrades memory for stable frame time (H-Slice style).\nRe-enabled automatically when leaving the song. Use with care.",
+		"variable": "disableGC",
+		"type": "bool",
+		"defaultValue": false
 	}
 ]

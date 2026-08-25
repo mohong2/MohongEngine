@@ -45,7 +45,7 @@ import openfl.utils.Assets as OpenFlAssets;
 import editors.ChartingState;
 import editors.CharacterEditorState;
 import EKData.Keybinds;
- 
+
 import flixel.input.keyboard.FlxKey;
 import Note.EventNote;
 import Note.PreloadedChartNote;
@@ -67,7 +67,7 @@ import Conductor.Rating;
 import backend.Ratings;
 import mohong.TraceManager;
 import popup.RatingPopup;
-#if !flash 
+#if !flash
 import flixel.addons.display.FlxRuntimeShader;
 import openfl.filters.ShaderFilter;
 #end
@@ -126,7 +126,7 @@ class PlayState extends MusicBeatState
 		['AAA', 0.9], //From 80% to 89%
 		['AAAA', 1], //From 90% to 99%
 		['AAAAA', 1] //The value on this one isn't used actually, since Perfect is always "1"
-	]; 
+	];
 
 	//public static var ratingStuff:Array<Dynamic> = [
 	//	['You Suck!', 0.2], //From 0% to 19%
@@ -249,7 +249,70 @@ class PlayState extends MusicBeatState
 	private var lastSpawnedNote:Map<Int, Note> = new Map<Int, Note>();
 	/** Per-state recycled Note pool. Dead notes stay in notes.members and are revived in place. */
 	private var notePool:Array<Note> = [];
+	/** Reusable buffers for fasterSort (only visible/alive notes are sorted; dead slots keep their position). */
+	private var _noteSortArr:Array<Note> = [];
+	private var _noteSortIdx:Array<Int> = [];
+	private var _noteSortRange:Int = 0;
+	/** 缓存的排序比较器 (每 state 只创建一次, 避免每帧 lambda 分配)。 */
+	private var _cmpNoteY:Note->Note->Int = null;
+	private var _cmpIntAsc:Int->Int->Int = null;
+	/** True while this PlayState has disabled the hxcpp GC (restored in destroy). */
+	private var _gcDisabledForSong:Bool = false;
+	/** H-Slice 风格离屏剔除: 每帧重算的滚动方向可视距离 (世界像素, 含缩放/旋转余量)。 */
+	private var _cullDistPlayer:Float = 2200;
+	private var _cullDistOpponent:Float = 2200;
+	/** 存活 Note 计数: 由每帧 update 钩子刷新, 生成循环 O(1) 读取 (替代 countLiving 全表扫描)。 */
+	private var _frameAliveTally:Int = 0;
+	private var _lastAliveTally:Int = 0;
+	/** notes.members 空槽扫描游标: 让追加 Note 从 O(n) (indexOf+getFirstNull) 降为均摊 O(1)。 */
+	private var _noteSlotCursor:Int = 0;
+
+	// ── 命中表现层合并 (万级 NPS 降阶核心): 分数文本/评级弹窗/ms 文本 每帧最多刷新一次 ──
+	/** 无脚本时 updateScore 只置脏标记, 帧末 flushScoreText() 统一重建一次文本。 */
+	var _scoreTextDirty:Bool = false;
+	var _scoreZoomDirty:Bool = false;
+	/** ms 判定文本 (kadems) 同帧合并: 只保留最后一次命中的差值。 */
+	var _msTextDirty:Bool = false;
+	var _pendingMsText:String = null;
+	var _pendingMsColor:FlxColor = 0xFFFFFFFF;
+	/** 评级弹窗合并: 高密度命中帧只展示最新一次 (低密度帧保持原版逐击弹窗)。 */
+	var _popupPending:Bool = false;
+	var _pendingRatingImage:String = null;
+	/** 每帧前 POPUP_IMMEDIATE_HITS 个命中保持原版逐击弹窗 (正常谱面行为完全不变)。 */
+	static inline var POPUP_IMMEDIATE_HITS:Int = 8;
+	var _popupImmediateBudget:Int = POPUP_IMMEDIATE_HITS;
+	/** 每帧溅射生成预算 + 存活硬上限 (手动连击风暴下池化不再无界膨胀)。 */
+	static inline var SPLASH_FRAME_BUDGET:Int = 16;
+	public static inline var MAX_SPLASH_ALIVE:Int = 256;
+	var _splashBudgetLeft:Int = SPLASH_FRAME_BUDGET;
+	/** botplay 下角色 sing 动画 / strum 静态化的"每轨每帧一次"门控 (与 strumsHit 同步重置)。 */
+	var _botCharAnim:Array<Bool> = [false, false, false, false, false, false, false, false];
+	var _botStrumStatic:Array<Bool> = [false, false, false, false, false, false, false, false];
+	/** 对手侧同理: sing 动画与 confirm 动画每轨每帧一次; static 化整帧一次。 */
+	var _oppCharAnim:Array<Bool> = [false, false, false, false, false, false, false, false];
+	var _oppStrumConfirm:Array<Bool> = [false, false, false, false, false, false, false, false];
+	var _oppStaticSet:Bool = false;
+	/** 当前处于离屏剔除驻留状态的 Note 数 (trace 观测用)。 */
+	var _culledCount:Int = 0;
+	/** 本帧数据级批量结算中累计的 Hurt Note 数 (finishBulkFrame 消费后清零)。 */
+	var bulkHurtCount:Int = 0;
+	/** 存活音符紧凑列表: 物化时追加, 回收时 O(1) swap-remove; 每帧只需遍历它。 */
+	var activeNotes:Array<Note> = [];
+	/** 可视物化地平线 (ms): 超出剔除距离的音符物化后必然被驻留/数据层结算, 不值得构造。 */
+	var _visHorizonMs:Float = 2000;
+	/** 上一次数据级批量推进消费的条目数 —— 引擎"是否跟不上到达速率"的过载信号。 */
+	var _bulkDrainedLast:Int = 0;
+	/** 过载状态滞回计数: drain 显著非零时置满, 之后逐帧衰减 —— 防止模式来回抖动。 */
+	var _overloadFrames:Int = 0;
+	/** 每轨 cos/sin 缓存: 万级音符逐帧 trig → 每轨每帧一次 (方向本就按轨道常量)。 */
+	var _playerLaneCos:Array<Float> = [];
+	var _playerLaneSin:Array<Float> = [];
+	var _oppLaneCos:Array<Float> = [];
+	var _oppLaneSin:Array<Float> = [];
+
 	public var limitNC:Int = 0;
+	/** True if the loaded chart contains holds/sustains. Fast bulk-skip is disabled for such charts to avoid orphan sustain tails. */
+	private var _chartHasHolds:Bool = false;
 	public var noteLimit:Int = 1000;
 	/** True once the music file reached its end but chart notes remain. */
 	public var musicEnded:Bool = false;
@@ -557,7 +620,7 @@ class PlayState extends MusicBeatState
 	public var maxcombo:Int = 0;
 	//
 	public var precacheList:Map<String, String> = new Map<String, String>();
-	
+
 	// stores the last judgement object
 	public static var lastRating:FlxSprite;
 	// stores the last combo sprite object
@@ -636,7 +699,10 @@ class PlayState extends MusicBeatState
 		PauseSubState.songName = null; //Reset to default
 		playbackRate = ClientPrefs.getGameplaySetting('songspeed', 1);
 		// replay 模式下 playbackRate 将在 replayExam.loadFromFile() 时从 StateRecord 恢复
-		
+		// H-Slice 风格 Note 上限: 0 = 无限 (仅高级用户)
+		noteLimit = ClientPrefs.data.limitNotes;
+		if (noteLimit <= 0) noteLimit = 2147483647;
+
 
 		EKData.loadConfig();
 		mania = (SONG.mania == null) ? Note.defaultMania : EKData.clampMania(SONG.mania);
@@ -725,6 +791,7 @@ class PlayState extends MusicBeatState
 		FlxG.cameras.add(camHUD, false);
 		FlxG.cameras.add(camOther, false);
 		grpNoteSplashes = new FlxTypedGroup<NoteSplash>();
+		NoteSplash.liveCount = 0; // 新一局: 溅射存活计数归零 (上一局实例随 state 销毁)
 
 		FlxG.cameras.setDefaultDrawTarget(camGame, true);
 		CustomFadeTransition.nextCamera = camOther;
@@ -1350,7 +1417,7 @@ class PlayState extends MusicBeatState
 
 		// cameras = [FlxG.cameras.list[1]];
 		startingSong = true;
-		
+
 		#if LUA_ALLOWED
 		for (notetype in noteTypeMap.keys())
 		{
@@ -1376,7 +1443,7 @@ class PlayState extends MusicBeatState
 			}
 			#end
 		}
-		
+
 		for (event in eventPushedMap.keys())
 		{
 			#if MODS_ALLOWED
@@ -1432,7 +1499,7 @@ class PlayState extends MusicBeatState
 				TraceManager.error('trace.playState.notetypeHscriptFailed', 'Failed to load notetype hscript {}: {}', [notetype, e]);
 			}
 		}
-		
+
 		for (event in eventPushedMap.keys())
 		{
 			try {
@@ -1625,14 +1692,14 @@ class PlayState extends MusicBeatState
 			tnh = new FlxText(tnhx + 10, 259, 250, totalNotesText, 20);
 			tnh.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			tnh.cameras = [camOther];
-			tnh.font = Paths.languageFont(); 
+			tnh.font = Paths.languageFont();
 			tnh.borderSize = 2;
 			add(tnh);
 
 			cm = new FlxText(-tnh.x + cmoffset, tnh.y + cmy, 200, combosText, 20);
 			cm.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			cm.cameras = [camOther];
-			cm.font = Paths.languageFont(); 
+			cm.font = Paths.languageFont();
 			cm.borderSize = 2;
 			add(cm);
 
@@ -1649,35 +1716,35 @@ class PlayState extends MusicBeatState
 			sick = new FlxText(cm.x, (marv != null ? marv.y : cm.y) + 30, 200, sicksText, 20);
 			sick.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			sick.cameras = [camOther];
-			sick.font = Paths.languageFont(); 
+			sick.font = Paths.languageFont();
 			sick.borderSize = 2;
 			add(sick);
 
 			good = new FlxText(cm.x, sick.y + 30, 200, goodsText, 20);
 			good.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			good.cameras = [camOther];
-			good.font = Paths.languageFont(); 
+			good.font = Paths.languageFont();
 			good.borderSize = 2;
 			add(good);
 
 			bad = new FlxText(cm.x, good.y + 30, 200, badsText, 20);
 			bad.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			bad.cameras = [camOther];
-			bad.font = Paths.languageFont(); 
+			bad.font = Paths.languageFont();
 			bad.borderSize = 2;
 			add(bad);
 
 			shit = new FlxText(cm.x, bad.y + 30, 200, shitsText, 20);
 			shit.setFormat(20, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			shit.cameras = [camOther];
-			shit.font = Paths.languageFont(); 
+			shit.font = Paths.languageFont();
 			shit.borderSize = 2;
 			add(shit);
 
 			miss = new FlxText(cm.x, shit.y + 30, 200, missesText, 20);
 			miss.setFormat(20, FlxColor.RED, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			miss.cameras = [camOther];
-			miss.font = Paths.languageFont(); 
+			miss.font = Paths.languageFont();
 			miss.borderSize = 2;
 			add(miss);
 			}
@@ -1690,7 +1757,7 @@ class PlayState extends MusicBeatState
 		msTxtKade.visible = !ClientPrefs.data.hideHud;
 		msTxtKade.setFormat(19, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		msTxtKade.borderSize = 2;
-		msTxtKade.font = Paths.font("kadems.ttf"); 
+		msTxtKade.font = Paths.font("kadems.ttf");
 		add(msTxtKade);
 
 		/*
@@ -1706,7 +1773,7 @@ class PlayState extends MusicBeatState
 		add(tailBadgeTxt);
 		*/
 
-		var songName:String = PlayState.SONG.song; 
+		var songName:String = PlayState.SONG.song;
 		var difficultyName:String = displayDifficultyString();
 		var seiunEngineVersion:String = MainMenuState.seiunengineVersion;
 		var psychEngineVersion:String = CompatEngine.current();
@@ -1717,7 +1784,7 @@ class PlayState extends MusicBeatState
         atkText.cameras = [camHUD];
 		atkText.borderSize = 2;
 		atkText.setFormat(15, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		atkText.font = Paths.font("vcr.ttf"); 
+		atkText.font = Paths.font("vcr.ttf");
         add(atkText);
 		if(replayMode)
 			atkText.text += '(Replay)';
@@ -1735,7 +1802,7 @@ class PlayState extends MusicBeatState
 		}
 
 		precacheList.set('alphabet', 'image');
-	
+
 		#if cpp
 		// Updating Discord Rich Presence.
 		if(iconP2 != null) DiscordClient.changePresence(detailsText, SONG.song + " (" + storyDifficultyText + ")", iconP2.getCharacter());
@@ -1774,8 +1841,19 @@ class PlayState extends MusicBeatState
 		initHitsound();
 
 		Paths.clearUnusedMemory();
+
+		#if cpp
+		if (ClientPrefs.data.disableGC)
+		{
+			_gcDisabledForSong = true;
+			cpp.vm.Gc.enable(true);
+			cpp.vm.Gc.run(true);
+			cpp.vm.Gc.enable(false);
+		}
+		#end
+
 		CustomFadeTransition.nextCamera = camOther;
-		
+
 	}
 
 	/**
@@ -1855,7 +1933,7 @@ class PlayState extends MusicBeatState
 			#end
 		})();
 		#end
-		
+
 		#if HSCRIPT_ALLOWED
 		(function() {
 			var hscriptFile:String = 'stages/' + curStage + '.hx';
@@ -2555,10 +2633,10 @@ class PlayState extends MusicBeatState
 
 		var introAlts:Array<String> = introAssets.get('default');
 		if (isPixelStage) introAlts = introAssets.get('pixel');
-		
+
 		for (asset in introAlts)
 			Paths.image(asset);
-		
+
 		Paths.sound('intro3' + introSoundsSuffix);
 		Paths.sound('intro2' + introSoundsSuffix);
 		Paths.sound('intro1' + introSoundsSuffix);
@@ -2607,7 +2685,7 @@ class PlayState extends MusicBeatState
 					p.y = o.y;
 					o.y = tmpY;
 					}
-									
+
 
                     var tmpAngle:Float = p.angle;
                     p.angle = o.angle;
@@ -2825,35 +2903,91 @@ class PlayState extends MusicBeatState
 	//var lerpSongScore:Float = 0;
 	public function updateScore(miss:Bool = false)
 	{
-		// 0.7.3+/1.0.4: preUpdateScore（返回 Function_Stop 可跳过分数刷新）
-		// 0.7.3+/1.0.4: preUpdateScore (return Function_Stop to skip the refresh)
-		var preResult:Dynamic = callOnScripts('preUpdateScore', [miss], true);
-		if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
-			return;
-
-		/*
-		scoreTxt.text = Language.get("scorelangtxt", "Score") + ': ${Math.floor(lerpSongScore)}'
-		+ " | " + Language.get("combobtxt", "Combo Breaks") + ': $songMisses'
-		+  " | " + Language.get("acclangtxt", "Accuracy") + ':' + (ratingName != '?' ? ' ${Highscore.floorDecimal(ratingPercent * 100, 2)}% | $ratingFC ' : '') + '($ratingName)';
-		*/
-		scoreTxt.text = Language.get("scorelangtxt", "Score") + ': $songScore'
-		+ " | " + Language.get("combobtxt", "Combo Breaks") + ': $songMisses'
-		+  " | " + Language.get("acclangtxt", "Accuracy") + ':' + (ratingName != '?' ? ' ${Highscore.floorDecimal(ratingPercent * 100, 2)}% | $ratingFC ' : '') + '($ratingName)';
-
-		if(ClientPrefs.data.scoreZoom && !miss && !cpuControlled)
+		if (hasActiveScripts())
 		{
-			if(scoreTxtTween != null) {
-				scoreTxtTween.cancel();
-			}
-			scoreTxt.scale.x = 1.075;
-			scoreTxt.scale.y = 1.075;
-			scoreTxtTween = FlxTween.tween(scoreTxt.scale, {x: 1, y: 1}, 0.2, {
-				onComplete: function(twn:FlxTween) {
-					scoreTxtTween = null;
-				}
-			});
+			// 有脚本: 保留原逐次回调语义 (preUpdateScore 可拦截, onUpdateScore 每次触发)
+			var preResult:Dynamic = callOnScripts('preUpdateScore', [miss], true);
+			if (preResult == LuaUtils.Function_Stop || preResult == FunkinLua.Function_Stop)
+				return;
+
+			scoreTxt.text = buildScoreText();
+			if(ClientPrefs.data.scoreZoom && !miss && !cpuControlled)
+				bounceScoreTxt();
+			callOnScripts('onUpdateScore', [miss]);
+			return;
 		}
-		callOnScripts('onUpdateScore', [miss]);
+
+		if (!ClientPrefs.data.perfMode)
+		{
+			scoreTxt.text = buildScoreText();
+			if(ClientPrefs.data.scoreZoom && !miss && !cpuControlled)
+				bounceScoreTxt();
+			return;
+		}
+		_scoreTextDirty = true;
+		if (!miss && ClientPrefs.data.scoreZoom && !cpuControlled)
+			_scoreZoomDirty = true;
+	}
+
+	/** 拼接分数 HUD 文本 (updateScore 的纯构建部分)。 */
+	inline function buildScoreText():String
+	{
+		return Language.get("scorelangtxt", "Score") + ': $songScore'
+		+ " | " + Language.get("combobtxt", "Combo Breaks") + ': $songMisses'
+		+  " | " + Language.get("acclangtxt", "Accuracy") + ':' + (ratingName != '?' ? ' ${Highscore.floorDecimal(ratingPercent * 100, 2)}% | $ratingFC ' : '') + '($ratingName)';
+	}
+
+	/** 分数文本弹跳 (原 updateScore 内的 zoom tween 块)。 */
+	function bounceScoreTxt():Void
+	{
+		if(scoreTxtTween != null) {
+			scoreTxtTween.cancel();
+		}
+		scoreTxt.scale.x = 1.075;
+		scoreTxt.scale.y = 1.075;
+		scoreTxtTween = FlxTween.tween(scoreTxt.scale, {x: 1, y: 1}, 0.2, {
+			onComplete: function(twn:FlxTween) {
+				scoreTxtTween = null;
+			}
+		});
+	}
+
+
+	function flushHitPresentation():Void
+	{
+		if (_scoreTextDirty)
+		{
+			_scoreTextDirty = false;
+			scoreTxt.text = buildScoreText();
+			if (_scoreZoomDirty)
+			{
+				_scoreZoomDirty = false;
+				bounceScoreTxt();
+			}
+		}
+
+		if (_msTextDirty)
+		{
+			_msTextDirty = false;
+			msTxtKade.color = _pendingMsColor;
+			msTxtKade.text = _pendingMsText;
+			msTxtKade.alpha = 1;
+			if (msScaleTween != null) msScaleTween.cancel();
+			msTxtKade.scale.set(1.15, 1.15);
+			msScaleTween = FlxTween.tween(msTxtKade.scale, {x: 1, y: 1}, 0.15, {ease: FlxEase.backOut});
+			if (msTween != null) msTween.cancel();
+			msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
+		}
+
+		if (_popupPending)
+		{
+			_popupPending = false;
+			showComboNum = (combo >= 10);
+			ratingPopup.show(_pendingRatingImage, combo, playbackRate, FlxG.width * 0.35,
+				ClientPrefs.data.hideHud, showRating, showCombo, showComboNum,
+				[for (v in ClientPrefs.data.comboOffset) Std.int(v)], Conductor.crochet,
+				ClientPrefs.data.comboStacking);
+		}
 	}
 
 	public function setSongTime(time:Float)
@@ -2874,13 +3008,13 @@ class PlayState extends MusicBeatState
 			vocals.time = time;
 			vocals.pitch = playbackRate;
 		}
-		
+
 		if (Conductor.songPosition <= opponentVocals.length)
 		{
 			opponentVocals.time = time;
 			opponentVocals.pitch = playbackRate;
 		}
-		
+
 		if (Conductor.songPosition <= vocalsPlayer.length)
 		{
 			vocalsPlayer.time = time;
@@ -3140,6 +3274,9 @@ class PlayState extends MusicBeatState
 
 		notesAddedCount = 0;
 		limitNC = 0;
+		_frameAliveTally = 0;
+		_lastAliveTally = 0;
+		_noteSlotCursor = 0;
 
 		var preloadedNotes:Array<PreloadedChartNote> = [];
 		var noteData:Array<SwagSection> = songData.notes;
@@ -3181,6 +3318,10 @@ class PlayState extends MusicBeatState
 		var stepCrochet:Float = Conductor.stepCrochet;
 		var isNewVer:Bool = Song.isNewVersion;
 
+		// 预构建 Change Mania 时间线: 每条 Note 的键数查询由全事件扫描 O(E)
+		// 降为二分查找 O(log M) —— 万级 Note 谱面的加载耗时不再随事件数平方增长。
+		EKData.maniaTimelineBuild(songData.events, mania);
+
 		// 多k: Change Mania 事件会把事件后的谱面按新键数解释/编码: 这里按每个 Note 自身
 		// 时间点的生效键数解释轨道, 保证事件前后的 Note 各归各的键数 (无事件时与旧行为一致)。
 		for (section in noteData)
@@ -3198,7 +3339,7 @@ class PlayState extends MusicBeatState
 			{
 				var rawStrum:Float = songNotes[0];
 				var rawData:Int = Std.int(songNotes[1]);
-				var noteMania:Int = EKData.effectiveManiaAtTime(songData.events, mania, rawStrum);
+				var noteMania:Int = EKData.maniaAtTimeCached(rawStrum);
 				var noteAmmo:Int = Note.ammo[noteMania];
 				var noteDataIdx:Int = rawData % noteAmmo;
 
@@ -3346,6 +3487,15 @@ class PlayState extends MusicBeatState
 		// Note 只在进入生成窗口时由 spawn 循环物化，峰值内存 = 同时存活 Note，而不是整张谱面。
 		unspawnNotes = preloadedNotes;
 		lastSpawnedNote = new Map<Int, Note>();
+		_chartHasHolds = false;
+		for (pn in preloadedNotes)
+		{
+			if (pn.isSustainNote || pn.sustainLength > 0)
+			{
+				_chartHasHolds = true;
+				break;
+			}
+		}
 
 		if (eventNotes.length > 1)
 			eventNotes.sort(sortByTime);
@@ -3886,6 +4036,18 @@ class PlayState extends MusicBeatState
 
 	override public function update(elapsed:Float)
 	{
+		// perfMode 关闭: 预算视为无限 —— 弹窗/溅射回到原版逐击直显, 无存活上限。
+		if (ClientPrefs.data.perfMode)
+		{
+			_popupImmediateBudget = POPUP_IMMEDIATE_HITS;
+			_splashBudgetLeft = SPLASH_FRAME_BUDGET;
+		}
+		else
+		{
+			_popupImmediateBudget = 999999;
+			_splashBudgetLeft = 999999;
+		}
+		var _phaseT:Float = haxe.Timer.stamp();
 		/*if (FlxG.keys.justPressed.NINE)
 		{
 			iconP1.swapOldIcon();
@@ -4038,12 +4200,12 @@ class PlayState extends MusicBeatState
 			cancelMusicFadeTween();
 			MusicBeatState.switchState(new CharacterEditorState(SONG.player2));
 		}
-		
+
 		if (startedCountdown)
 		{
 			Conductor.songPosition += FlxG.elapsed * 1000 * playbackRate;
 		}
-		
+
 		updateIconsScale(elapsed);
 		// Smoothly interpolate displayed health towards actual health for a smooth bar transition
 		var smoothSpeed:Float = 8; // tweakable smoothing speed
@@ -4129,10 +4291,45 @@ class PlayState extends MusicBeatState
 			if(songSpeed < 1) time /= songSpeed;
 			if(unspawnNotes[notesAddedCount].multSpeed < 1) time /= unspawnNotes[notesAddedCount].multSpeed;
 
-			var targetData:PreloadedChartNote = unspawnNotes[notesAddedCount];
-			limitNC = notes.countLiving();
+			fastSkipPastNotes();
+			var targetData:PreloadedChartNote = (notesAddedCount < unspawnNotes.length) ? unspawnNotes[notesAddedCount] : null;
+			// 精确存活数: 直接读存活紧凑列表长度 (物化/回收 O(1) 维护)。
+			limitNC = activeNotes.length;
 
-			while (limitNC < noteLimit && targetData != null && targetData.strumTime - Conductor.songPosition < time)
+			// 自适应物化预算: 帧时间越长允许生成越多 (掉帧后自动追赶积压, 恢复流畅);
+			// 同时判定线前的音符 (hardDeadline 内) 无视预算强制生成 —— 保证可玩性优先于削峰。
+			var hardDeadline:Float = Conductor.songPosition + Conductor.safeZoneOffset;
+			var spawnBudget:Int = Std.int(Math.max(2048, Math.min(20000, elapsed * 1000 * 30)));
+			// 过载判定用"本帧数据级 drain 量": drain 显著非零说明到达速率超过了物化能力,
+			// 此刻到点音符由数据级路径结算, 物化只保留小额度维持近线可视, 且判定线硬时限
+			// 不再强制追加 —— 落后状态下强物化等于为注定被数据层结算的音符白付构造费。
+			// 滞回: 本帧 drain 显著非零 → 置满 30 帧; 否则逐帧衰减。
+			// 光标被长条头临时钉住等场景下 drain 会短暂归零, 滞回避免节流模式反复开关。
+			if (_bulkDrainedLast >= 128) _overloadFrames = 30;
+			else if (_overloadFrames > 0) _overloadFrames--;
+			var perfOn:Bool = ClientPrefs.data.perfMode;
+			// 关键修复: 物化节流只允许存在于 botplay。手动模式没有数据层吸收路径
+			// (fastSkipPastNotes 的 softCut 恒为 -∞), 节流的唯一效果是让生成光标
+			// 落后于可视地平线 —— 落后的毫秒数 × 流速 = 音符在屏内"凭空出现"的像素
+			// 深度 (流速越大越深入屏幕), 长条头已生成而尾段未跟上则表现为"吞长条"。
+			// 手动模式恢复原版无限物化吞吐, 仅保留 noteLimit 上限与可视地平线准入。
+			var behind:Bool = perfOn && cpuControlled && _overloadFrames > 0;
+			var manualUnthrottled:Bool = !cpuControlled;
+			if (behind)
+				spawnBudget = 1024;
+			// 可视物化地平线: 超出剔除距离的音符只会被驻留或数据层结算, 构造它们是纯浪费。
+			// (spawnTime=2000ms 的旧窗口在 speed=10 时是可视视距的 ~10 倍。)
+			// perfMode 关闭: 回到原版完整 spawnTime 窗口, 不做地平线收缩。
+			var effTime:Float = perfOn ? Math.min(time, _visHorizonMs) : time;
+			var spawnedThisFrame:Int = 0;
+
+			_phaseT = haxe.Timer.stamp();
+			// perfMode 关闭: 无预算节流、无硬时限追加 —— 与原版逐条无条件物化一致。
+			// 手动模式 (manualUnthrottled): 同样不节流, 保证屏外滑入的正确性优先。
+			while (targetData != null && targetData.strumTime - Conductor.songPosition < effTime
+				&& limitNC < noteLimit
+				&& (!perfOn || manualUnthrottled || spawnedThisFrame < spawnBudget
+					|| (!behind && targetData.strumTime <= hardDeadline && spawnedThisFrame < spawnBudget + 4096)))
 			{
 				if (targetData.wasHit)
 				{
@@ -4144,7 +4341,6 @@ class PlayState extends MusicBeatState
 					continue;
 				}
 
-				// 延迟物化 + 回池复用：优先复用本 state 内已击杀的 Note 槽位。
 				var newNote:Note;
 				var reusedNote:Bool = notePool.length > 0;
 				if (reusedNote)
@@ -4160,6 +4356,9 @@ class PlayState extends MusicBeatState
 				newNote.sourceIndex = notesAddedCount;
 				newNote.setupNoteData(targetData);
 				newNote.spawned = true;
+				// 进入存活紧凑列表 (limitNC 读取精确存活数的关键)
+				newNote.activeIdx = activeNotes.length;
+				activeNotes.push(newNote);
 
 				// 重建 prevNote/nextNote 链（只链已生成的 Note；未生成的 sustain 尾段由数据扫描兜底）。
 				var linkKey:Int = newNote.noteData + (newNote.mustPress ? 10000 : 0);
@@ -4171,32 +4370,35 @@ class PlayState extends MusicBeatState
 				lastSpawnedNote.set(linkKey, newNote);
 
 				if (!reusedNote)
-					notes.add(newNote);
-				if (CompatEngine.isModern()) {
-					callOnScripts('onSpawnNote', [
-						notes.members.indexOf(newNote),
-						newNote.noteData,
-						newNote.noteType,
-						newNote.isSustainNote,
-						newNote.strumTime
-					]);
-				} else {
-					callOnScripts('onSpawnNote', [
-						notes.members.indexOf(newNote),
-						newNote.noteData,
-						newNote.noteType,
-						newNote.isSustainNote
-					]);
+					appendNoteFast(newNote);
+				if (hasActiveScripts()) {
+					if (CompatEngine.isModern()) {
+						callOnScripts('onSpawnNote', [
+							noteIndexFast(newNote),
+							newNote.noteData,
+							newNote.noteType,
+							newNote.isSustainNote,
+							newNote.strumTime
+						]);
+					} else {
+						callOnScripts('onSpawnNote', [
+							noteIndexFast(newNote),
+							newNote.noteData,
+							newNote.noteType,
+							newNote.isSustainNote
+						]);
+					}
 				}
 
 				notesAddedCount++;
 				limitNC++;
+				spawnedThisFrame++;
 				if (notesAddedCount < unspawnNotes.length)
 					targetData = unspawnNotes[notesAddedCount];
 				else
 					break;
-			}
 		}
+	}
 
 		if (generatedMusic && !inCutscene)
 		{
@@ -4211,6 +4413,10 @@ class PlayState extends MusicBeatState
 
 			if(startedCountdown)
 			{
+				refreshNoteCullRanges(elapsed);
+				refreshLaneTrigCaches();
+				_frameAliveTally = 0;
+
 				// 复用 strumsHit 数组，避免每帧分配新数组（密集谱面下是主要的每帧垃圾来源之一）
 				var laneCount:Int = Note.ammo[mania] * 2;
 				if (strumsHit.length != laneCount)
@@ -4218,148 +4424,24 @@ class PlayState extends MusicBeatState
 				else
 					for (i in 0...laneCount)
 						strumsHit[i] = false;
-				function updateDaNote(daNote:Note):Void
+				// botplay/对手侧的"每轨每帧一次"门控同步重置
+				resetBotGateArrays();
+
+				_phaseT = haxe.Timer.stamp();
+				bulkHitDueMaterialized(); // botplay 到点已物化音符的批量命中 (合并逐击调用链)
+				// 遍历存活紧凑列表 (O(存活数), 不再扫全量 members 槽位)。
+				// 正向遍历 + swap-remove 补偿: updateDaNote 可能回收当前元素,
+				// 尾元素补位到当前下标, 此时 i 不前进即可补上新换入的元素。
+				var ai:Int = 0;
+				while (ai < activeNotes.length)
 				{
-					if (daNote == null || !daNote.exists) return;
-
-					// Auto-hit opponent notes
-					if (!daNote.mustPress && !daNote.hitByOpponent && !daNote.ignoreNote && daNote.strumTime <= Conductor.songPosition)
-						opponentNoteHit(daNote);
-
-					// CPU auto-hit player notes
-					if (daNote.mustPress && cpuControlled && !daNote.wasGoodHit && daNote.strumTime <= Conductor.songPosition && !daNote.ignoreNote && !daNote.blockHit)
-						goodNoteHit(daNote);
-
-					if (!daNote.exists) return;
-
-					var strumGroup:FlxTypedGroup<StrumNote> = daNote.mustPress ? playerStrums : opponentStrums;
-					// 0.6.3 原版: 直接用 noteData 索引 strum 组 (strumGroup.members[daNote.noteData])。
-					// 多k 谱面的 noteData 生成时已按 ammo 取模, 直接索引与原 laneData() 等价;
-					// 但 lua 模组 (如 Holofunk 第5键) 会把 noteData 改成 4, 此时必须命中
-					// playerStrums.members[4] (模组 add 的中间 strum), 不能再 % ammo 折叠回 0。
-					var strumIdx:Int = Std.int(Math.abs(daNote.noteData));
-					if (strumIdx >= strumGroup.members.length) strumIdx %= strumGroup.members.length;
-					var strum:StrumNote = strumGroup.members[strumIdx];
-					if (strum == null) return;
-
-					var strumX:Float = strum.x + daNote.offsetX;
-					var strumY:Float = strum.y + daNote.offsetY;
-					var strumAngle:Float = strum.angle + daNote.offsetAngle;
-					var strumDirection:Float = strum.direction;
-					var strumAlpha:Float = strum.alpha * daNote.multAlpha;
-					var strumScroll:Bool = strum.downScroll;
-
-					if (strumScroll)
-						// Scale movement by mania (4K = 1.0; high-K notes/sustains shrink together).
-						daNote.distance = (0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
-					else
-						daNote.distance = (-0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
-
-						var angleDir:Float = strumDirection * Math.PI / 180;
-
-						if (daNote.copyAngle)
-							daNote.angle = strumDirection - 90 + strumAngle;
-
-						if (daNote.copyAlpha)
-							daNote.alpha = strumAlpha;
-
-					// Sustain body scale stretch — must span pixel gap between pieces.
-					// Pixel gap = 0.45 * stepCrochet * songSpeed.
-					// Rendered height = frameHeight * scale.y.
-					// So: scale.y = (0.45 * stepCrochet * songSpeed * multSpeed) / frameHeight
-					/*
-					if (daNote.isSustainNote && !daNote.animation.curAnim.name.endsWith('end'))
-					{
-						daNote.scale.y = (0.45 * Conductor.stepCrochet * songSpeed * daNote.multSpeed) / daNote.frameHeight;
-						if (PlayState.isPixelStage)
-						{
-							daNote.scale.y *= PlayState.daPixelZoom * 1.20;
-							daNote.scale.x *= PlayState.daPixelZoom;
-						}
-						daNote.scale.x = 0.7;
-						daNote.updateHitbox();
-					}
-					*/
-
-						if (daNote.copyX)
-							daNote.x = strumX + Math.cos(angleDir) * daNote.distance;
-
-						if (daNote.copyY)
-						{
-							daNote.y = strumY + Math.sin(angleDir) * daNote.distance;
-
-							if (daNote.isSustainNote)
-							{
-								// 0.6.3 原版定位：长条各段按自身 strumTime 摆放 + 原版常量修正。
-								// 不依赖 prevNote.exists——TAP 命中销毁后长条不会跳位/突出 TAP。
-								// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
-								var maniaScale:Float = Note.getManiaScale(daNote.mania);
-								var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
-								var isEnd:Bool = (daNote.animation.curAnim != null
-									&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
-								if (strumScroll)
-								{
-									if (isEnd)
-									{
-										daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
-										daNote.y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
-										if (PlayState.isPixelStage)
-											daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
-										else
-											daNote.y -= 19 * maniaScale;
-									}
-									daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
-									daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
-								}
-							}
-						}
-
-	var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
-					if (strum.sustainReduce && daNote.isSustainNote
-						&& (!daNote.mustPress || daNote.wasGoodHit))
-					{
-						// Use the real drawn bottom/top for the receptor clip. The old
-						// y - offset.y*scale.y formula triggers hundreds of pixels early
-						// when scale.y is large (pixel sustains), squashing every piece.
-						var drawnTop:Float = daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
-							+ daNote.frame.offset.y * daNote.scale.y;
-						var drawnBottom:Float = drawnTop + daNote.height;
-						var swagRect:FlxRect = daNote.clipRect;
-						if (swagRect == null)
-							swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
-						swagRect.x = 0;
-						swagRect.width = daNote.frameWidth;
-						if (strumScroll)
-						{
-							if (drawnBottom >= center)
-							{
-								swagRect.height = (center - drawnTop) / daNote.scale.y;
-								swagRect.y = daNote.frameHeight - swagRect.height;
-								daNote.clipRect = swagRect;
-							}
-						}
-						else
-						{
-							if (drawnTop <= center)
-							{
-								swagRect.y = (center - drawnTop) / daNote.scale.y;
-								swagRect.height = daNote.frameHeight - swagRect.y;
-								daNote.clipRect = swagRect;
-							}
-						}
-					}
-
-					// Kill late notes
-					if (Conductor.songPosition > noteKillOffset + daNote.strumTime)
-					{
-						if (daNote.mustPress && !cpuControlled && !daNote.ignoreNote && !endingSong && !daNote.wasGoodHit)
-							noteMiss(daNote);
-
-						invalidateNote(daNote);
-					}
+					var an:Note = activeNotes[ai];
+					var lenBefore:Int = activeNotes.length;
+					updateDaNote(an);
+					if (activeNotes.length == lenBefore && ai < activeNotes.length && activeNotes[ai] == an)
+						ai++;
 				}
-
-				notes.forEachAlive(updateDaNote);
+				_lastAliveTally = _frameAliveTally;
 
 				// 回池复用后不再批量 remove/destroy；dead Note 保留在 members 中供槽位复用。
 				// 只清理被脚本/外部直接 destroy 的壳（scale == null），避免异常路径堆积。
@@ -4367,13 +4449,41 @@ class PlayState extends MusicBeatState
 				if (_noteCleanupFrameCounter >= NOTE_CLEANUP_INTERVAL)
 				{
 					_noteCleanupFrameCounter = 0;
-					var cleanI:Int = notes.members.length - 1;
-					while (cleanI >= 0) {
-						var cleanNote:Note = notes.members[cleanI];
+					// 单趟压缩清除被脚本 destroy 的空壳 (scale == null),
+					// 替代逐个 notes.remove(.., true) 的 O(n) splice。
+					var m:Array<Note> = notes.members;
+					var total:Int = m.length;
+					var wI:Int = 0;
+					for (rI in 0...total)
+					{
+						var cleanNote:Note = m[rI];
 						if (cleanNote != null && cleanNote.scale == null)
-							notes.remove(cleanNote, true);
-						cleanI--;
+							continue;
+						m[wI] = cleanNote;
+						if (cleanNote != null) cleanNote.memberIndex = wI; // 同步下标缓存
+						wI++;
 					}
+					@:privateAccess notes.length = wI;
+					// 关键修复: 必须直接截断数组, 保持与旧版 notes.remove(splice) 相同的
+					// "members 无 null 槽位" 不变量 —— FlxTypedGroup.sort 是不加过滤的
+					// members.sort(), fastSort 关闭时每帧 notes.sort(FlxSort.byY) 会把
+					// null 槽位送入比较器解引用 Obj1.y → 按下长条(留壳)后数帧内直接崩溃。
+					if (wI < total)
+						m.resize(wI);
+					if (_noteSlotCursor > wI) _noteSlotCursor = wI;
+
+					// 同步压缩存活列表 (脚本 destroy 的壳可能残留在活跃列表)
+					var wA:Int = 0;
+					for (aI in 0...activeNotes.length)
+					{
+						var an:Note = activeNotes[aI];
+						if (an == null || !an.exists || an.scale == null)
+							continue;
+						an.activeIdx = wA;
+						activeNotes[wA] = an;
+						wA++;
+					}
+					activeNotes.resize(wA);
 				}
 
 				// Periodically release unused graphics to bound memory on long runs / mod-heavy sets.
@@ -4384,18 +4494,25 @@ class PlayState extends MusicBeatState
 					Paths.purgeUnusedGraphics();
 				}
 
-				// Sort for correct draw order (closer to strum on top)
+				// Sort for correct draw order (closer to strum on top).
+				// fasterNoteSort 对长条同样安全: 只重排存活且可见的 Note, 死槽位保持原位,
+				// 绘制顺序与全表 sort 完全一致; 密集长条谱面不再退回 O(n log n) 全排序。
 				var sortOrder:Int = ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
-				notes.sort(FlxSort.byY, sortOrder);
+				_phaseT = haxe.Timer.stamp();
+				if (ClientPrefs.data.fastSort)
+					fasterNoteSort(sortOrder);
+				else
+				{
+					notes.sort(FlxSort.byY, sortOrder);
+					rebuildMemberIndexes(notes.members, notes.members.length); // 全表重排后单趟重建下标缓存
+				}
 			}
 			else
 			{
-				function resetNote(daNote:Note):Void
-				{
-					daNote.canBeHit = false;
-					daNote.wasGoodHit = false;
-				}
-				notes.forEachAlive(resetNote);
+				_frameAliveTally = 0;
+				for (rn in activeNotes)
+					resetNote(rn);
+				_lastAliveTally = _frameAliveTally;
 				// 倒计时前同样不 remove/destroy，dead Note 留在 members 中复用。
 			}
 		}
@@ -4413,6 +4530,11 @@ class PlayState extends MusicBeatState
 			}
 		}
 		#end
+
+		// 表现层帧末统一刷新 (分数文本/ms 文本/合并弹窗), 随后写 watch 计数面板。
+		// 放在 onUpdatePost 之前: 脚本在本帧回调里读到的分数/文本已是最终值。
+		_phaseT = haxe.Timer.stamp();
+		flushHitPresentation();
 
 		setOnScripts('cameraX', camFollowPos.x);
 		setOnScripts('cameraY', camFollowPos.y);
@@ -4522,7 +4644,7 @@ class PlayState extends MusicBeatState
 				vocalsPlayer.stop();
 				opponentVocals.stop();
 				FlxG.sound.music.stop();
-				
+
 				persistentUpdate = false;
 				persistentDraw = false;
 				for (tween in modchartTweens) {
@@ -5108,12 +5230,12 @@ class PlayState extends MusicBeatState
 				];
 				Highscore.saveScore(SONG.song, songScore, storyDifficulty, percent,sicks, goods, bads, shits, songMisses, maxcombo);
 				Allscore.addEntry(
-				SONG.song, storyDifficulty, 
+				SONG.song, storyDifficulty,
 				percent, ratingFC, ratingName,
 				songScore,
 				marvelouses, sicks, goods, bads, shits, songMisses, maxcombo,
 				replayFrameData,
-				details,    
+				details,
 				null,
     			songSpeed, playbackRate, songSpeedType
 			);
@@ -5176,10 +5298,15 @@ class PlayState extends MusicBeatState
 				i--;
 			}
 			notePool = [];
+			activeNotes.resize(0);
 
 			unspawnNotes = [];
+			_chartHasHolds = false;
 			notesAddedCount = 0;
 			limitNC = 0;
+			_frameAliveTally = 0;
+			_lastAliveTally = 0;
+			_noteSlotCursor = 0;
 			lastSpawnedNote = new Map<Int, Note>();
 			eventNotes = [];
 	}
@@ -5217,7 +5344,7 @@ class PlayState extends MusicBeatState
 		Paths.image(pixelShitPart1 + "bad" + pixelShitPart2);
 		Paths.image(pixelShitPart1 + "shit" + pixelShitPart2);
 		Paths.image(pixelShitPart1 + "combo" + pixelShitPart2);
-		
+
 		for (i in 0...10) {
 			Paths.image(pixelShitPart1 + 'num' + i + pixelShitPart2);
 		}
@@ -5271,12 +5398,14 @@ class PlayState extends MusicBeatState
 			noteDiff = Math.abs(note.strumTime - Conductor.songPosition + ClientPrefs.data.ratingOffset);
 			NoteMs.push(noteDiff / playbackRate);
 			NoteTime.push(note.strumTime);
-		} 
+		}
 
 		// boyfriend.playAnim('hey');
-		vocals.volume = 1;
-		vocalsPlayer.volume = 1;
-		opponentVocals.volume = 1;
+		// set_volume 会触发 soundTransform 原生写入, 峰值下每击×3 路是纯浪费;
+		// 已是 1 时跳过 (语义等价)。
+		if (vocals.volume != 1) vocals.volume = 1;
+		if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+		if (opponentVocals.volume != 1) opponentVocals.volume = 1;
 
 		var score:Int = 350;
 		var daRating:Rating = Conductor.judgeNote(note, noteDiff / playbackRate);
@@ -5293,24 +5422,34 @@ class PlayState extends MusicBeatState
 			spawnNoteSplashOnNote(note);
 		}
 
-		if(!practiceMode && !cpuControlled) {
-			songScore += score;
-			if(!note.ratingDisabled)
-			{
-				songHits++;
-			}
+		if(!practiceMode) {
+		 // 分数仍保持 vanilla botplay 语义 (botplay 不加分); 命中数则与批量路径
+		 // 同口径计入, 避免 HUD/结算里"击中数"只剩逐对象路径处理的少数音符。
+		 if(!cpuControlled) songScore += score;
+		 if(!note.ratingDisabled)
+		 {
+			 songHits++;
+		 }
 		}
 		if(!note.ratingDisabled) {
 			totalPlayed++;
 			RecalculateRating(false);
 		}
 
-		// ---- display rating/combo/number sprites ----
-		showComboNum = (combo >= 10);
-		ratingPopup.show(daRating.image, combo, playbackRate, FlxG.width * 0.35,
-			ClientPrefs.data.hideHud, showRating, showCombo, showComboNum,
-			[for (v in ClientPrefs.data.comboOffset) Std.int(v)], Conductor.crochet,
-			ClientPrefs.data.comboStacking);
+		if (_popupImmediateBudget > 0)
+		{
+			_popupImmediateBudget--;
+			showComboNum = (combo >= 10);
+			ratingPopup.show(daRating.image, combo, playbackRate, FlxG.width * 0.35,
+				ClientPrefs.data.hideHud, showRating, showCombo, showComboNum,
+				[for (v in ClientPrefs.data.comboOffset) Std.int(v)], Conductor.crochet,
+				ClientPrefs.data.comboStacking);
+		}
+		else
+		{
+			_popupPending = true;
+			_pendingRatingImage = daRating.image;
+		}
 	}
 
 	public var strumsBlocked:Array<Bool> = [];
@@ -5368,7 +5507,7 @@ class PlayState extends MusicBeatState
 				Conductor.songPosition = hitTime;
 
 		keyboardDisplay.pressed(key);
-			
+
 
 			callOnScripts('preKeyPress', [key]);
 		if(!boyfriend.stunned && generatedMusic && !endingSong)
@@ -5448,7 +5587,7 @@ class PlayState extends MusicBeatState
 				//more accurate hit time for the ratings? part 2 (Now that the calculations are done, go back to the time it was before for not causing a note stutter)
 			Conductor.songPosition = lastTime;
 			}
-			
+
 
 			var spr:StrumNote = playerStrums.members[key];
 			if(strumsBlocked[key] != true && spr != null && spr.animation.curAnim.name != 'confirm')
@@ -5575,7 +5714,7 @@ class PlayState extends MusicBeatState
 			mobileHeld[key] = false;
 			keyReleased(key);
 		}
-		
+
 
 
 		function sortHitNotes(a:Note, b:Note):Int
@@ -5639,7 +5778,7 @@ class PlayState extends MusicBeatState
 
 		// ======================== osu! 尾判 ========================
 
-		/** osu! 尾判: 初始化轨道数组 (mania 可能变化) 
+		/** osu! 尾判: 初始化轨道数组 (mania 可能变化)
 		private function ensureTailArrays():Void
 		{
 			var laneCount:Int = Note.ammo[mania];
@@ -5651,7 +5790,7 @@ class PlayState extends MusicBeatState
 		}
 			*/
 
-		/** osu! 尾判: 清除指定轨道的活动长条 
+		/** osu! 尾判: 清除指定轨道的活动长条
 		private function clearActiveHold(lane:Int):Void
 		{
 			if (lane >= 0 && lane < activeTailEnd.length)
@@ -5662,7 +5801,7 @@ class PlayState extends MusicBeatState
 		}
 			*/
 
-		/** osu! 尾判: 长条头部命中时注册活动长条 (记录尾端时间与头部 Note) 
+		/** osu! 尾判: 长条头部命中时注册活动长条 (记录尾端时间与头部 Note)
 		private function registerActiveHold(note:Note):Void
 		{
 			if (note == null || cpuControlled || playOpponent || note.isSustainNote || note.sustainLength < 1) return;
@@ -5694,7 +5833,7 @@ class PlayState extends MusicBeatState
 		 * (stepCrochet / songSpeed), 玩家松手是对着屏幕上的尾段松的。
 		 * 沿 nextNote 链找到最后一个 sustain 段 (isSustainEnd) 用它的 strumTime;
 		 * 短到没生成尾段的兜底用 chart 时长。
-		
+
 		private function computeTailEnd(head:Note):Float
 		{
 			var fallback:Float = head.strumTime + head.sustainLength;
@@ -5722,7 +5861,7 @@ class PlayState extends MusicBeatState
 		 * - 松键误差 = 松键时间 - 尾端时间, 与普通音符一样按 |误差| 使用同一套判定窗口
 		 * - 误差超出安全区 → miss (早放/晚放都算)
 		 * - 按住超过尾端 + 安全区仍不松 → 由每帧超时检查判 miss (osu: 超过晚 miss 窗口仍按住 = miss)
-		 
+
 		private function judgeTailRelease(lane:Int, releaseTime:Float):Void
 		{
 			if (lane < 0 || lane >= activeTailEnd.length) return;
@@ -5738,13 +5877,13 @@ class PlayState extends MusicBeatState
 				//tailHit(lane, tailEnd, diff, rating);
 			//clearActiveHold(lane);
 		//}
-		
+
 		/**
 		 * osu! 尾判: 松键评级 (完全还原 osu!mania: 早放/晚放对称使用同一套窗口)。
 		 * - |误差| ≤ marvelous/sick/good/bad 窗口 → 对应评级
 		 * - bad 窗口 < |误差| ≤ 安全区 → shit
 		 * - |误差| > 安全区 → miss
-		 
+
 		private function tailRatingFor(diff:Float):String
 		{
 			var absDiff:Float = Math.abs(diff);
@@ -5755,7 +5894,7 @@ class PlayState extends MusicBeatState
 		}
 			*/
 
-		/** osu! 尾判: 松键命中 → 结算长条分数 + 评级分数, 显示延迟与评级图标 
+		/** osu! 尾判: 松键命中 → 结算长条分数 + 评级分数, 显示延迟与评级图标
 		private function tailHit(lane:Int, tailEnd:Float, diff:Float, rating:String):Void
 		{
 			var head:Note = (lane < activeHoldNote.length) ? activeHoldNote[lane] : null;
@@ -5819,7 +5958,7 @@ class PlayState extends MusicBeatState
 					//ClientPrefs.data.comboStacking);
 		//}
 
-		/** osu! 尾判: 提前过多松键 → 尾判失误 (断连/扣血/计 miss) 
+		/** osu! 尾判: 提前过多松键 → 尾判失误 (断连/扣血/计 miss)
 		private function tailMiss(lane:Int, tailEnd:Float, releaseTime:Float):Void
 		{
 			var head:Note = (lane < activeHoldNote.length) ? activeHoldNote[lane] : null;
@@ -5870,21 +6009,21 @@ class PlayState extends MusicBeatState
 			msTxtKade.alpha = 1;
 			if (msTween != null) msTween.cancel();
 			msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
-			
+
 /**
 			if (instakillOnMiss)
 			{
 				vocals.volume = 0;
 				vocalsPlayer.volume = 0;
 				doDeathCheck(true);
-			}*/	
+			}*/
 			//FlxG.sound.play(Paths.soundRandom('missnote', 1, 3), FlxG.random.float(0.1, 0.2));
 			//clearActiveHold(lane);
 		//}
-		
+
 			// it's bad , yes?
 
-		/** osu! 尾判: 命中时丢弃长条剩余未命中段, 防止松键后被逐段判 miss 
+		/** osu! 尾判: 命中时丢弃长条剩余未命中段, 防止松键后被逐段判 miss
 		private function invalidateRemainingSustain(lane:Int, head:Note):Void
 		{
 			if (head == null) return;
@@ -5901,10 +6040,10 @@ class PlayState extends MusicBeatState
 					invalidateNote(n);
 				}*/
 			//});
-		
-			
 
-		/** osu! 尾判: 判 miss 时把长条剩余段恢复为未按住状态, 让它们像普通 miss 一样划过接收器 
+
+
+		/** osu! 尾判: 判 miss 时把长条剩余段恢复为未按住状态, 让它们像普通 miss 一样划过接收器
 		private function markRemainingSustainMissed(lane:Int, head:Note):Void
 		{
 			if (head == null) return;
@@ -6707,7 +6846,7 @@ class PlayState extends MusicBeatState
 						}
 					}
 					if (daNote == parentNote.tail[0]) {
-						return; 
+						return;
 					}
 				}
 			}
@@ -6770,7 +6909,8 @@ class PlayState extends MusicBeatState
 			char.playAnim(animToPlay, true);
 		}
 
-		callOnScripts('noteMiss', [notes.members.indexOf(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
+		if (hasActiveScripts())
+			callOnScripts('noteMiss', [noteIndexFast(daNote), daNote.noteData, daNote.noteType, daNote.isSustainNote]);
 	}
 
 	function noteMissPress(direction:Int = 1):Void //You pressed a key when there was no notes to press for this key
@@ -6826,25 +6966,37 @@ class PlayState extends MusicBeatState
 			vocals.volume = 0;
 			vocalsPlayer.volume = 0;
 		}
-		callOnScripts('noteMissPress', [direction]);
+		if (hasActiveScripts())
+			callOnScripts('noteMissPress', [direction]);
 	}
 
 	function opponentNoteHit(note:Note):Void
 	{
 
-
 		if (Paths.formatToSongPath(SONG.song) != 'tutorial')
 			camZooming = true;
 
-        if(note.noteType == 'Hey!' && dad.animOffsets.exists('hey') && !playOpponent) {
+		// 对手侧降阶: sing 动画与 strum confirm 同样"每轨每帧一次" (对手轨道在
+		// 万级 NPS 谱面下同样每帧数千次命中, 逐击 playAnim 是纯浪费)。
+		var oppLane:Int = Std.int(Math.abs(note.noteData));
+		var laneTotal:Int = Note.ammo[mania];
+		if (oppLane >= laneTotal) oppLane %= laneTotal;
+		var allowCharAnim:Bool = true;
+		if (oppLane >= 0 && oppLane < _oppCharAnim.length)
+		{
+			allowCharAnim = !_oppCharAnim[oppLane];
+			_oppCharAnim[oppLane] = true;
+		}
+
+        if(note.noteType == 'Hey!' && dad.animOffsets.exists('hey') && !playOpponent && allowCharAnim) {
             dad.playAnim('hey', true);
             dad.specialAnim = true;
             dad.heyTimer = 0.6;
-		    } else if(note.noteType == 'Hey!' && boyfriend.animOffsets.exists('hey') && playOpponent) {
+		    } else if(note.noteType == 'Hey!' && boyfriend.animOffsets.exists('hey') && playOpponent && allowCharAnim) {
                 boyfriend.playAnim('hey', true);
                 boyfriend.specialAnim = true;
                 boyfriend.heyTimer = 0.6;
-                } else if(!note.noAnimation) {
+                } else if(!note.noAnimation && allowCharAnim) {
                 var altAnim:String = note.animSuffix;
 
                  if (SONG.notes[curSection] != null)
@@ -6866,62 +7018,81 @@ class PlayState extends MusicBeatState
                 char.holdTimer = 0;
                     }
             }
-	
-		if (SONG.needsVoices)
+
+		if (SONG.needsVoices && vocals.volume != 1)
 			vocals.volume = 1;
-			vocalsPlayer.volume = 1;
-			opponentVocals.volume = 1;
-		var time:Float = 0.15;
-		if(note.isSustainNote && !note.animation.curAnim.name.endsWith('end')) {
-			time += 0.15;
+			if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+			if (opponentVocals.volume != 1) opponentVocals.volume = 1;
+		if (oppLane >= 0 && oppLane < _oppStrumConfirm.length && !_oppStrumConfirm[oppLane])
+		{
+			_oppStrumConfirm[oppLane] = true;
+			var time:Float = 0.15;
+			if(note.isSustainNote && !note.animation.curAnim.name.endsWith('end')) {
+				time += 0.15;
+			}
+			StrumPlayAnim(true, Std.int(Math.abs(note.noteData)), time);
 		}
-		StrumPlayAnim(true, Std.int(Math.abs(note.noteData)), time);
 		note.hitByOpponent = true;
 
-if (CompatEngine.isModern()) {
+if (CompatEngine.isModern() && hasActiveScripts()) {
 			// 0.7.3+/1.0.4: opponentNoteHitPre / goodNoteHitPre 回调
 			var preName:String = reverseNoteHit ? 'goodNoteHitPre' : 'opponentNoteHitPre';
-			var preResult:Dynamic = callOnLuas(preName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+			var preResult:Dynamic = callOnLuas(preName, [noteIndexFast(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
 			if(preResult != FunkinLua.Function_Stop && preResult != FunkinLua.Function_StopHScript && preResult != FunkinLua.Function_StopAll)
 				callOnHScript(preName, [note]);
 			if (CompatEngine.stopOnPreHitStop() && preResult == FunkinLua.Function_Stop)
+			{
 				return;
+			}
 		}
 
-		var scriptName:String = reverseNoteHit ? 'goodNoteHit' : 'opponentNoteHit';
-		var result:Dynamic;
-		if (CompatEngine.isModern()) {
-			// 0.7.3 格式: 与 opponentNoteHit 一致使用 Math.abs
-			result = callOnLuas(scriptName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
-		} else if (reverseNoteHit) {
-			// 0.6.3 格式, 但因 reverseNoteHit 实际调用了 goodNoteHit, 需传原始 noteData
-			result = callOnLuas(scriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
-		} else {
-			// 0.6.3 opponentNoteHit 本身使用 Math.abs
-			result = callOnLuas(scriptName, [notes.members.indexOf(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+		if (hasActiveScripts())
+		{
+			var scriptName:String = reverseNoteHit ? 'goodNoteHit' : 'opponentNoteHit';
+			var result:Dynamic;
+			if (CompatEngine.isModern()) {
+				// 0.7.3 格式: 与 opponentNoteHit 一致使用 Math.abs
+				result = callOnLuas(scriptName, [noteIndexFast(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+			} else if (reverseNoteHit) {
+				// 0.6.3 格式, 但因 reverseNoteHit 实际调用了 goodNoteHit, 需传原始 noteData
+				result = callOnLuas(scriptName, [noteIndexFast(note), note.noteData, note.noteType, note.isSustainNote]);
+			} else {
+				// 0.6.3 opponentNoteHit 本身使用 Math.abs
+				result = callOnLuas(scriptName, [noteIndexFast(note), Math.abs(note.noteData), note.noteType, note.isSustainNote]);
+			}
+			if(result != FunkinLua.Function_Stop && result != FunkinLua.Function_StopHScript && result != FunkinLua.Function_StopAll) callOnHScript(scriptName, [note]);
 		}
-		if(result != FunkinLua.Function_Stop && result != FunkinLua.Function_StopHScript && result != FunkinLua.Function_StopAll) callOnHScript(scriptName, [note]);
 		if (!note.isSustainNote)
 			recycleNote(note);
 		if (!ClientPrefs.data.opponentfe) {
-		for (i in 0...Note.ammo[mania]) {
-		setOpponentStrumStatic(i);
+			// 对手侧降阶: 原实现每击把全部轨道 static 化一次 (万级 NPS 下 = 命中数×轨道数次
+			// playAnim); 改为整帧一次, 同帧内重复设置不可见。
+			if (!_oppStaticSet)
+			{
+				_oppStaticSet = true;
+				for (i in 0...Note.ammo[mania]) {
+				setOpponentStrumStatic(i);
+				}
+			}
 		}
-	}
 }
 	function invalidateNote(daNote:Note):Void
 	{
 		recycleNote(daNote);
 	}
 
+
+
 	/** 击杀 Note 并回收到本 state 的 notePool；不 remove、不 destroy，members 保持有界。 */
 	private function recycleNote(daNote:Note):Void
 	{
 		if (daNote == null || daNote.pooled) return;
 		if (daNote.scale == null) return; // 已 destroy 的壳直接丢弃
+		if (daNote.culled) { daNote.culled = false; if (_culledCount > 0) _culledCount--; }
+		activeRemove(daNote);
 
-		// 长条/长条头涉及 prevNote/nextNote 链，回池复用可能让后续 sustain 链到错误对象；
-		// 为绝对保证长条正确，长条相关 Note 不进入 per-state 池，直接销毁（由 safety cleanup 移除壳）。
+		// Long-note pieces and hold heads are not pooled; destroying them keeps the
+		// prev/next chain and clipping semantics identical to the original engine.
 		if (daNote.isSustainNote || daNote.sustainLength > 0)
 		{
 			daNote.active = false;
@@ -6943,6 +7114,813 @@ if (CompatEngine.isModern()) {
 			daNote.pooled = true;
 			notePool.push(daNote);
 		}
+	}
+
+	/**
+	 * 每帧重算离屏剔除距离 (世界像素):
+	 * - 由接收器组与 HUD 相机的真实几何推导: 距最远接收器到屏幕上下边的余量
+	 *   (再留 140px 给长条裁剪/offset 抖动)。被剔除的音符必然不可见。
+	 * - 覆盖 HUD 相机缩放 (zoom<1 时可见世界范围更大)
+	 * - 除以轨道滚动方向的 |sin|: 即使模组旋转了接收器也保证正确; 纯水平滚动放弃剔除。
+	 */
+	function refreshNoteCullRanges(elapsed:Float):Void
+	{
+		var zoom:Float = (camHUD != null && camHUD.zoom > 0 && camHUD.zoom < 32) ? camHUD.zoom : 1;
+		var viewTop:Float = (camHUD != null) ? camHUD.scroll.y : 0;
+		var viewBottom:Float = viewTop + FlxG.height / zoom;
+		// 关键修复: 余量必须覆盖"帧量化超冲" —— 驻留/解除驻留的判定每帧只做一次,
+		// 低帧率下一帧内音符会多走 帧时长×流速 像素, 固定 140px 余量会被直接冲过,
+		// 音符/长条尾段在屏内闪现 (流速越大越深入屏幕)。余量随帧时长与流速放大。
+		var quantizeMs:Float = Math.max(120.0, elapsed * 1000 * 1.5);
+		var cullMargin:Float = 140 + 0.45 * songSpeed * quantizeMs;
+		_cullDistPlayer = noteCullDistFor(playerStrums, viewTop, viewBottom, cullMargin);
+		_cullDistOpponent = noteCullDistFor(opponentStrums, viewTop, viewBottom, cullMargin);
+
+		// 可视物化地平线 (ms): 音符从物化到滚入判定线的可视时长。
+		// 距离换算: px/ms = 0.45 * songSpeed * maniaScale (updateDaNote 同款公式),
+		// 取两侧剔除距离的较小者并留 20% 余量; 超出地平线物化的音符只会被
+		// 离屏驻留或数据层结算 —— speed=10 的尾杀里旧 2000ms 窗口是可视视距的 ~10 倍。
+		var cullMin:Float = Math.min(_cullDistPlayer, _cullDistOpponent);
+		var speedFactor:Float = 0.45 * songSpeed * Note.getManiaScale(mania);
+		if (speedFactor <= 0.0001) speedFactor = 0.45;
+		_visHorizonMs = Math.min(spawnTime, Math.max(120.0, (cullMin / speedFactor) * 1.2 + 50));
+	}
+
+	/**
+	 * 每轨 cos/sin 缓存: 音符位置 = strum + (cos,sin)(direction) * distance。
+	 * direction 属于 strum (每轨常量), 原实现对每个音符每帧算两次 trig ——
+	 * 屏内 ~3200 音符时是 ~6400 次/帧; 缓存后每轨每帧只算一次。
+	 */
+	function refreshLaneTrigCaches():Void
+	{
+		cacheLaneTrig(playerStrums, _playerLaneCos, _playerLaneSin);
+		cacheLaneTrig(opponentStrums, _oppLaneCos, _oppLaneSin);
+	}
+
+	static function cacheLaneTrig(group:FlxTypedGroup<StrumNote>, cosOut:Array<Float>, sinOut:Array<Float>):Void
+	{
+		var members:Array<StrumNote> = group.members;
+		var len:Int = members.length;
+		if (cosOut.length < len) cosOut.resize(len);
+		if (sinOut.length < len) sinOut.resize(len);
+		for (i in 0...len)
+		{
+			var st:StrumNote = members[i];
+			if (st == null) continue;
+			var rad:Float = st.direction * Math.PI / 180;
+			cosOut[i] = Math.cos(rad);
+			sinOut[i] = Math.sin(rad);
+		}
+	}
+
+	/** 存活列表 O(1) 移除 (swap-remove; 尾元素补位并修正其下标)。 */
+	function activeRemove(n:Note):Void
+	{
+		var i:Int = n.activeIdx;
+		if (i < 0 || i >= activeNotes.length || activeNotes[i] != n)
+			return;
+		var last:Note = activeNotes[activeNotes.length - 1];
+		activeNotes.pop();
+		if (last != n)
+		{
+			activeNotes[i] = last;
+			last.activeIdx = i;
+		}
+		n.activeIdx = -1;
+	}
+
+	/** 重置 botplay/对手侧"每轨每帧一次"门控数组 (与 strumsHit 同步, 大小随 k 值调整)。 */
+	function resetBotGateArrays():Void
+	{
+		var laneCount:Int = Note.ammo[mania] * 2;
+		if (_botCharAnim.length != laneCount)
+			_botCharAnim = [for (i in 0...laneCount) false];
+		else
+			for (i in 0...laneCount) _botCharAnim[i] = false;
+
+		if (_botStrumStatic.length != laneCount)
+			_botStrumStatic = [for (i in 0...laneCount) false];
+		else
+			for (i in 0...laneCount) _botStrumStatic[i] = false;
+
+		if (_oppCharAnim.length != laneCount)
+			_oppCharAnim = [for (i in 0...laneCount) false];
+		else
+			for (i in 0...laneCount) _oppCharAnim[i] = false;
+
+		if (_oppStrumConfirm.length != laneCount)
+			_oppStrumConfirm = [for (i in 0...laneCount) false];
+		else
+			for (i in 0...laneCount) _oppStrumConfirm[i] = false;
+
+		_oppStaticSet = false;
+	}
+
+	/**
+	 * O(1) 读取 Note 在 notes.members 的下标 (脚本回调参数用), 替代每击
+	 * notes.members.indexOf 的 O(n) 全表扫描 —— 万级成员 × 上万命中/帧 时是秒级开销。
+	 * 下标由 appendNoteFast/fasterNoteSort/压缩清理增量维护; 校验失败 (脚本/外部
+	 * 直接改过 members) 时回退一次 indexOf 并自愈缓存。
+	 */
+	function noteIndexFast(note:Note):Int
+	{
+		if (note == null) return -1;
+		var m:Array<Note> = notes.members;
+		var idx:Int = note.memberIndex;
+		if (idx >= 0 && idx < m.length && m[idx] == note)
+		{
+			return idx;
+		}
+		idx = m.indexOf(note);
+		if (idx >= 0) note.memberIndex = idx;
+		return idx;
+	}
+
+	/** 全量重建 memberIndex 缓存 (notes.sort 等整体重排路径后调用, 单趟 O(n))。 */
+	static function rebuildMemberIndexes(m:Array<Note>, len:Int):Void
+	{
+		for (i in 0...len)
+		{
+			var n:Note = m[i];
+			if (n != null) n.memberIndex = i;
+		}
+	}
+
+	/**
+	 * O(1) 均摊追加 Note 到 notes 组, 槽位选择与 FlxTypedGroup.add 一致
+	 * (优先填第一个空洞, 否则尾部追加)。add() 内部的 members.indexOf 去重检查
+	 * 与 getFirstNull 都是 O(n): 万级成员 + 密集生成时每帧浪费数十毫秒。
+	 * 仅用于本 state 的延迟物化路径 (同一 Note 绝不会重复添加)。
+	 */
+	@:privateAccess
+	function appendNoteFast(note:Note):Void
+	{
+		var m:Array<Note> = notes.members;
+		var len:Int = m.length;
+
+		// 从游标向后找第一个空洞
+		var idx:Int = _noteSlotCursor;
+		while (idx < len && m[idx] != null) idx++;
+
+		if (idx >= len)
+		{
+			// 游标之前可能有清理产生的空洞, 补扫前段
+			idx = 0;
+			while (idx < _noteSlotCursor && idx < len && m[idx] != null) idx++;
+		}
+
+		if (idx < len)
+		{
+			m[idx] = note;
+			note.memberIndex = idx;
+			if (idx >= notes.length)
+				notes.length = idx + 1;
+			_noteSlotCursor = idx + 1;
+			return;
+		}
+
+		if (notes.maxSize > 0 && notes.length >= notes.maxSize)
+			return; // 组已满: 与 add() 行为一致, 丢弃
+
+		m.push(note);
+		note.memberIndex = m.length - 1;
+		notes.length++;
+		_noteSlotCursor = m.length;
+	}
+
+	static function noteCullDistFor(group:FlxTypedGroup<StrumNote>, viewTop:Float, viewBottom:Float, margin:Float):Float
+	{
+		var minY:Float = 1e9;
+		var maxY:Float = -1e9;
+		var members:Array<StrumNote> = group.members;
+		for (i in 0...members.length)
+		{
+			var st:StrumNote = members[i];
+			if (st == null) continue;
+			if (st.y < minY) minY = st.y;
+			if (st.y > maxY) maxY = st.y;
+		}
+		if (minY > maxY) return 2200; // 接收器未就绪: 保守默认值
+
+		var below:Float = viewBottom - maxY + margin; // 向屏幕下方还能滚多远
+		var above:Float = minY - viewTop + margin;    // 向屏幕上方还能滚多远
+		var dist:Float = (below > above) ? below : above;
+
+		// 旋转/异形轨道: 按 |sin(滚动角)| 收紧阈值, 保证 "距离超限 ⇒ 必然出屏"
+		var s0:StrumNote = members[0];
+		var sinY:Float = (s0 == null) ? 1 : Math.abs(Math.sin(s0.direction * Math.PI / 180));
+		return (sinY < 0.35) ? 1e12 : dist / sinY;
+	}
+
+	/** H-Slice style fasterSort: only alive+visible notes participate in the Y sort; dead slots keep their positions. */
+	private function fasterNoteSort(order:Int):Void
+	{
+		_noteSortRange = 0;
+		var members = notes.members;
+		for (i in 0...members.length)
+		{
+			var n:Note = members[i];
+			if (n != null && n.exists && n.visible)
+			{
+				if (_noteSortArr.length <= _noteSortRange)
+					_noteSortArr.push(n);
+				else
+					_noteSortArr[_noteSortRange] = n;
+				if (_noteSortIdx.length <= _noteSortRange)
+					_noteSortIdx.push(i);
+				else
+					_noteSortIdx[_noteSortRange] = i;
+				_noteSortRange++;
+			}
+		}
+
+		if (_noteSortArr.length > _noteSortRange)
+		{
+			_noteSortArr.resize(_noteSortRange);
+			_noteSortIdx.resize(_noteSortRange);
+		}
+
+		if (_noteSortRange > 1)
+		{
+			// 比较器闭包只创建一次 (原实现每帧两个 lambda 分配, 高帧率下是稳定的 GC 压力源);
+			// 排序方向在比较器内部实时读取, 与外部 order 参数保持一致。
+			if (_cmpNoteY == null)
+				_cmpNoteY = function(a:Note, b:Note):Int {
+					var o:Int = ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING;
+					return FlxSort.byY(o, a, b);
+				};
+			if (_cmpIntAsc == null)
+				_cmpIntAsc = function(a:Int, b:Int):Int { return a - b; };
+			_noteSortArr.sort(_cmpNoteY);
+			_noteSortIdx.sort(_cmpIntAsc);
+			for (k in 0..._noteSortRange)
+			{
+				members[_noteSortIdx[k]] = _noteSortArr[k];
+				// 同步维护 memberIndex 缓存 (排序重排是缓存失效的主要来源)
+				_noteSortArr[k].memberIndex = _noteSortIdx[k];
+			}
+		}
+	}
+
+	/** Per-alive-note update hook (method reference, avoids allocating a closure every frame). */
+	private function updateDaNote(daNote:Note):Void
+	{
+		if (daNote == null || !daNote.exists) return;
+
+		_frameAliveTally++;
+
+		// H-Slice 风格离屏剔除: 音符 y 完全由 strumTime 线性派生, 远离屏幕的音符
+		// 无需逐帧三角函数/裁剪/绘制 (visible=false 让 group.draw 直接跳过)。
+		// 只对位置完全由引擎派生 (copyX&&copyY) 的音符生效; 已过击杀窗口的音符
+		// 永不驻留 —— 它们必须走正常 miss/kill 流程。
+		if (daNote.copyX && daNote.copyY && !daNote.inEditor)
+		{
+			if (!(Conductor.songPosition > noteKillOffset + daNote.strumTime))
+			{
+				var distPx:Float = Conductor.songPosition - daNote.strumTime;
+				if (distPx < 0) distPx = -distPx;
+				distPx *= 0.45 * songSpeed * daNote.multSpeed * Note.getManiaScale(daNote.mania);
+				if (distPx > (daNote.mustPress ? _cullDistPlayer : _cullDistOpponent))
+				{
+					if (!daNote.culled)
+					{
+						daNote.culled = true;
+						daNote.visible = false;
+						daNote.active = false;
+						_culledCount++;
+					}
+					return;
+				}
+			}
+		}
+		if (daNote.culled)
+		{
+			daNote.culled = false;
+			daNote.visible = true;
+			daNote.active = true;
+			_culledCount--;
+		}
+
+		// Auto-hit opponent notes
+		if (!daNote.mustPress && !daNote.hitByOpponent && !daNote.ignoreNote && daNote.strumTime <= Conductor.songPosition)
+			opponentNoteHit(daNote);
+
+		// CPU auto-hit player notes
+		if (daNote.mustPress && cpuControlled && !daNote.wasGoodHit && daNote.strumTime <= Conductor.songPosition && !daNote.ignoreNote && !daNote.blockHit)
+			goodNoteHit(daNote);
+
+		if (!daNote.exists) return;
+
+		var strumGroup:FlxTypedGroup<StrumNote> = daNote.mustPress ? playerStrums : opponentStrums;
+		var strumIdx:Int = Std.int(Math.abs(daNote.noteData));
+		if (strumIdx >= strumGroup.members.length) strumIdx %= strumGroup.members.length;
+		var strum:StrumNote = strumGroup.members[strumIdx];
+		if (strum == null) return;
+
+		var strumX:Float = strum.x + daNote.offsetX;
+		var strumY:Float = strum.y + daNote.offsetY;
+		var strumAngle:Float = strum.angle + daNote.offsetAngle;
+		var strumDirection:Float = strum.direction;
+		var strumAlpha:Float = strum.alpha * daNote.multAlpha;
+		var strumScroll:Bool = strum.downScroll;
+
+		if (strumScroll)
+			daNote.distance = (0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
+		else
+			daNote.distance = (-0.45 * (Conductor.songPosition - daNote.strumTime) * songSpeed * daNote.multSpeed) * Note.getManiaScale(daNote.mania);
+
+		// 每轨 cos/sin 缓存 (refreshLaneTrigCaches 每帧刷新); 缓存未覆盖时回退实时计算。
+		var angleDir:Float = strumDirection * Math.PI / 180;
+		var cosDir:Float = Math.cos(angleDir);
+		var sinDir:Float = Math.sin(angleDir);
+		{
+			var cosArr:Array<Float> = daNote.mustPress ? _playerLaneCos : _oppLaneCos;
+			var sinArr:Array<Float> = daNote.mustPress ? _playerLaneSin : _oppLaneSin;
+			if (strumIdx < cosArr.length && strumIdx < sinArr.length)
+			{
+				cosDir = cosArr[strumIdx];
+				sinDir = sinArr[strumIdx];
+			}
+		}
+
+		if (daNote.copyAngle)
+			daNote.angle = strumDirection - 90 + strumAngle;
+
+		if (daNote.copyAlpha)
+			daNote.alpha = strumAlpha;
+
+		if (daNote.copyX)
+			daNote.x = strumX + cosDir * daNote.distance;
+
+		if (daNote.copyY)
+		{
+			daNote.y = strumY + sinDir * daNote.distance;
+
+			if (daNote.isSustainNote)
+			{
+				var maniaScale:Float = Note.getManiaScale(daNote.mania);
+				var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+				var isEnd:Bool = (daNote.animation.curAnim != null
+					&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
+				if (strumScroll)
+				{
+					if (isEnd)
+					{
+						daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
+						daNote.y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
+						if (PlayState.isPixelStage)
+							daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
+						else
+							daNote.y -= 19 * maniaScale;
+					}
+					daNote.y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
+					daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
+				}
+			}
+		}
+
+		var center:Float = strumY + (Note.swagWidth / 2) * Note.getManiaScale(daNote.mania);
+		if (strum.sustainReduce && daNote.isSustainNote
+			&& (!daNote.mustPress || daNote.wasGoodHit))
+		{
+			var drawnTop:Float = daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
+				+ daNote.frame.offset.y * daNote.scale.y;
+			var drawnBottom:Float = drawnTop + daNote.height;
+			var swagRect:FlxRect = daNote.clipRect;
+			if (swagRect == null)
+				swagRect = new FlxRect(0, 0, daNote.frameWidth, daNote.frameHeight);
+			swagRect.x = 0;
+			swagRect.width = daNote.frameWidth;
+			if (strumScroll)
+			{
+				if (drawnBottom >= center)
+				{
+					swagRect.height = (center - drawnTop) / daNote.scale.y;
+					swagRect.y = daNote.frameHeight - swagRect.height;
+					daNote.clipRect = swagRect;
+				}
+			}
+			else
+			{
+				if (drawnTop <= center)
+				{
+					swagRect.y = (center - drawnTop) / daNote.scale.y;
+					swagRect.height = daNote.frameHeight - swagRect.y;
+					daNote.clipRect = swagRect;
+				}
+			}
+		}
+
+		// Kill late notes
+		if (Conductor.songPosition > noteKillOffset + daNote.strumTime)
+		{
+			if (daNote.mustPress && !cpuControlled && !daNote.ignoreNote && !endingSong && !daNote.wasGoodHit)
+				noteMiss(daNote);
+
+			invalidateNote(daNote);
+		}
+	}
+
+	/** Countdown light reset hook (method reference). */
+	private function resetNote(daNote:Note):Void
+	{
+		_frameAliveTally++;
+		daNote.canBeHit = false;
+		daNote.wasGoodHit = false;
+	}
+
+	/**
+	 * H-Slice 风格数据级批量推进 —— 万级 NPS 的结构性降阶。
+	 *
+	 * 核心思想: 音符密度超过"逐对象处理"能力时, 把到点/过期的未物化音符在数据层
+	 * 直接结算 (PreloadedChartNote.wasHit = true), 不再为它们构造精灵。
+	 * 结算口径与逐击路径一致 (combo/maxcombo/totalPlayed/totalNotesHit/判定计数/血量);
+	 * 表现层合并到帧末或按轨去重。
+	 *
+	 * 两层 cutoff:
+	 * - softCut (= songPosition, 仅 botplay): 已到点的未物化 tap 音符按自动命中在
+	 *   数据层结算。帧率健康时光标跑在演唱位置前面 (~2s 提前物化), 此层无事可做;
+	 *   帧率跟不上到达速率时光标落后, 溢出部分在这里被吸收 —— 打破"越卡越积、
+	 *   越积越卡"的死亡螺旋。
+	 * - hardCut (= songPosition - noteKillOffset): 过期音符 drain (原行为)。
+	 *
+	 * 含长条的谱面不再整体禁用: 扫描在第一条未结算长条处停下 (长条仍走逐对象路径,
+	 * 保留尾段/裁剪语义); 其后的 tap 在长条解决后继续 drain。
+	 *
+	 * 门控: 无 Lua/HScript、非回放、非联机 (脚本语义保持逐字节不变)。
+	 */
+	function fastSkipPastNotes():Void
+	{
+		if (!ClientPrefs.data.perfMode || !ClientPrefs.data.bulkSkip) { _bulkDrainedLast = 0; return; }
+		if (hasActiveScripts() || replayMode || seiunOnline || endingSong) { _bulkDrainedLast = 0; return; }
+		if (notesAddedCount >= unspawnNotes.length) { _bulkDrainedLast = 0; return; }
+
+		var pos:Float = Conductor.songPosition;
+		var hardCut:Float = pos - noteKillOffset;
+		// 关键修复: 原写法 "-Math.NEGATIVE_INFINITY" 是正无穷 —— 手动模式下 softCut
+		// 变 +∞, 扫描永不停且 "strumTime <= softCut" 对所有未生成音符恒真,
+		// 全部被数据层提前自动命中 (combo/回血/strum confirm 全触发), 即
+		// "没开 botplay 却部分 Note 自己按下且提前" 的根因。禁用 softCut 应取 -∞。
+		var softCut:Float = cpuControlled ? pos : Math.NEGATIVE_INFINITY;
+		// 过载 (上一帧 drain 显著非零) 时把数据层结算线推进到可视带内沿:
+		// 物化预算不足时, 近半带的音符只会在判定线附近闪现一帧就被回收,
+		// 与其白付构造费不如直接数据层结算; 物化因此集中到外半带 ——
+		// 每个精灵存活整个下落过程 (多帧可见), 视觉变成连续稀疏流而非贴线闪烁。
+		// (结算口径不变: 该自动命中的照常计入 combo/判定/血量, 只是提前几毫秒。)
+		if (cpuControlled && _overloadFrames > 0)
+			softCut = pos + _visHorizonMs * 0.5;
+		var drainTotal:Int = 0;
+
+		var drainedHit:Int = 0;
+		var skippedMiss:Int = 0;
+		var skippedMissHealth:Float = 0;
+		var skippedHit:Int = 0;
+		var skippedHitHealth:Float = 0;
+		var oppDrained:Int = 0;
+
+		while (notesAddedCount < unspawnNotes.length)
+		{
+			var d:PreloadedChartNote = unspawnNotes[notesAddedCount];
+			if (d.strumTime > hardCut && d.strumTime > softCut) break;
+			// 长条与长条头 (isSustainNote=false 但 sustainLength>0) 都留给逐对象路径:
+			// 头被数据层消费会让尾段失去 prevNote/parent 链, 破坏长条渲染。
+			if (d.isSustainNote || d.sustainLength > 0) break;
+
+			if (d.wasHit)
+			{
+				notesAddedCount++;
+				continue;
+			}
+			drainTotal++;
+
+			if (d.mustPress)
+			{
+				var lane:Int = Std.int(Math.abs(d.noteData));
+				var laneTotal:Int = Note.ammo[mania];
+				if (lane >= laneTotal) lane = lane % laneTotal;
+
+				if (d.strumTime <= softCut)
+				{
+					d.wasHit = true;
+					if (d.blockHit)
+					{
+						// 卡键音符从不参与判定: 静默消费 (与原路径最终效果一致)
+					}
+					else if (d.ignoreNote)
+					{
+						// botplay 下原路径仅触发脚本 (此处无脚本): 静默消费
+					}
+					else if (d.hitCausesMiss)
+					{
+						bulkHurtCount++;
+						combo = 0;
+						if (playOpponent)
+							health += d.missHealth * healthLoss;
+						else
+							health -= d.missHealth * healthLoss;
+						songMisses++;
+						totalPlayed++;
+					}
+					else
+					{
+						drainedHit++;
+						combo++;
+						if (combo > maxcombo) maxcombo = combo;
+						totalPlayed++;
+						songHits++;
+						notehitlol++; // HUD 总命中数口径与 totalPlayed 同源
+						totalNotesHit += 1; // botplay 判定恒为 ratingsData[0], ratingMod=1
+						if (ClientPrefs.data.marvelousRatings)
+							marvelouses++;
+						else
+							sicks++;
+						if (playOpponent)
+							health -= d.hitHealth * healthGain;
+						else
+							health += d.hitHealth * healthGain;
+						gateBotLaneAnim(lane);
+					}
+				}
+				else if (cpuControlled)
+				{
+					d.wasHit = true;
+					if (!d.ignoreNote && !d.blockHit)
+					{
+						skippedHit++;
+						skippedHitHealth += d.hitHealth;
+					}
+				}
+				else
+				{
+					d.wasHit = true;
+					if (!d.ignoreNote)
+					{
+						skippedMiss++;
+						skippedMissHealth += d.missHealth;
+					}
+				}
+			}
+			else
+			{
+				if (d.strumTime > hardCut)
+				{
+					if (!cpuControlled) break; // 手动模式: 对手只受 hardCut drain
+					// botplay: 对手 tap 到点 → 数据层结算表现门控后消费,
+					// 否则混流谱面里"到点未过期"的对手音符会卡住整条 drain 队列。
+					d.wasHit = true;
+					gateOppLaneAnim(laneOf(d.noteData));
+					oppDrained++;
+					notesAddedCount++;
+					continue;
+				}
+				d.wasHit = true;
+				oppDrained++;
+			}
+			notesAddedCount++;
+		}
+
+		_bulkDrainedLast = drainTotal;
+		if (drainedHit > 0 || skippedHit > 0 || skippedMiss > 0 || bulkHurtCount > 0 || oppDrained > 0)
+			finishBulkFrame(drainedHit, skippedHit, skippedHitHealth, skippedMiss, skippedMissHealth, oppDrained);
+	}
+
+	inline function laneOf(noteData:Int):Int
+	{
+		var lane:Int = Std.int(Math.abs(noteData));
+		var laneTotal:Int = Note.ammo[mania];
+		return (lane >= laneTotal) ? lane % laneTotal : lane;
+	}
+
+	/** botplay 到点对手音符的表现门控 (sing/confirm 动画, 每轨每帧一次)。 */
+	function gateOppLaneAnim(lane:Int, allowAnim:Bool = true):Void
+	{
+		camZooming = true;
+		if (SONG.needsVoices && vocals.volume != 1) vocals.volume = 1;
+		if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+		if (opponentVocals.volume != 1) opponentVocals.volume = 1;
+		var oIdx:Int = lane + Note.ammo[mania];
+		if (oIdx < 0 || oIdx >= _oppCharAnim.length) return;
+		if (!_oppCharAnim[oIdx])
+		{
+			_oppCharAnim[oIdx] = true;
+			var char:Character = playOpponent ? boyfriend : dad;
+			if (char != null && allowAnim)
+				char.playAnim(getSingAnimDir(lane), true);
+		}
+		if (lane < _oppStrumConfirm.length && !_oppStrumConfirm[lane])
+		{
+			_oppStrumConfirm[lane] = true;
+			StrumPlayAnim(true, lane, 0.15);
+		}
+	}
+
+	/**
+	 * botplay 到点命中的轨道表现门控: 角色 sing 动画 + 玩家侧 strum confirm,
+	 * 均为每轨每帧一次 —— 与逐击路径的表现完全一致。
+	 */
+	function gateBotLaneAnim(lane:Int):Void
+	{
+		// strum confirm (与逐击路径的 strumsHit 门控同口径, 保证击中特效不丢)
+		var shIdx:Int = lane + Note.ammo[mania];
+		if (shIdx >= 0 && shIdx < strumsHit.length && !strumsHit[shIdx])
+		{
+			strumsHit[shIdx] = true;
+			StrumPlayAnim(false, lane, calculateResetTime());
+		}
+
+		var aIdx:Int = shIdx;
+		if (aIdx < 0 || aIdx >= _botCharAnim.length) return;
+		if (_botCharAnim[aIdx]) return;
+		_botCharAnim[aIdx] = true;
+		var playChar:Character = playOpponent ? dad : boyfriend;
+		playChar.playAnim(getSingAnimDir(lane), true);
+		playChar.holdTimer = 0;
+	}
+
+	/**
+	 * 已物化音符的到点批量命中 (仅 botplay): 把逐击 goodNoteHit 的调用链
+	 * (judgeNote/popUpScore/RecalculateRating/回收) 合并为一次聚合 + O(存活数)
+	 * 的单趟扫描。结算口径与逐击路径一致; 长条/长条头仍走原路径 (裁剪/尾段语义)。
+	 * 视觉等价: 音符在判定线处消失的时机不变, 轨道动画保持每轨每帧一次。
+	 */
+	function bulkHitDueMaterialized():Void
+	{
+		if (!ClientPrefs.data.perfMode || !cpuControlled || replayMode || seiunOnline || hasActiveScripts()) return;
+
+		var pos:Float = Conductor.songPosition;
+		var hitCount:Int = 0;
+		var hurtCount:Int = 0;
+		var oppCount:Int = 0;
+
+		// 遍历存活紧凑列表; recycleNote 会 swap-remove 当前元素并把尾元素补位到
+		// 当前下标 —— 未处理的新元素需要原地复查, 因此只在"长度未变"时前进。
+		var i:Int = 0;
+		while (i < activeNotes.length)
+		{
+			var n:Note = activeNotes[i];
+			var lenBefore:Int = activeNotes.length;
+			var removed:Bool = false;
+
+			{
+				if (n == null || n.pooled || !n.exists)
+				{
+					// 幽灵槽位: 不可能出现在活跃列表, 防御性跳过
+				}
+				else if (n.isSustainNote || n.sustainLength > 0)
+				{
+					// 长条与长条头走逐对象路径 (裁剪/尾段链语义)
+					removed = false;
+				}
+				else if (n.strumTime <= pos && !n.wasGoodHit && !n.hitByOpponent)
+				{
+					if (n.mustPress)
+					{
+						if (n.blockHit || n.ignoreNote)
+						{
+							recycleNote(n); // 从不参与判定的音符: 直接回收
+							removed = true;
+						}
+						else if (n.hitCausesMiss)
+						{
+							hurtCount++;
+							combo = 0;
+							if (playOpponent)
+								health += n.missHealth * healthLoss;
+							else
+								health -= n.missHealth * healthLoss;
+							songMisses++;
+							totalPlayed++;
+							recycleNote(n);
+							removed = true;
+						}
+						else
+						{
+							hitCount++;
+							combo++;
+							if (combo > maxcombo) maxcombo = combo;
+							totalPlayed++;
+							songHits++;
+							notehitlol++; // HUD 总命中数口径同源
+							totalNotesHit += 1; // botplay 判定恒为 ratingsData[0], ratingMod=1
+							if (ClientPrefs.data.marvelousRatings)
+								marvelouses++;
+							else
+								sicks++;
+							if (playOpponent)
+								health -= n.hitHealth * healthGain;
+							else
+								health += n.hitHealth * healthGain;
+							var nMania:Int = (n.mania >= 0) ? n.mania : mania;
+							gateBotLaneAnim(Std.int(Math.abs(n.noteData)) % Note.ammo[nMania]);
+							recycleNote(n);
+							removed = true;
+						}
+					}
+					else
+					{
+						// 对手到点: opponentNoteHit 的表现门控 + 回收
+						oppCount++;
+						camZooming = true;
+						if (SONG.needsVoices && vocals.volume != 1) vocals.volume = 1;
+						if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+						if (opponentVocals.volume != 1) opponentVocals.volume = 1;
+						gateOppLaneAnim(laneOf(n.noteData), !n.noAnimation);
+						recycleNote(n);
+						removed = true;
+					}
+				}
+			}
+
+			if (!removed && activeNotes.length == lenBefore)
+				i++;
+			// removed 或长度变化: 尾元素已补位到当前下标, 原地下标复查
+		}
+
+		if (hitCount > 0)
+		{
+			if (SONG.needsVoices && vocals.volume != 1) vocals.volume = 1;
+			if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+			if (opponentVocals.volume != 1) opponentVocals.volume = 1;
+			_popupPending = true;
+			var r:Rating = (ratingsData.length > 0) ? ratingsData[0] : null;
+			_pendingRatingImage = (r != null) ? r.image : 'sick';
+			RecalculateRating(false);
+		}
+		if (hurtCount > 0)
+		{
+			vocals.volume = 0; vocalsPlayer.volume = 0;
+			_msTextDirty = true;
+			_pendingMsText = 'Miss';
+			_pendingMsColor = 0xFF0000;
+			RecalculateRating(true);
+			if (instakillOnMiss) doDeathCheck(true);
+		}
+	}
+
+	/** 本帧数据级批量结算收尾: 统一一次 RecalculateRating / 弹窗合并标记 / 音量。 */
+	function finishBulkFrame(drainedHit:Int, skippedHit:Int, skippedHitHealth:Float,
+		skippedMiss:Int, skippedMissHealth:Float, oppDrained:Int):Void
+	{
+		if (skippedHit > 0)
+		{
+			combo += skippedHit;
+			if (combo > maxcombo) maxcombo = combo;
+			totalPlayed += skippedHit;
+			songHits += skippedHit; // 口径修复: 结算 hits 此前漏加聚合命中
+			notehitlol += skippedHit; // 口径修复: HUD 总命中数此前只统计逐对象路径
+			totalNotesHit += skippedHit;
+			if (ClientPrefs.data.marvelousRatings)
+				marvelouses += skippedHit;
+			else
+				sicks += skippedHit;
+			if (playOpponent)
+				health -= skippedHitHealth * healthGain;
+			else
+				health += skippedHitHealth * healthGain;
+		}
+
+		if (skippedMiss > 0)
+		{
+			combo = 0;
+			if (!endingSong) songMisses += skippedMiss;
+			totalPlayed += skippedMiss;
+			if (playOpponent)
+				health += skippedMissHealth * healthLoss;
+			else
+				health -= skippedMissHealth * healthLoss;
+		}
+
+		if (drainedHit > 0 || skippedHit > 0)
+		{
+			if (SONG.needsVoices && vocals.volume != 1) vocals.volume = 1;
+			if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+			if (opponentVocals.volume != 1) opponentVocals.volume = 1;
+		}
+
+		if (bulkHurtCount > 0)
+		{
+			vocals.volume = 0; vocalsPlayer.volume = 0;
+			_msTextDirty = true;
+			_pendingMsText = 'Miss';
+			_pendingMsColor = 0xFF0000;
+		}
+
+		if (drainedHit > 0)
+		{
+			_popupPending = true;
+			var r:Rating = (ratingsData.length > 0) ? ratingsData[0] : null;
+			_pendingRatingImage = (r != null) ? r.image : 'sick';
+		}
+
+		if (drainedHit > 0 || skippedHit > 0)
+			RecalculateRating(false);
+		else if (skippedMiss > 0 || bulkHurtCount > 0)
+			RecalculateRating(true);
+
+		if (instakillOnMiss && (skippedMiss > 0 || bulkHurtCount > 0))
+			doDeathCheck(true);
+
+		bulkHurtCount = 0;
 	}
 
 public function setOpponentStrumStatic(direction:Int) {
@@ -7072,14 +8050,41 @@ if (!cpuControlled) {
 	onlineHitDiff = diff;
 #end
 
-	msTxtKade.text = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
-	msTxtKade.alpha = 1;
-	if (msScaleTween != null) msScaleTween.cancel();
-	msTxtKade.scale.set(1.15, 1.15);
-	msScaleTween = FlxTween.tween(msTxtKade.scale, {x: 1, y: 1}, 0.15, {ease: FlxEase.backOut});
-
-	if (msTween != null) msTween.cancel();
-	msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
+	// 万级 NPS 降阶: ms 文本同帧合并 —— 只保留本帧最后一次命中的差值,
+	// 帧末 flushHitPresentation() 统一重建一次文本 + 一对 tween。
+	// 原实现每击一次 text setter (整段字形网格重建) + 两次 tween 分配。
+	// perfMode 关闭: 保持原版逐击直写文本 + tween, 不做合并。
+	if (!ClientPrefs.data.perfMode)
+	{
+		if (rating == 'marvelous') msTxtKade.color = 0xFFFFD700;
+		else if (rating == 'sick') msTxtKade.color = 0x00FFFF;
+		else if (rating == 'good') msTxtKade.color = 0x006400;
+		else if (rating == 'bad') msTxtKade.color = 0xEEFF00;
+		else msTxtKade.color = 0xFF0000;
+		msTxtKade.text = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
+		msTxtKade.alpha = 1;
+		if (msScaleTween != null) msScaleTween.cancel();
+		msTxtKade.scale.set(1.15, 1.15);
+		msScaleTween = FlxTween.tween(msTxtKade.scale, {x: 1, y: 1}, 0.15, {ease: FlxEase.backOut});
+		if (msTween != null) msTween.cancel();
+		msTween = FlxTween.tween(msTxtKade, {alpha: 0}, 0.5, {ease: FlxEase.quintIn});
+	}
+	else
+	{
+	_msTextDirty = true;
+	_pendingMsText = Std.string(FlxMath.roundDecimal(-diff, 3)) + "ms";
+	if (rating == 'marvelous') {
+		_pendingMsColor = 0xFFFFD700;
+	} else if (rating == 'sick') {
+		_pendingMsColor = 0x00FFFF;
+	} else if (rating == 'good') {
+		_pendingMsColor = 0x006400;
+	} else if (rating == 'bad') {
+		_pendingMsColor = 0xEEFF00;
+	} else if (rating == 'shit') {
+		_pendingMsColor = 0xFF0000;
+	}
+	}
 } else {
 	sustainNotescore = 0;
 }
@@ -7088,28 +8093,33 @@ if (!cpuControlled) {
 if (!note.wasGoodHit)
 		{
 			// 0.7.3+/1.0.4: goodNoteHitPre / opponentNoteHitPre 回调
-			if (CompatEngine.isModern()) {
+if (CompatEngine.isModern() && hasActiveScripts()) {
 				var preName:String = reverseNoteHit ? 'opponentNoteHitPre' : 'goodNoteHitPre';
 				var preIsSus:Bool = note.isSustainNote;
 				var preLeData:Int = Math.round(Math.abs(note.noteData));
 				var preLeType:String = note.noteType;
-				var preResult:Dynamic = callOnLuas(preName, [notes.members.indexOf(note), preLeData, preLeType, preIsSus]);
+				var preResult:Dynamic = callOnLuas(preName, [noteIndexFast(note), preLeData, preLeType, preIsSus]);
 				if(preResult != FunkinLua.Function_Stop && preResult != FunkinLua.Function_StopHScript && preResult != FunkinLua.Function_StopAll)
 					callOnHScript(preName, [note]);
 				if (CompatEngine.stopOnPreHitStop() && preResult == FunkinLua.Function_Stop)
+				{
 					return;
+				}
 			}
 
 			// Fire scripts for ignore/hurt notes in botplay instead of skipping them.
 			if(cpuControlled && (note.ignoreNote || note.hitCausesMiss)) {
-				var botScriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
-				var botResult:Dynamic = FunkinLua.Function_Continue;
-				if (CompatEngine.isModern())
-					botResult = callOnLuas(botScriptName, [notes.members.indexOf(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
-				else
-					botResult = callOnLuas(botScriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
-				if(botResult != FunkinLua.Function_Stop && botResult != FunkinLua.Function_StopHScript && botResult != FunkinLua.Function_StopAll)
-					callOnHScript(botScriptName, [note]);
+				if (hasActiveScripts())
+				{
+					var botScriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
+					var botResult:Dynamic = FunkinLua.Function_Continue;
+					if (CompatEngine.isModern())
+						botResult = callOnLuas(botScriptName, [noteIndexFast(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
+					else
+						botResult = callOnLuas(botScriptName, [noteIndexFast(note), note.noteData, note.noteType, note.isSustainNote]);
+					if(botResult != FunkinLua.Function_Stop && botResult != FunkinLua.Function_StopHScript && botResult != FunkinLua.Function_StopAll)
+						callOnHScript(botScriptName, [note]);
+				}
 				note.wasGoodHit = true;
 				return;
 			}
@@ -7147,7 +8157,7 @@ if (!note.wasGoodHit)
 			{
 				combo += 1;
 				popUpScore(note, time);
-			} 
+			}
 			if (note.isSustainEnd && /*!ClientPrefs.data.osuTailJudgement && */!cpuControlled && !practiceMode) {
 			songScore += sustainNotescore;
 			updateScore();
@@ -7173,33 +8183,49 @@ if (!note.wasGoodHit)
 			if(!note.noAnimation && !_suppressNoteAnim) {
 				var animToPlay:String = getSingAnim(note);
 
-				if(note.gfNote)
+				// botplay 降阶: 角色动画改为"每轨每帧一次"。峰值下每帧数千次命中
+				// 原本会触发数千次 playAnim (字符串拼接 + 动画查找 + 重启), 而同轨
+				// 同帧的重启只有第一次可见; 手动模式保持逐击播放不变。
+				var allowCharAnim:Bool = true;
+				if (cpuControlled)
 				{
-					if(gf != null)
+					var aIdx:Int = note.laneData() + Note.ammo[mania];
+					if (aIdx >= 0 && aIdx < _botCharAnim.length)
 					{
-						gf.playAnim(animToPlay + note.animSuffix, true);
-						gf.holdTimer = 0;
+						allowCharAnim = !_botCharAnim[aIdx];
+						_botCharAnim[aIdx] = true;
 					}
 				}
-                else
-                    {
-                        var playChar:Character = playOpponent ? dad : boyfriend;
-                        playChar.playAnim(animToPlay + note.animSuffix, true);
-                        playChar.holdTimer = 0;
-                    }
+				if (allowCharAnim)
+				{
+					if(note.gfNote)
+					{
+						if(gf != null)
+						{
+							gf.playAnim(animToPlay + note.animSuffix, true);
+							gf.holdTimer = 0;
+						}
+					}
+					else
+						{
+							var playChar:Character = playOpponent ? dad : boyfriend;
+							playChar.playAnim(animToPlay + note.animSuffix, true);
+							playChar.holdTimer = 0;
+						}
 
-                    if(note.noteType == 'Hey!') {
-                    var heyChar:Character = playOpponent ? dad : boyfriend;
-                    if(heyChar.animOffsets.exists('hey')) {
-                    heyChar.playAnim('hey', true);
-                    heyChar.specialAnim = true;
-                    heyChar.heyTimer = 0.6;
-                }
+						if(note.noteType == 'Hey!') {
+						var heyChar:Character = playOpponent ? dad : boyfriend;
+						if(heyChar.animOffsets.exists('hey')) {
+						heyChar.playAnim('hey', true);
+						heyChar.specialAnim = true;
+						heyChar.heyTimer = 0.6;
+					}
 
-					if(gf != null && gf.animOffsets.exists('cheer')) {
-						gf.playAnim('cheer', true);
-						gf.specialAnim = true;
-						gf.heyTimer = 0.6;
+						if(gf != null && gf.animOffsets.exists('cheer')) {
+							gf.playAnim('cheer', true);
+							gf.specialAnim = true;
+							gf.heyTimer = 0.6;
+						}
 					}
 				}
 			}
@@ -7231,40 +8257,51 @@ if (!note.wasGoodHit)
 					songScore, songMisses, maxcombo, ratingPercent, ratingName, ratingFC, 0, health);
 			}
 			#end
-			vocals.volume = 1;
-			vocalsPlayer.volume = 1;
-			opponentVocals.volume = 1;
+			if (vocals.volume != 1) vocals.volume = 1;
+			if (vocalsPlayer.volume != 1) vocalsPlayer.volume = 1;
+			if (opponentVocals.volume != 1) opponentVocals.volume = 1;
 
-			var scriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
-			var result:Dynamic = FunkinLua.Function_Continue;
-			if (!cpuControlled) {
-				if (CompatEngine.isModern()) {
-					// 0.7.3 格式: 传递 Math.round(Math.abs(noteData))
-					var isSus:Bool = note.isSustainNote;
-					var leData:Int = Math.round(Math.abs(note.noteData));
-					var leType:String = note.noteType;
-					result = callOnLuas(scriptName, [notes.members.indexOf(note), leData, leType, isSus]);
-				} else {
-					// 0.6.3 格式: 传递原始 noteData (可能为负数)
-					result = callOnLuas(scriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
+			if (hasActiveScripts())
+			{
+				var scriptName:String = reverseNoteHit ? 'opponentNoteHit' : 'goodNoteHit';
+				var result:Dynamic = FunkinLua.Function_Continue;
+				if (!cpuControlled) {
+					if (CompatEngine.isModern()) {
+						// 0.7.3 格式: 传递 Math.round(Math.abs(noteData))
+						var isSus:Bool = note.isSustainNote;
+						var leData:Int = Math.round(Math.abs(note.noteData));
+						var leType:String = note.noteType;
+						result = callOnLuas(scriptName, [noteIndexFast(note), leData, leType, isSus]);
+					} else {
+						// 0.6.3 格式: 传递原始 noteData (可能为负数)
+						result = callOnLuas(scriptName, [noteIndexFast(note), note.noteData, note.noteType, note.isSustainNote]);
+					}
 				}
+				// Botplay still represents a real hit. Do not skip custom note/event
+				// scripts just because keyboard judgement was bypassed.
+				if (cpuControlled) {
+					if (CompatEngine.isModern())
+						result = callOnLuas(scriptName, [noteIndexFast(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
+					else
+						result = callOnLuas(scriptName, [noteIndexFast(note), note.noteData, note.noteType, note.isSustainNote]);
+				}
+				if(result != FunkinLua.Function_Stop && result != FunkinLua.Function_StopHScript && result != FunkinLua.Function_StopAll)
+					callOnHScript(scriptName, [note]);
 			}
-			// Botplay still represents a real hit. Do not skip custom note/event
-			// scripts just because keyboard judgement was bypassed.
-			if (cpuControlled) {
-				if (CompatEngine.isModern())
-					result = callOnLuas(scriptName, [notes.members.indexOf(note), Math.round(Math.abs(note.noteData)), note.noteType, note.isSustainNote]);
-				else
-					result = callOnLuas(scriptName, [notes.members.indexOf(note), note.noteData, note.noteType, note.isSustainNote]);
-			}
-			if(result != FunkinLua.Function_Stop && result != FunkinLua.Function_StopHScript && result != FunkinLua.Function_StopAll)
-				callOnHScript(scriptName, [note]);
 
 			if (!note.isSustainNote)
 				recycleNote(note);
 		}
 		if (cpuControlled && !ClientPrefs.data.opponentfe) {
-			setgoodnoteStrumStatic(Std.int(Math.abs(note.noteData)));
+			// botplay 降阶: static 化同样"每轨每帧一次" (原为每击一次 playAnim)
+			var stIdx:Int = Std.int(Math.abs(note.noteData));
+			var laneTotal:Int = Note.ammo[mania];
+			if (stIdx >= laneTotal) stIdx %= laneTotal;
+			if (stIdx >= 0 && stIdx < _botStrumStatic.length && !_botStrumStatic[stIdx])
+			{
+				_botStrumStatic[stIdx] = true;
+				setgoodnoteStrumStatic(stIdx);
+			}
 		}
 }
 
@@ -7284,6 +8321,9 @@ if (!note.wasGoodHit)
 	}
 
 	public function spawnNoteSplash(x:Float, y:Float, data:Int, ?note:Note = null, ?strum:StrumNote = null) {
+		if (_splashBudgetLeft <= 0 || (ClientPrefs.data.perfMode && NoteSplash.liveCount >= MAX_SPLASH_ALIVE))
+			return;
+
 		var skin:String = 'noteSplashes';
 		if(PlayState.SONG != null && PlayState.SONG.splashSkin != null && PlayState.SONG.splashSkin.length > 0) skin = PlayState.SONG.splashSkin;
 		else
@@ -7323,10 +8363,9 @@ if (!note.wasGoodHit)
 		}
 
 		var splash:NoteSplash = grpNoteSplashes.recycle(NoteSplash);
-		// 多k: 缩放与居中补偿已移入 NoteSplash.setupNoteSplash (与 offset 一起处理),
-		// 保证高 k 下溅射仍以 strum 为中心, 并让 0.7.3 白底溅射按 Note 色板染色。
 		splash.setupNoteSplash(x, y, data, skin, hue, sat, brt, note);
 		grpNoteSplashes.add(splash);
+		_splashBudgetLeft--;
 	}
 
 	// Stage-specific private methods moved to stage/*.hx handlers.
@@ -7364,6 +8403,16 @@ if (!note.wasGoodHit)
 			hscriptArray = null;
 		}
 		#end
+
+		#if cpp
+		if (_gcDisabledForSong)
+		{
+			_gcDisabledForSong = false;
+			cpp.vm.Gc.enable(true);
+			cpp.vm.Gc.run(true);
+		}
+		#end
+
 		FlxAnimationController.globalSpeed = 1;
 		if (FlxG.sound.music != null) FlxG.sound.music.pitch = 1;
 		if (ratingPopup != null) ratingPopup.destroyAll();
@@ -7393,6 +8442,10 @@ if (!note.wasGoodHit)
 			notes.clear();
 		}
 		notePool = [];
+		activeNotes.resize(0);
+		_frameAliveTally = 0;
+		_lastAliveTally = 0;
+		_noteSlotCursor = 0;
 
 		// 清空跨歌曲静态 Note 池，释放池中 Note 的动画/ColorSwap 等常驻内存。
 		if (Note.pool != null)
@@ -7458,7 +8511,13 @@ if (!note.wasGoodHit)
 
 		if (generatedMusic)
 		{
-			notes.sort(FlxSort.byY, ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+			if (ClientPrefs.data.fastSort)
+				fasterNoteSort(ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+			else
+			{
+				notes.sort(FlxSort.byY, ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+				rebuildMemberIndexes(notes.members, notes.members.length);
+			}
 		}
 
 		iconP1.scale.set(1.2, 1.2);
@@ -7517,10 +8576,23 @@ if (!note.wasGoodHit)
 			setOnScripts('altAnim', SONG.notes[curSection].altAnim);
 			setOnScripts('gfSection', SONG.notes[curSection].gfSection);
 		}
-		
+
 		setOnScripts('curSection', curSection);
 		callOnScripts('onSectionHit', []);
 	}
+	/** True when any Lua/HScript runtime may have callback handlers. Used to skip pure no-op callback+indexOf work in the hot paths. */
+	inline function hasActiveScripts():Bool
+	{
+		#if LUA_ALLOWED
+		if (luaArray != null && luaArray.length > 0) return true;
+		#end
+		#if HSCRIPT_ALLOWED
+		if (hscriptArray != null && hscriptArray.length > 0) return true;
+		#end
+		return false;
+	}
+
+
 	public function callOnScripts(funcToCall:String, args:Array<Dynamic> = null, ignoreStops = false, exclusions:Array<String> = null, excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal:Dynamic = FunkinLua.Function_Continue;
 		if(args == null) args = [];
@@ -7635,6 +8707,7 @@ if (!note.wasGoodHit)
 	override public function callOnLuas(funcToCall:String, args:Array<Dynamic> = null, ignoreStops = false, exclusions:Array<String> = null, excludeValues:Array<Dynamic> = null):Dynamic {
 		var returnVal:Dynamic = FunkinLua.Function_Continue;
 		#if LUA_ALLOWED
+		if (luaArray == null || luaArray.length == 0) return returnVal;
 		if(args == null) args = [];
 		if(exclusions == null) exclusions = [];
 		if(excludeValues == null) excludeValues = [FunkinLua.Function_Continue];
@@ -7694,13 +8767,22 @@ if (!note.wasGoodHit)
 	public var ratingPercent:Float;
 	public var ratingFC:String;
 	public function RecalculateRating(badHit:Bool = false) {
-		setOnScripts('score', songScore);
-		setOnScripts('misses', songMisses);
-		setOnScripts('hits', songHits);
-		setOnScripts('combo', combo);
+		// 万级 NPS 降阶: setOnScripts/callOnScripts 在无脚本时本就是空转, 但
+		// 每击 7 次 set + 1 次回调的调用链在峰值下仍有可观开销, 统一收进
+		// hasActiveScripts() 门控 —— 有脚本时语义逐字节保留 (含 Stop 跳过计算,
+		// 但 set 变量仍照常同步)。
+		var scriptStopped:Bool = false;
+		if (hasActiveScripts())
+		{
+			setOnScripts('score', songScore);
+			setOnScripts('misses', songMisses);
+			setOnScripts('hits', songHits);
+			setOnScripts('combo', combo);
 
-		var ret:Dynamic = callOnScripts('onRecalculateRating', [], false);
-		if(ret != FunkinLua.Function_Stop)
+			scriptStopped = (callOnScripts('onRecalculateRating', [], false) == FunkinLua.Function_Stop);
+		}
+
+		if (!scriptStopped)
 		{
 			if(totalPlayed < 1) //Prevent divide by 0
 				ratingName = '?';
@@ -7742,9 +8824,12 @@ if (!note.wasGoodHit)
 			else if (songMisses >= 10) ratingFC = "Clear";
 		}
 		updateScore(badHit); // score will only update after rating is calculated, if it's a badHit, it shouldn't bounce -Ghost
-		setOnScripts('rating', ratingPercent);
-		setOnScripts('ratingName', ratingName);
-		setOnScripts('ratingFC', ratingFC);
+		if (hasActiveScripts())
+		{
+			setOnScripts('rating', ratingPercent);
+			setOnScripts('ratingName', ratingName);
+			setOnScripts('ratingFC', ratingFC);
+		}
 	}
 
 	#if ACHIEVEMENTS_ALLOWED

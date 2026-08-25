@@ -87,6 +87,12 @@ class RGBShaderReference
 	/** enabled=false 时回退到的着色器 (本引擎: colorSwap.shader; null = 无着色器)。 */
 	public var fallbackShader:FlxShader = null;
 
+	/**
+	 * 中性感知回退: 优先用 ColorSwap 引用解析 —— 中性色时不挂任何着色器
+	 * (万级 Note 合批关键), 非中性时才实例化其 GLSL 程序。
+	 */
+	public var fallbackColorSwap:ColorSwap = null;
+
 	/** SONG.disableNoteRGB 时禁止挂载 RGB 着色器。 */
 	public var forceDisabled:Bool = false;
 
@@ -150,6 +156,8 @@ class RGBShaderReference
 		enabled = value;
 		if (value && !forceDisabled && ClientPrefs.data.shaders)
 			_owner.shader = parent.shader;
+		else if (fallbackColorSwap != null)
+			_owner.shader = fallbackColorSwap.isNeutral() ? null : fallbackColorSwap.shader;
 		else
 			_owner.shader = fallbackShader;
 		return enabled;

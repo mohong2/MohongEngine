@@ -237,6 +237,10 @@ class FlxTypedButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 	 */
 	var currentInput:IFlxInput;
 
+	#if TOUCH_CONTROLS
+	var _pendingTap:IFlxInput;
+	#end
+
 	var lastStatus = -1;
 
 	#if desktop
@@ -407,7 +411,20 @@ class FlxTypedButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 	 */
 	function updateButton():Void
 	{
+		#if TOUCH_CONTROLS
+		_pendingTap = null;
+		#end
 		var overlapFound = checkTouchOverlap();
+
+		#if TOUCH_CONTROLS
+		if (_pendingTap != null && currentInput == null && status == FlxButton.NORMAL)
+		{
+			currentInput = _pendingTap;
+			onDownHandler();
+			onUpHandler();
+			_pendingTap = null;
+		}
+		#end
 
 		if (currentInput != null && currentInput.justReleased && overlapFound)
 			onUpHandler();
@@ -472,6 +489,10 @@ class FlxTypedButton<T:FlxSprite> extends FlxSprite implements IFlxInput
 			// Allow 'swiping' to press a button (dragging it over the button while pressed)
 			if (allowSwiping && input.pressed)
 				onDownHandler();
+			#if TOUCH_CONTROLS
+			else if (input.justReleased && currentInput == null)
+				_pendingTap = input;
+			#end
 			else
 				onOverHandler();
 		}

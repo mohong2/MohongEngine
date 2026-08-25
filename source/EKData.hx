@@ -389,6 +389,106 @@ class EKData
 	 * 事件 value1 为 1 基键数 (9 = 9K), 内部 mania 为 0 基。
 	 * events 结构: [[strumTime, [[name, value1, value2], ...]], ...]
 	 */
+	/** ── Change Mania 时间线缓存 (谱面批量加载专用, 见 maniaTimelineBuild) ── */
+	private static var _mtEvents:Array<Dynamic> = null;
+	private static var _mtBase:Int = -1;
+	private static var _mtTimes:Array<Float> = [];
+	private static var _mtManias:Array<Int> = [];
+
+	/**
+	 * 预构建 "Change Mania" 事件时间线: 谱面加载循环开始前调用一次。
+	 * 之后每条 Note 用 maniaAtTimeCached 做一次二分查找即可,
+	 * 替代原先每条 Note 全事件扫描 (O(Notes×Events), 万级 Note + 事件多的谱面
+	 * 在加载阶段会冻结数秒)。events 引用与 base 一并校验, 防止跨谱面脏缓存。
+	 */
+	public static function maniaTimelineBuild(events:Array<Dynamic>, baseMania:Int):Void
+	{
+		_mtEvents = events;
+		_mtBase = clampMania(baseMania);
+		_mtTimes.resize(0);
+		_mtManias.resize(0);
+
+		if (events == null) return;
+
+		var rawTimes:Array<Float> = [];
+		var rawIdx:Array<Int> = [];
+		var rawManias:Array<Int> = [];
+
+		var evI:Int = 0;
+		for (event in events)
+		{
+			if (event == null || event[0] == null || event[1] == null) continue;
+			var evTime:Float = Std.parseFloat(Std.string(event[0]));
+			if (Math.isNaN(evTime)) continue;
+			var subEvents:Array<Dynamic> = cast event[1];
+			if (subEvents == null) continue;
+			for (subEvent in subEvents)
+			{
+				if (subEvent == null || subEvent.length < 2) continue;
+				if (Std.string(subEvent[0]) != 'Change Mania') continue;
+				var newMania:Null<Int> = Std.parseInt(Std.string(subEvent[1]));
+				if (newMania == null || Math.isNaN(newMania)) continue;
+				rawTimes.push(evTime);
+				rawIdx.push(evI);
+				rawManias.push(clampMania(newMania - 1));
+			}
+			evI++;
+		}
+
+		var total:Int = rawTimes.length;
+		if (total == 0) return;
+
+		// 按 (时间, 数组顺序) 排序; 同一时刻保留数组靠后者 (与原实现语义一致)
+		var order:Array<Int> = [for (i in 0...total) i];
+		order.sort(function(a:Int, b:Int):Int {
+			if (rawTimes[a] != rawTimes[b]) return rawTimes[a] < rawTimes[b] ? -1 : 1;
+			return rawIdx[a] - rawIdx[b];
+		});
+
+		for (oi in order)
+		{
+			var n:Int = _mtTimes.length;
+			if (n > 0 && _mtTimes[n - 1] == rawTimes[oi])
+				_mtManias[n - 1] = rawManias[oi];
+			else
+			{
+				_mtTimes.push(rawTimes[oi]);
+				_mtManias.push(rawManias[oi]);
+			}
+		}
+	}
+
+	/**
+	 * 谱面加载循环专用: 必须先对同一 events 数组 maniaTimelineBuild 过。
+	 * 无 Change Mania 事件时 O(1); 有事件时二分查找 O(log M)。
+	 */
+	public static function maniaAtTimeCached(time:Float):Int
+	{
+		var n:Int = _mtTimes.length;
+		if (n == 0) return _mtBase;
+
+		var lo:Int = 0;
+		var hi:Int = n - 1;
+		var idx:Int = -1;
+		while (lo <= hi)
+		{
+			var mid:Int = (lo + hi) >> 1;
+			if (_mtTimes[mid] <= time)
+			{
+				idx = mid;
+				lo = mid + 1;
+			}
+			else hi = mid - 1;
+		}
+		return (idx < 0) ? _mtBase : _mtManias[idx];
+	}
+
+	/** 缓存是否指向给定 events 数组 (供调用方自检/调试)。 */
+	public static function maniaTimelineMatches(events:Array<Dynamic>):Bool
+	{
+		return _mtEvents == events;
+	}
+
 	public static function effectiveManiaAtTime(events:Array<Dynamic>, baseMania:Int, time:Float):Int
 	{
 		var result:Int = clampMania(baseMania);

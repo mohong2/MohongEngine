@@ -3,34 +3,75 @@ package;
  
 import flixel.system.FlxAssets.FlxShader;
 
+/**
+ * HSV 调色容器。
+ *
+ * 万级 Note 性能关键点: GLSL 程序按"着色器实例"分批 (startQuadBatch 的 shader 相同才合批),
+ * 每 Note 一个 ColorSwapShader 实例会把同贴图音符拆成数千个 draw call。
+ * 因此 shader 改为懒创建: 中性色 (hue/sat/brt 全 0) 时 Note 不挂任何着色器,
+ * 走引擎默认管线并完全合批; 值变为非中性时通过 onChange 通知持有者再挂载。
+ */
 class ColorSwap {
-	public var shader(default, null):ColorSwapShader = new ColorSwapShader();
+	var _shader:ColorSwapShader = null;
+
+	/** 懒创建: 只有真正需要 GPU 调色时才实例化 GLSL 程序。 */
+	public var shader(get, never):ColorSwapShader;
+	function get_shader():ColorSwapShader
+	{
+		if (_shader == null)
+		{
+			_shader = new ColorSwapShader();
+			_shader.uTime.value = [hue, saturation, brightness];
+			_shader.awesomeOutline.value = [false];
+		}
+		return _shader;
+	}
+
 	public var hue(default, set):Float = 0;
 	public var saturation(default, set):Float = 0;
 	public var brightness(default, set):Float = 0;
 
+	/** 值变化回调 (Note 用它在中性↔非中性之间挂/摘着色器)。 */
+	public var onChange:Void->Void = null;
+
+	function syncShader():Void
+	{
+		if (_shader != null)
+		{
+			_shader.uTime.value[0] = hue;
+			_shader.uTime.value[1] = saturation;
+			_shader.uTime.value[2] = brightness;
+		}
+		if (onChange != null)
+			onChange();
+	}
+
 	private function set_hue(value:Float) {
 		hue = value;
-		shader.uTime.value[0] = hue;
+		syncShader();
 		return hue;
 	}
 
 	private function set_saturation(value:Float) {
 		saturation = value;
-		shader.uTime.value[1] = saturation;
+		syncShader();
 		return saturation;
 	}
 
 	private function set_brightness(value:Float) {
 		brightness = value;
-		shader.uTime.value[2] = brightness;
+		syncShader();
 		return brightness;
+	}
+
+	/** 是否为恒等变换 (无需着色器参与渲染)。 */
+	public inline function isNeutral():Bool
+	{
+		return hue == 0 && saturation == 0 && brightness == 0;
 	}
 
 	public function new()
 	{
-		shader.uTime.value = [0, 0, 0];
-		shader.awesomeOutline.value = [false];
 	}
 }
 

@@ -335,4 +335,5 @@
   "newchartEditor_convert_shuffle": "自动打乱",
   "newchartEditor_convert_double": "自动补双押",
   "newchartEditor_convert_shuffle_double": "打乱+双押"
-}
+,
+    "newchartEditor_events_tab": "事件"}

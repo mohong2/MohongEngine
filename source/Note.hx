@@ -1,6 +1,14 @@
 package;
 
 import flixel.math.FlxRect;
+import flixel.math.FlxMatrix;
+import flixel.graphics.frames.FlxFrame;
+import flixel.graphics.frames.FlxFrame.FlxFrameAngle;
+import flixel.graphics.frames.FlxFrame.FlxFrameType;
+import flixel.system.FlxAssets.FlxShader;
+import openfl.geom.ColorTransform;
+//noinspection HaxeUsingResolverPlaceInvalid
+using flixel.util.FlxColorTransformUtil;
 import editors.ChartingState;
 import openfl.utils.AssetType;
 import openfl.display.BlendMode;
@@ -157,8 +165,31 @@ class Note extends FlxSprite {
     /** Index into PlayState.unspawnNotes (PreloadedChartNote), used for data-based sustain tail lookup. */
     public var sourceIndex:Int = -1;
 
+    /**
+     * PlayState.activeNotes (存活音符紧凑列表) 的下标, -1 = 不在列表中。
+     * 由 PlayState 在物化/回收时以 O(1) swap-remove 维护,
+     * 让每帧更新/预扫只需遍历真正存活的音符而非整个 members 数组。
+     */
+    public var activeIdx:Int = -1;
+
+    /**
+     * 本 Note 在 PlayState.notes.members 中的缓存下标 (脚本回调参数用)。
+     * 由 PlayState 在追加/排序/压缩时增量维护, noteIndexFast() 以 O(1) 校验读取,
+     * 失效时才回退一次 O(n) indexOf 并自愈 —— 替代每击 notes.members.indexOf 的 O(n) 扫描。
+     */
+    public var memberIndex:Int = -1;
+
     /** True while this Note sits in PlayState.notePool (per-state recycling). */
     public var pooled:Bool = false;
+
+    /**
+     * H-Slice style off-screen culling: true while PlayState parked this note
+     * off-screen (visible forced false) because its scroll distance exceeds the
+     * screen range. PlayState restores visible when the note scrolls back into
+     * range. Scripts may still freely toggle visible; only engine-managed
+     * park/unpark pairs touch it.
+     */
+    public var culled:Bool = false;
 
     public var animSuffix:String = '';
     public var gfNote:Bool = false;
@@ -445,6 +476,72 @@ class Note extends FlxSprite {
         return new ColorSwap();
     }
 
+    /** 绑定值变化回调并按当前颜色决定是否挂载 GLSL 程序 (中性色不挂 → 引擎默认管线完全合批)。 */
+    function wireColorSwap():Void
+    {
+        if (colorSwap == null) return;
+        colorSwap.onChange = refreshSwapShader;
+        refreshSwapShader();
+    }
+
+    function refreshSwapShader():Void
+    {
+        if (colorSwap == null) return;
+        var target:FlxShader = colorSwap.isNeutral() ? null : colorSwap.shader;
+        if (shader != target)
+            shader = target;
+    }
+
+    /** 万级 Note 合批: 与引擎快速路径同条件, 但支持等比缩放 (0.7/mania 缩放的音符)。 */
+    static var _fastDrawMatrix:FlxMatrix = new FlxMatrix();
+
+    override function draw():Void
+    {
+        if (FlxG.renderTile && !pixelPerfectPosition && cameras != null && cameras.length == 1
+            && alpha > 0 && angle == 0 && scale.x == scale.y && scale.x != 0
+            && !flipX && !flipY && blend == null && shader == null)
+        {
+            @:privateAccess
+            {
+                checkEmptyFrame();
+                if (alpha > 0 && _frame != null && _frame.type != FlxFrameType.EMPTY && frames != null
+                    && _frame.angle == FlxFrameAngle.ANGLE_0 && !_frame.flipX && !_frame.flipY
+                    && (animation.curAnim == null || (!animation.curAnim.flipX && !animation.curAnim.flipY)))
+                {
+                    if (dirty)
+                        calcFrame(useFramePixels);
+
+                    final cam:FlxCamera = cameras[0];
+                    if (cam.visible && cam.exists && !isPixelPerfectRender(cam))
+                    {
+                        final s:Float = scale.x;
+                        final sx:Float = x - cam.scroll.x * scrollFactor.x - offset.x;
+                        final sy:Float = y - cam.scroll.y * scrollFactor.y - offset.y;
+                        // 与 drawComplex(angle=0 无翻转) 矩阵结果一致:
+                        // destTL = screenPos - offset + origin*(1-scale)   (centerOrigin + updateHitbox 时化简为 screenPos)
+                        final dx:Float = sx + origin.x * (1 - s);
+                        final dy:Float = sy + origin.y * (1 - s);
+                        if (dx + width > cam.viewOffsetX && dx < cam.viewOffsetWidth
+                            && dy + height > cam.viewOffsetY && dy < cam.viewOffsetHeight)
+                        {
+                            _fastDrawMatrix.identity();
+                            _fastDrawMatrix.scale(s, s);
+                            _fastDrawMatrix.translate(dx + _frame.offset.x * s, dy + _frame.offset.y * s);
+
+                            final ct:ColorTransform = colorTransform;
+                            final isColored:Bool = (ct != null && ct.hasRGBMultipliers());
+                            final hasOffsets:Bool = (ct != null && ct.hasRGBAOffsets());
+                            final item = cam.startQuadBatch(_frame.parent, isColored, hasOffsets, blend, antialiasing, null);
+                            item.addQuad(_frame, _fastDrawMatrix, ct);
+                        }
+                    }
+                    return;
+                }
+            }
+        }
+        super.draw();
+    }
+
     /**
      * 0.7.3/1.0.4 兼容: 获取某条轨道的共享 RGB 色板 (按 noteData+mania 缓存)。
      * 多k: 轨道颜色用基底纹理色 (SPACE 轨道映射为 UP, 保证只用原版资源)。
@@ -504,14 +601,14 @@ class Note extends FlxSprite {
         this.noteData = noteData;
 
         if(noteData > -1) {
-            // 先创建着色器, 再触发纹理加载 (reloadNote 内部会 applyLaneColor 设置轨道色),
-            // 避免 reloadNote 创建的着色器被构造函数再次创建的新着色器覆盖而丢失颜色
+            // 先创建着色器容器, 再触发纹理加载 (reloadNote 内部会 applyLaneColor 设置轨道色)。
+            // 中性色不挂 GLSL 程序: 万级 Note 时按 shader 实例分批会把同贴图拆成数千 draw call。
             colorSwap = makeColorSwap();
-            shader = colorSwap.shader;
+            wireColorSwap();
             // 0.7.3/1.0.4 兼容: 懒挂载的 RGB 引用, 默认回退到 colorSwap;
             // 脚本修改 rgbShader.r/g/b/mult 时才克隆并接管精灵着色器。
             rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(noteData));
-            rgbShader.fallbackShader = colorSwap.shader;
+            rgbShader.fallbackColorSwap = colorSwap;
             if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
                 rgbShader.forceDisabled = true;
             if(!skipTexture) texture = '';
@@ -688,7 +785,10 @@ class Note extends FlxSprite {
         noteSplashSat = 0;
         noteSplashBrt = 0;
         noteType = null;
-        @:bypassAccessor texture = null;
+        // 保留 texture 输入值 (不再强制置 null): setupNoteData 的 texture setter
+        // 按值比较, 相同材质直接跳过 reloadNote —— 原先每次池复用都会整趟重取图集 +
+        // 重建动画 (万级 NPS 下每帧上千次复用, 是持续段的主要 CPU 开销之一)。
+        // 材质真正变化时 setter 照常触发 reload, Lua setNoteTexture 兼容性不变。
         eventName = '';
         eventVal1 = '';
         eventVal2 = '';
@@ -698,6 +798,8 @@ class Note extends FlxSprite {
         ratingDisabled = false;
         sourceIndex = -1;
         pooled = false;
+        culled = false;
+        visible = true;
         spawned = false;
         wasGoodHit = false;
         hitByOpponent = false;
@@ -870,6 +972,17 @@ class Note extends FlxSprite {
 		}
         if(isSustainNote) scale.y = lastScaleY;
         updateHitbox();
+
+        // 材质溯源同步: 让 texture 字段始终反映"当前 frames 由哪种输入加载而来",
+        // 池化复用时 setupNoteData 的按值比较才能安全跳过重载。
+        // - 空 prefix/suffix (含 PlayState/Lua 的直接调用): 输入本身可复现 → 存原输入;
+        // - 带 prefix/suffix (如 'HURT' 变体): 不可由输入复现 → 存哨兵值,
+        //   下一次复用比较必然不等, 强制走一次正常重载恢复基础材质。
+        var directVariant:Bool = ((prefix != null && prefix.length > 0) || (suffix != null && suffix.length > 0));
+        // 注意: 本函数的参数名 texture 遮蔽了属性本身, 必须用 this.texture + bypass
+        // 直接写底层字段, 否则会再次触发 set_texture 造成递归重载。
+        var provenance:String = directVariant ? ('__direct__' + blahblah) : texture;
+        @:bypassAccessor this.texture = provenance;
         if(animName != null) animation.play(animName, true);
         if(inEditor) {
             setGraphicSize(ChartingState.GRID_SIZE, ChartingState.GRID_SIZE);
@@ -887,7 +1000,7 @@ class Note extends FlxSprite {
             // 保留 colorSwap 对象作为 rgbShader 的回退, 默认染色交给 RGB 色板 (arrowRGB)
             if (rgbShader != null)
             {
-                rgbShader.fallbackShader = (colorSwap != null) ? colorSwap.shader : null;
+                rgbShader.fallbackColorSwap = colorSwap;
                 rgbShader.enabled = true;
             }
         }
@@ -898,7 +1011,7 @@ class Note extends FlxSprite {
             if (colorSwap == null && noteData > -1 && noteType != 'Hurt Note')
             {
                 colorSwap = makeColorSwap();
-                shader = colorSwap.shader;
+                wireColorSwap();
             }
             if (colorSwap != null && noteData > -1)
                 applyLaneColor();
@@ -950,6 +1063,10 @@ class Note extends FlxSprite {
     }
 
     public function setupNoteData(chartNoteData:PreloadedChartNote):Void {
+        // 自愈: 池化复用/异常路径下 frames 缺失时强制重载一次, 避免空帧参与渲染。
+        if (frames == null || this.frame == null) {
+            @:bypassAccessor texture = null;
+        }
         wasGoodHit = false;
         hitByOpponent = false;
         tooLate = false;
@@ -1002,7 +1119,7 @@ class Note extends FlxSprite {
         applyLaneColorShader = true; // 复用后恢复默认 (Hurt/自定义纹理由后续 noteType/texture 重新决定)
         if(colorSwap == null) {
             colorSwap = makeColorSwap();
-            shader = colorSwap.shader;
+            wireColorSwap();
         }
         // 0.7.3/1.0.4 兼容: 重新绑定轨道色板 (池化复用/换 k 值后轨道色可能变化)。
         // 先确保 rgbShader 存在，再设 fallback/rebind，避免池化复用 releaseToPool 置空后空引用。
@@ -1010,7 +1127,7 @@ class Note extends FlxSprite {
             rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(chartNoteData.noteData, mania));
         else
             rgbShader.rebind(initializeGlobalRGBShader(chartNoteData.noteData, mania));
-        rgbShader.fallbackShader = colorSwap != null ? colorSwap.shader : null;
+        rgbShader.fallbackColorSwap = colorSwap;
         rgbShader.forceDisabled = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
         noteColorOverride = null;
         customCharAnim = null;

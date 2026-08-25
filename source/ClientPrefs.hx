@@ -114,6 +114,16 @@ import sys.io.Process;
 	public var unnotec:Bool = false;
 	public var cacheOnGPU:Bool = true;
 	public var preloadAssets:Bool = false;
+	/** H-Slice 性能总开关: 关闭时全部批量推进/合并重建/预算节流回到原版逐击行为。 */
+	public var perfMode:Bool = false;
+	/** H-Slice 性能项: 批量跳过已过期谱面 Note。 */
+	public var bulkSkip:Bool = false;
+	/** H-Slice 性能项: 只对可见存活 Note 做排序。 */
+	public var fastSort:Bool = false;
+	/** H-Slice 性能项: 最大同时物化 Note 数, 0 = 无限 (谨慎使用)。 */
+	public var limitNotes:Int = 0;
+	/** H-Slice 性能项: 游玩期禁用 hxcpp GC, 用内存换帧时间 (默认关, 防泄漏)。 */
+	public var disableGC:Bool = false;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [

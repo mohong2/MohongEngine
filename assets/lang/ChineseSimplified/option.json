@@ -259,5 +259,15 @@
     "option.mobileCAlpha.desc": "虚拟按键未按下时的透明程度。",
     "option.keyboard": "键盘显示",
     "option.storageType": "存储类型",
-    "option.storageType.desc": "选择游戏访问存储的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（旧版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所选路径不可用，游戏会自动回退。"
-}
+    "option.storageType.desc": "选择游戏访问存储的方式。\nEXTERNAL_DATA（最安全）→ /Android/data/<package>/files\nEXTERNAL（旧版）→ /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\n如果所选路径不可用，游戏会自动回退。",
+    "option.preloadAssets.desc": "如果勾选，会在游玩前用加载界面预加载脚本所需图片。\n减少歌曲中的卡顿，代价是首次加载时间增加。",
+    "option.perfMode": "性能模式",
+    "option.perfMode.desc": "极限谱面优化总开关（批量跳过、弹窗/溅射合并、生成预算）。关闭时游玩行为与原版引擎完全一致，仅在极端高 NPS 谱面下开启。",
+    "option.bulkSkip": "批量跳过过期音符",
+    "option.bulkSkip.desc": "H-Slice 式批量跳过已经过期的谱面音符，避免极端高 NPS 谱面的逐帧生成后立即 Miss 再回收风暴。有 Lua/HScript、回放或联机时自动关闭。",
+    "option.fastSort": "快速音符排序",
+    "option.fastSort.desc": "H-Slice 式快速排序：每帧只对可见且存活的音符排序。密集谱面下减少排序开销；若模组依赖完整组顺序可关闭。",
+    "option.limitNotes": "最大同屏音符数",
+    "option.limitNotes.desc": "同一时刻最多物化的音符数。0 表示不限，仅建议高端机器使用。数值越高渲染越多，CPU/GPU/内存开销越大。",
+    "option.disableGC": "游玩时禁用 GC",
+    "option.disableGC.desc": "游玩时禁用 hxcpp 垃圾回收，用内存换稳定帧时间，离开歌曲后自动恢复。请谨慎使用。"}

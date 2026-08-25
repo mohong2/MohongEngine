@@ -261,4 +261,14 @@
     "option.keyboard": "Keyboard Display",
     "option.storageType": "Storage Type",
     "option.storageType.desc": "Choose how the game accesses storage.\nEXTERNAL_DATA (safest) → /Android/data/<package>/files\nEXTERNAL (legacy) → /storage/emulated/0/.<game>\nEXTERNAL_OBB → /Android/obb/<package>\nEXTERNAL_MEDIA → /Android/media/<package>\n\nIf the selected path fails, the game falls back automatically."
-}
+,
+    "option.perfMode": "Performance Mode",
+    "option.perfMode.desc": "Master switch for extreme-chart optimizations (bulk skip,\npopup/splash merging, spawn budgets). When off, gameplay is identical to the\nstock engine; only enable it for absurd-NPS charts.",
+    "option.bulkSkip": "Bulk Skip Old Notes",
+    "option.bulkSkip.desc": "H-Slice style bulk skipping of already expired chart notes.\nAvoids spawn->instant miss churn on extreme NPS charts.\nAutomatically disabled while Lua/HScript/replay/online is active.",
+    "option.fastSort": "Fast Note Sorting",
+    "option.fastSort.desc": "H-Slice style faster sort: only visible/alive notes are sorted every frame.\nImproves frame time on dense charts; turn off if a mod depends on the full group order.",
+    "option.limitNotes": "Max Simultaneous Notes",
+    "option.limitNotes.desc": "Maximum materialized notes at once. 0 means unlimited (only for high-end machines).\nHigher values render more notes but cost more CPU/GPU and memory.",
+    "option.disableGC": "Disable GC During Song",
+    "option.disableGC.desc": "Disables hxcpp garbage collection while playing.\nTrades memory for stable frame time (H-Slice style).\nRe-enabled automatically when leaving the song. Use with care."}

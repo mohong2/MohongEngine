@@ -1,7 +1,7 @@
 # SeiunEngine 更新日志 · Changelog
 
-> 完整记录 2026年6月19日 至 8月23日 的所有改进、修复与突破
-> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 23, 2026.
+> 完整记录 2026年6月19日 至 8月25日 的所有改进、修复与突破
+> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 25, 2026.
 
 ---
 
@@ -275,6 +275,33 @@
 - 安卓下滚长条的亚像素接缝防护：非像素长条每段在构造时额外加约 2px 长度，使相邻段（含 TAP↔长条起始）必然重叠，避免分数 scale.y + 非 AA 时 GLES 上出现的细分缝；帧无关、无逐帧开销（保守防护，以安卓实测决定是否保留）。
 - 修复 Hurt Note 长条在经过判定区（ARROWS）时即便未按下也会消失的问题：长条裁剪（clip）条件不再把 ignoreNote（Hurt）音符当作“已命中”而提前裁剪；只有必须按的轨道在真正命中（wasGoodHit）后才裁剪，与 0.6.3 原版行为一致。
 - 修复“虚空按下”/幻按（未触碰屏幕却显示按键按下）：在释放轮询中增加反卡键复位——若某轨道当前确实未按住（多绑定/触摸释放丢失）但 strum 仍停在 'pressed'，则强制回 'static'；仅在确实未按住时才复位，因此不误伤长按/真按住。⚠ 尚未在安卓设备上验证，待实测确认。
+
+---
+
+### 2026年8月25日（万级 Note 极限性能优化 + 安卓触控修复）
+
+#### 万级 Note 极限性能优化
+
+针对上万 Note 密集谱面的掉帧问题，落地 H-Slice 风格优化体系（默认全关，可在「图形设置」按需开启）：
+
+- 新增「性能模式」总开关及子项：批量跳过期 Note / 快速 Note 排序 / 最大同时音符数 / 游玩期禁用 GC；总开关开启后启用批量结算、弹窗与溅射合并、生成节流等极限优化；
+- 离屏剔除 + 可视物化地平线 + 回池复用：屏外音符零更新零绘制，内存与 CPU 只随同时存活数增长；
+- 命中与渲染热点全面降阶：存活紧凑列表、O(1) 组追加、下标/三角函数缓存、中性色免着色器合批（同贴图数千音符合并为 1 次 draw call）；
+- Botplay 到点音符走数据层批量结算，表现层按帧合并，极限 NPS 不再进入死亡螺旋；
+- Change Mania 时间线缓存，谱面加载不再随事件数平方增长；
+- 兼容性：有 Lua/HScript 时回调语义保持原版不变，关闭开关即回到 stock 行为。
+
+#### 安卓触控修复（Hitbox 钢琴键「按下不松开」「无法按下」）
+
+根因定位：Lime 底层切换到 SDL3 后，系统手势（导航条边缘滑动、预测性返回、防误触、通知栏下拉等）抢走触摸时，Android 会发出 ACTION_CANCEL，SDL3 将其映射为新增的 SDL_EVENT_FINGER_CANCELED 事件；而 Lime 的 SDL3 后端此前只处理 DOWN/UP/MOTION 三种手指事件，取消事件被整体丢弃。SDL 内部已删除该手指，但上层（lime → openfl → flixel）的触摸状态永久停留在「按下」——表现为按键不松开；此后同一指针 id 被系统复用再按时不再产生按下边沿——表现为无法按下。两个症状同源。（SDL2 时代无此问题：上游根本未定义 ACTION_CANCEL 的处理。）钢琴键 Hitbox 手指常驻屏幕底边手势区、多指连打触发掌压拒绝，使取消事件在高版本安卓上高频出现。
+
+三层修复（纵深防御）：
+
+- Android Java 模板（SDLSurface.java）：在进入 SDL 前把 ACTION_CANCEL 转译为 ACTION_UP，所有被取消的手指走正常释放路径，恢复与 SDL2 一致的行为；随下次 APK 构建直接生效，无需重编原生库。
+- Lime SDL3 后端（SDLApplication.cpp）：补上 SDL_EVENT_FINGER_CANCELED 分支，按 TOUCH_END 分发给上层，根治取消事件丢失；下次重编 Lime 原生库后叠加生效。
+- 引擎按钮层（android.flixel.FlxButton）：快速点击恢复——按下+抬起落在同一帧窗口内时，flixel 只剩 justReleased 边沿而无任何 justPressed 帧，原逻辑会丢掉整次点击（表现为有概率无法按下）；现补发一次完整的按下/抬起回调，快速连打不再丢键。仅触摸平台启用，多相机遍历防重复触发，槽位被占用时不干扰。Hitbox 与虚拟手柄共用该按钮类，一并受益。
+
+（你知道吗？我是讨厌先更新公告的，还是交给AI吧）
 
 ---
 
@@ -558,11 +585,40 @@
 
 ---
 
+### August 25, 2026 — Extreme 10k+ Note Performance + Android Touch Fixes
+
+#### Extreme Performance for Massive Charts
+
+An H-Slice-style optimization system for charts with tens of thousands of notes, targeting frame drops under extreme density (all off by default; enable per-option in Graphics Settings):
+
+- New "Performance Mode" master switch with sub-options: batch-skip off-screen notes / fast note sorting / max concurrent notes / GC disable during gameplay; enabling the switch turns on batched hit resolution, merged popups & splashes, spawn throttling and other aggressive optimizations.
+- Off-screen culling + visible-object horizon + object pooling: off-screen notes cost zero updates and zero draws; memory and CPU scale only with concurrently alive notes.
+- Hot paths downgraded in complexity: compact alive lists, O(1) group appends, cached indices/trig, shader-free batching of neutral-color notes sharing one texture (thousands of notes merge into a single draw call).
+- Botplay resolves due notes through the data layer in batches while presentation merges per frame, avoiding death spirals at extreme NPS.
+- Change Mania event timeline caching: chart loading no longer scales quadratically with event count.
+- Compatibility: Lua/HScript callback semantics remain vanilla when scripts are present; turning switches off restores stock behavior.
+
+#### Android Touch Fixes (Hitbox piano keys stuck pressed / presses not registering)
+
+Root cause: after switching Lime's backend to SDL3, when a system gesture steals an active touch (navigation-bar edge swipes, predictive back, palm rejection, notification shade, etc.) Android sends ACTION_CANCEL, which SDL3 maps to the new SDL_EVENT_FINGER_CANCELED event. Lime's SDL3 backend only handled FINGER DOWN/UP/MOTION and silently dropped the cancel. SDL had already removed the finger internally, but the upper layers (lime → openfl → flixel) kept the touch pressed forever — keys stopped releasing; afterwards, re-pressing on the same recycled pointer id produced no fresh just-pressed edge — presses stopped registering. Both symptoms share this root. (SDL2 was unaffected because upstream never handled ACTION_CANCEL at all.) Hitbox fingers rest along the bottom gesture zone and multi-finger drumming triggers palm rejection, so cancels occur frequently on modern Android.
+
+Three-layer fix (defense in depth):
+
+- Android Java template (SDLSurface.java): translates ACTION_CANCEL into ACTION_UP before it reaches SDL, so every canceled finger follows the normal release path — restoring SDL2-era behavior. Takes effect with the next APK build; no native library rebuild required.
+- Lime SDL3 backend (SDLApplication.cpp): added the missing SDL_EVENT_FINGER_CANCELED case and dispatches it as TOUCH_END, fixing the lost-cancel at the source. Stacks in once the Lime native library is rebuilt.
+- Engine button layer (android.flixel.FlxButton): fast-tap recovery — when a press+release both land within one frame window, flixel's FlxInput only keeps a justReleased edge with no justPressed frame, so the original logic dropped the entire tap ("sometimes can't press"). The button now synthesizes a full down/up callback pair so rapid drumming never loses hits. Enabled on touch platforms only, de-duplicated across multi-camera passes, and never interferes while another finger holds the lane. FlxHitbox and FlxVirtualPad share this button class and inherit the fix.
+
+Bundled regression harness (temp/touch-fix-test/TouchFixTest.hx): replicates the FlxInput state machine, touch manager, lime event mapping and button logic layer by layer; 15 assertions cover stuck-key reproduction, reused-id missing edge, same-frame fast-tap loss/recovery, multi-camera deduplication and zero regression on normal press/hold/release — all passing. Full android-target Haxe compilation verified.
+
+(You know what? I hate updating announcements first, so let's leave it to AI)
+
+---
+
 ### Acknowledgments
 
 A huge thank you to all testers — your feedback has been invaluable in shaping SeiunEngine into what it is today.
 
 ---
 
-*本日志覆盖 SeiunEngine 自 6.19 至 8.23 全部主要变动。*
-*This changelog covers all significant changes from June 19 to August 23, 2026.*
+*本日志覆盖 SeiunEngine 自 6.19 至 8.25 全部主要变动。*
+*This changelog covers all significant changes from June 19 to August 25, 2026.*
