@@ -271,4 +271,12 @@
     "option.limitNotes": "Max Simultaneous Notes",
     "option.limitNotes.desc": "Maximum materialized notes at once. 0 means unlimited (only for high-end machines).\nHigher values render more notes but cost more CPU/GPU and memory.",
     "option.disableGC": "Disable GC During Song",
-    "option.disableGC.desc": "Disables hxcpp garbage collection while playing.\nTrades memory for stable frame time (H-Slice style).\nRe-enabled automatically when leaving the song. Use with care."}
+    "option.disableGC.desc": "Disables hxcpp garbage collection while playing.\nTrades memory for stable frame time (H-Slice style).\nRe-enabled automatically when leaving the song. Use with care.",
+    "option.gfxCpuRelease": "Big Texture RAM Release",
+    "option.gfxCpuRelease.desc": "During play, frees CPU-side copies of large textures (>=2048px) once they are on the GPU.\nRendering is pixel-identical; saves a lot of RAM on songs with big character sheets.",
+    "option.asyncImageLoading": "Async Image Loading",
+    "option.asyncImageLoading.desc": "When entering a song, shows a loading screen and decodes character sheets\non background threads in parallel with real progress.",
+    "option.gfxLruCache": "Texture Reuse Cache (LRU)",
+    "option.gfxLruCache.desc": "Keeps decoded big textures (VRAM budget ~1.5GB) after leaving a song,\nso replaying the same song skips decoding entirely.\nPixel-identical; turning off flushes the cache immediately.",
+    "option.gfxRuntimeRepack": "Runtime Texture Repack",
+    "option.gfxRuntimeRepack.desc": "While preloading, trims fully transparent borders off big character sheets\n(>=2048px) in memory and packs frames tightly, shrinking VRAM and upload time.\nPixel-identical rendering; original files are never modified."}

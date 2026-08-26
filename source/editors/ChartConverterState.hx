@@ -615,7 +615,7 @@ class ChartConverterState extends MusicBeatState
 	override function update(elapsed:Float)
 	{
 		super.update(elapsed);
-		// 从联机选歌进入转谱器时保持心跳, 避免转换耗时导致房间掉线。
+		// Keep network heartbeat active when entering chart converter from online lobby to prevent timeout disconnect.
 		if (online.client.GameClient.instance != null)
 			online.client.GameClient.instance.update(elapsed);
 	}

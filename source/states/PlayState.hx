@@ -6,6 +6,7 @@ import substates.GameOverSubstate;
 import substates.PlayStateResultsSubstate;
 import script.hscript.HScript;
 import backend.CompatEngine;
+import backend.GfxPolicy;
 import haxe.display.Display.GotoDefinitionResult;
 import flixel.graphics.FlxGraphic;
 #if cpp
@@ -688,6 +689,8 @@ class PlayState extends MusicBeatState
 
 
 		//trace('Playback Rate: ' + playbackRate);
+		// Register song entry before clearing cache to allow LRU tracking
+		GfxPolicy.onPlayStateCreate(SONG != null && SONG.song != null ? SONG.song : 'unknown');
 		Paths.clearStoredMemory();
 		// 旧 state 已在 switchState 中 destroy，useCount 已归零；
 		// 这里立即清掉上一局残留的 currentTrackedAssets，避免反复重开/换歌后图片缓存只增不减。
@@ -1842,6 +1845,10 @@ class PlayState extends MusicBeatState
 
 		Paths.clearUnusedMemory();
 
+		// SeiunEngine P6.x：预加载阶段一次性完成大纹理的显存提交与 CPU 副本释放，
+		// 避免进歌后 5 秒内分批提交造成的偶发卡顿。
+		GfxPolicy.preloadWarm();
+
 		#if cpp
 		if (ClientPrefs.data.disableGC)
 		{
@@ -1853,7 +1860,6 @@ class PlayState extends MusicBeatState
 		#end
 
 		CustomFadeTransition.nextCamera = camOther;
-
 	}
 
 	/**
@@ -4494,6 +4500,9 @@ class PlayState extends MusicBeatState
 					Paths.purgeUnusedGraphics();
 				}
 
+				// Periodic scan to release CPU copies of large graphics meeting memory policy requirements
+				GfxPolicy.onPlayUpdate(elapsed);
+
 				// Sort for correct draw order (closer to strum on top).
 				// fasterNoteSort 对长条同样安全: 只重排存活且可见的 Note, 死槽位保持原位,
 				// 绘制顺序与全表 sort 完全一致; 密集长条谱面不再退回 O(n log n) 全排序。
@@ -5151,6 +5160,8 @@ class PlayState extends MusicBeatState
 			}
 		}
 		keyboardDisplay.save();
+		// Song end: perform final graphic release scan and flush memory ledger to log
+		GfxPolicy.onSongEnd();
 		if (androidControls != null) androidControls.visible = true;
 		timeBarBG.visible = false;
 		timeBar.visible = false;
@@ -8381,6 +8392,9 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 			lua.stop();
 		}
 		luaArray = [];
+
+		// Fallback memory ledger flush for exit paths that skip endSong (e.g. death exit)
+		GfxPolicy.onPlayStateDestroy();
 
 		#if hxvlc
 		// Safety net: mods often create video objects from Lua/HScript and

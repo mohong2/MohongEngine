@@ -501,6 +501,8 @@ class ControlsSubState extends MusicBeatSubstate {
 			}
 
 			if (controls.BACK) {
+				// 离开改键界面时立即落盘 (此前依赖父状态重建时间接触发保存)
+				ClientPrefs.saveSettings();
 				ClientPrefs.reloadControls();
 				FlxTransitionableState.skipNextTransOut = true;
 				FlxG.resetState();

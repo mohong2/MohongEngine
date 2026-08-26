@@ -210,7 +210,27 @@ class Main extends Sprite
 		FlxG.signals.preStateCreate.add(function(_) {
 			Paths.clearStoredMemory();
 			Paths.clearUnusedMemory();
+			// Prune invalid entries from CPU release registry after clearing memory cache
+			backend.GfxPolicy.pruneRegistry();
 		});
+
+		// Handle GL context loss / restoration - automatically reload released CPU graphics upon restoration
+		try
+		{
+			var gfxWindow = FlxG.stage != null && FlxG.stage.window != null ? FlxG.stage.window : null;
+			if (gfxWindow != null)
+			{
+				gfxWindow.onRenderContextLost.add(function() {
+					backend.GfxPolicy.onContextLost();
+				});
+				gfxWindow.onRenderContextRestored.add(function(_) {
+					backend.GfxPolicy.onContextRestored();
+					// Evict graphics with dead GPU textures from LRU cache upon restoration
+					backend.GfxLru.onContextRestored();
+				});
+			}
+		}
+		catch (e:Dynamic) {}
 
 		// Sync separateUpdateDraw (property setter handles timer + FlxG sync)
 		if (FlxG.game != null)

@@ -162,6 +162,11 @@ class Paths
 			for (k in staleAtlasKeys)
 				atlasFramesCache.remove(k);
 
+			// Try storing in LRU cache before destroying. If retained, keep VRAM copy loaded
+			// for instant reuse on song replay. Repacked graphics are exempted from size checks.
+			if (backend.GfxLru.park(obj, fileKey, backend.GfxRepack.isPacked(fileKey)))
+				return;
+
 			obj.destroy();
 		}
 	}
@@ -248,7 +253,7 @@ class Paths
 	static var localTrackedAssetSet:Map<String, Bool> = new Map<String, Bool>();
 
 	/** Record a key as used by the current state, deduplicated to avoid unbounded string-array growth. */
-	static function trackLocalAsset(key:String):Void
+	public static function trackLocalAsset(key:String):Void
 	{
 		if (key == null || localTrackedAssetSet.exists(key)) return;
 		localTrackedAssetSet.set(key, true);
@@ -605,7 +610,11 @@ class Paths
 			}
 			currentTrackedAssets.remove(file); // zombie — force a fresh load
 		}
-		else if (FileSystem.exists(file))
+		// Return cached graphic from LRU cache if available to skip disk read, decoding, and GPU upload
+		var lruG:FlxGraphic = backend.GfxLru.lookup(file);
+		if (lruG != null)
+			return lruG;
+		if (FileSystem.exists(file))
 			bitmap = BitmapData.fromFile(file);
 		else
 		#end
@@ -619,6 +628,14 @@ class Paths
 				if (OpenFlAssets.exists(sharedTry, IMAGE))
 					file = sharedTry;
 			}
+			// shared 资源可能以两种 key 进缓存（'shared:assets/shared/...' 或 'assets/shared/...'），
+			// 统一命中，避免同一张图被缓存两份。
+			var altKey:String = null;
+			if (file.startsWith('shared:assets/shared/'))
+				altKey = 'assets/shared/' + file.substr('shared:assets/shared/'.length);
+			else if (file.startsWith('assets/shared/'))
+				altKey = 'shared:assets/shared/' + file.substr('assets/shared/'.length);
+
 			if (currentTrackedAssets.exists(file))
 			{
 				var cached:FlxGraphic = currentTrackedAssets.get(file);
@@ -631,13 +648,6 @@ class Paths
 			}
 			else
 			{
-				// shared 资源可能以两种 key 进缓存（'shared:assets/shared/...' 或 'assets/shared/...'），
-				// 统一命中，避免同一张图被缓存两份。
-				var altKey:String = null;
-				if (file.startsWith('shared:assets/shared/'))
-					altKey = 'assets/shared/' + file.substr('shared:assets/shared/'.length);
-				else if (file.startsWith('assets/shared/'))
-					altKey = 'shared:assets/shared/' + file.substr('assets/shared/'.length);
 				if (altKey != null && currentTrackedAssets.exists(altKey))
 				{
 					var altCached:FlxGraphic = currentTrackedAssets.get(altKey);
@@ -648,10 +658,21 @@ class Paths
 					}
 					currentTrackedAssets.remove(altKey);
 				}
-
-				if (OpenFlAssets.exists(file, IMAGE))
-					bitmap = getBitmapDataOnce(file);
 			}
+
+			// Check LRU resident cache before any decoding attempts
+			var lruMain:FlxGraphic = backend.GfxLru.lookup(file);
+			if (lruMain == null && altKey != null)
+			{
+				var lruAlt:FlxGraphic = backend.GfxLru.lookup(altKey);
+				if (lruAlt != null)
+					return lruAlt;
+			}
+			if (lruMain != null)
+				return lruMain;
+
+			if (bitmap == null && OpenFlAssets.exists(file, IMAGE))
+				bitmap = getBitmapDataOnce(file);
 			#if sys
 			// 直接文件系统兜底：完全不依赖 manifest 注册（覆盖 dev 运行、打包后 manifest 缺项、
 			// 或 currentLevel 为 null 时库前缀解析异常等情况）。游戏目录下资源文件是真实存在的。
@@ -665,6 +686,13 @@ class Paths
 
 				for (candidate in fsCandidates)
 				{
+					// Restore graphic directly if found in LRU candidate cache
+					var cLru:FlxGraphic = backend.GfxLru.lookup(candidate);
+					if (cLru != null)
+					{
+						file = candidate;
+						return cLru;
+					}
 					if (FileSystem.exists(candidate))
 					{
 						file = candidate;
@@ -828,6 +856,8 @@ class Paths
 		try
 		{
 			var xmlContent:String = getSparrowXml(key, library);
+			// Use packed XML generated from repacked bitmap if repacked cache hits
+			xmlContent = backend.GfxRepack.applyPackedXml(xmlContent, imageLoaded);
 			if (xmlContent == null)
 			{
 				TraceManager.error('trace.paths.atlasError', 'Failed to find sparrow XML for {}', [key]);
@@ -1088,7 +1118,13 @@ class Paths
 		var modKey:String = modsImages(key);
 		if(FileSystem.exists(modKey)) {
 			if(!currentTrackedAssets.exists(modKey)) {
-				var newBitmap:BitmapData = BitmapData.fromFile(modKey);
+				// Reuse from LRU resident cache if hit
+				var lruMod:FlxGraphic = backend.GfxLru.lookup(modKey);
+				if (lruMod != null)
+					return lruMod;
+				// Reuse pre-decoded bitmap from async loader if available
+				var newBitmap:BitmapData = backend.AsyncGfxLoader.takeDecoded(modKey);
+				if (newBitmap == null) newBitmap = BitmapData.fromFile(modKey);
 				var newGraphic:FlxGraphic = FlxGraphic.fromBitmapData(newBitmap, false, modKey);
 				newGraphic.persist = true;
 				currentTrackedAssets.set(modKey, newGraphic);
@@ -1102,7 +1138,15 @@ class Paths
 		//trace(path);
 		if (OpenFlAssets.exists(path, IMAGE)) {
 			if(!currentTrackedAssets.exists(path)) {
-				var newGraphic:FlxGraphic = FlxG.bitmap.add(path, false, path);
+				// Reuse from LRU resident cache if hit
+				var lruPath:FlxGraphic = backend.GfxLru.lookup(path);
+				if (lruPath != null)
+					return lruPath;
+				// Reuse pre-decoded bitmap from async loader if available
+				var preBmp:BitmapData = backend.AsyncGfxLoader.takeDecoded(path);
+				var newGraphic:FlxGraphic = preBmp != null
+					? FlxGraphic.fromBitmapData(preBmp, false, path)
+					: FlxG.bitmap.add(path, false, path);
 				newGraphic.persist = true;
 				currentTrackedAssets.set(path, newGraphic);
 			}

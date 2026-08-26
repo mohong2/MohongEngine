@@ -83,12 +83,11 @@ class SUtil
 
 				cachedStorageType = stType;
 				cachedStoragePath = daPath;
-				// Path works — save to ClientPrefs so next boot uses it
-				if (ClientPrefs.data.storageType != stType)
-				{
-					ClientPrefs.data.storageType = stType;
-					ClientPrefs.saveSettings();
-				}
+				// 只更新内存值。开机走到这里时存档尚未加载 (loadPrefs 还没运行,
+				// storageType 恒为 ""), 之前在这里调用 ClientPrefs.saveSettings()
+				// 会把默认键位写进 controls_v3, 覆盖玩家已保存的按键绑定 ——
+				// 安卓每次冷启动按键被重置的根因。落盘交给后续正常保存流程。
+				ClientPrefs.data.storageType = stType;
 				lastError = '';
 				break;
 			} catch (e:Dynamic) {

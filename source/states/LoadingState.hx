@@ -11,6 +11,10 @@ import lime.utils.AssetManifest;
 
 import haxe.io.Path;
 import mohong.TraceManager;
+#if sys
+import sys.FileSystem;
+import sys.io.File;
+#end
 #if VIDEOS_ALLOWED
 import backend.VideoPreloader;
 #end
@@ -18,6 +22,8 @@ import backend.VideoPreloader;
 class LoadingState extends MusicBeatState
 {
 	inline static var MIN_TIME = 1.0;
+	/** Loading watchdog timeout in seconds; forces state transition if callbacks stall. */
+	inline static var LOAD_WATCHDOG_S:Float = 90;
 	public static var instance:LoadingState;
 	// Browsers will load create(), you can make your song load a custom directory there
 	// If you're compiling to desktop (or something that doesn't use NO_PRELOAD_ALL), search for getNextState instead
@@ -30,6 +36,11 @@ class LoadingState extends MusicBeatState
 	var directory:String;
 	var callbacks:MultiCallback;
 	var targetShit:Float = 0;
+
+	// Loading timeout watchdog and heartbeat state variables
+	var loadStartAt:Float = 0;
+	var switchStarted:Bool = false;
+	var dbgAccum:Float = 0;
 
 	function new(target:FlxState, stopMusic:Bool, directory:String)
 	{
@@ -44,6 +55,10 @@ class LoadingState extends MusicBeatState
 	override function create()
 	{
 		instance = this;
+
+		#if sys
+		loadStartAt = haxe.Timer.stamp();
+		#end
 
 		#if LUA_ALLOWED
 		initLuaScripts();
@@ -73,6 +88,22 @@ class LoadingState extends MusicBeatState
 			{
 				callbacks = new MultiCallback(onLoad);
 				var introComplete = callbacks.add("introComplete");
+
+				// Pre-decode character sheets on background threads in parallel
+				#if sys
+				if (ClientPrefs.data.asyncImageLoading && Std.isOfType(target, PlayState) && PlayState.SONG != null)
+				{
+					backend.AsyncGfxLoader.beginBatch(); // Reset batch counter for current song session
+					var gfxJobs = backend.AsyncGfxLoader.collectSongImages(PlayState.SONG);
+					for (gfxJob in gfxJobs)
+					{
+						var gfxDone = callbacks.add("gfx:" + gfxJob.cacheKey);
+						backend.AsyncGfxLoader.enqueue(gfxJob.cacheKey, gfxJob.filePath, gfxDone);
+					}
+					TraceManager.info('trace.asyncGfx.enqueue',
+						'AsyncGfxLoader enqueued {} images for {}', [gfxJobs.length, PlayState.SONG.song]);
+				}
+				#end
 				#if VIDEOS_ALLOWED
 				// Make sure LibVLC is ready before entering the next state, so
 				// the first cutscene video starts immediately instead of being
@@ -115,7 +146,18 @@ class LoadingState extends MusicBeatState
 			// @:privateAccess
 			// library.pathGroups.set(symbolPath, [library.__cacheBreak(symbolPath)]);
 			var callback = callbacks.add("song:" + path);
-			Assets.loadSound(path).onComplete(function (_) { callback(); });
+			var fut = Assets.loadSound(path);
+			fut.onComplete(function(_)
+			{
+				TraceManager.info('trace.loading.soundOk', 'sound loaded: {}', [path]);
+				callback();
+			});
+			// Allow continuation on failure to prevent sound issues from hanging the loading screen
+			fut.onError(function(e)
+			{
+				TraceManager.warn('trace.loading.soundFail', 'sound load FAILED (skipping wait): {} [{}]', [path, e]);
+				callback();
+			});
 		}
 	}
 	
@@ -128,12 +170,27 @@ class LoadingState extends MusicBeatState
 				throw new haxe.Exception("Missing library: " + library);
 
 			var callback = callbacks.add("library:" + library);
-			Assets.loadLibrary(library).onComplete(function (_) { callback(); });
+			var fut = Assets.loadLibrary(library);
+			fut.onComplete(function(_)
+			{
+				TraceManager.info('trace.loading.libraryOk', 'library loaded: {}', [library]);
+				callback();
+			});
+			// Allow continuation on failure to prevent library load issues from hanging the loading screen
+			fut.onError(function(e)
+			{
+				TraceManager.warn('trace.loading.libraryFail', 'library load FAILED (skipping wait): {} [{}]', [library, e]);
+				callback();
+			});
 		}
 	}
 	
 	override function update(elapsed:Float)
 	{
+		#if sys
+		// Drain background decoding results and fire callbacks on main thread
+		backend.AsyncGfxLoader.drain();
+		#end
 		#if LUA_ALLOWED
 		callOnLuas('onUpdate', [elapsed]);
 		#end
@@ -159,10 +216,25 @@ class LoadingState extends MusicBeatState
 			targetShit = FlxMath.remapToRange(callbacks.numRemaining / callbacks.length, 1, 0, 0, 1);
 			loadBar.scale.x += 0.5 * (targetShit - loadBar.scale.x);
 		}
+
+		#if sys
+		// Watchdog: force continue after timeout to prevent hanging on loading screen
+		if (loadStartAt > 0 && !switchStarted && (haxe.Timer.stamp() - loadStartAt) > LOAD_WATCHDOG_S)
+		{
+			switchStarted = true; // Prevent re-entry inside onLoad
+			TraceManager.error('trace.loading.watchdog',
+				'LoadingState watchdog fired after {}s, forcing continue', [LOAD_WATCHDOG_S]);
+			onLoad();
+		}
+		#end
 	}
 	
 	function onLoad()
 	{
+		// Prevent late callbacks from triggering duplicate state transitions after watchdog forced exit
+		if (switchStarted) return;
+		switchStarted = true;
+
 		if (stopMusic && FlxG.sound.music != null)
 			FlxG.sound.music.stop();
 		
@@ -190,10 +262,29 @@ class LoadingState extends MusicBeatState
 		var weekDir:String = StageData.forceNextDirectory;
 		StageData.forceNextDirectory = null;
 
+		// When restarting/changing difficulty in pause menu, re-derive week directory from SONG
+		// to prevent falling back to 'shared' and failing to load week-specific assets.
+		if ((weekDir == null || weekDir.length <= 0) && Std.isOfType(target, PlayState) && PlayState.SONG != null)
+		{
+			StageData.loadDirectory(PlayState.SONG);
+			weekDir = StageData.forceNextDirectory;
+			StageData.forceNextDirectory = null;
+			TraceManager.info('trace.loading.rederiveFolder',
+				'Re-derived asset folder from SONG: {}', [weekDir != null ? weekDir : 'shared']);
+		}
+
 		if(weekDir != null && weekDir.length > 0 && weekDir != '') directory = weekDir;
 
 		Paths.setCurrentLevel(directory);
 		TraceManager.info('trace.loading.setAssetFolder', 'Setting asset folder to {}', [directory]);
+
+		// When async image loading is enabled, display loading state to pre-decode character sheets
+		#if sys
+		if (ClientPrefs.data.asyncImageLoading && Std.isOfType(target, PlayState) && PlayState.SONG != null)
+		{
+			return new LoadingState(target, stopMusic, directory);
+		}
+		#end
 
 		/*#if NO_PRELOAD_ALL
 		var loaded:Bool = false;
@@ -225,6 +316,10 @@ class LoadingState extends MusicBeatState
 	override function destroy()
 	{
 		instance = null;
+		#if sys
+		// Clean up scheduling leftovers without clearing pre-decoded graphics
+		backend.AsyncGfxLoader.reset();
+		#end
 		super.destroy();
 		
 		callbacks = null;

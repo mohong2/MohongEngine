@@ -537,7 +537,8 @@ class PauseSubState extends MusicBeatSubstate
 				var poop = Highscore.formatSong(name, curSelected);
 				PlayState.SONG = Song.loadFromJson(poop, name);
 				PlayState.storyDifficulty = curSelected;
-				MusicBeatState.resetState();
+				// Changing difficulty reloads chart assets, switch via loading state for pre-decoding
+				states.LoadingState.loadAndSwitchState(new PlayState(), true);
 				FlxG.sound.music.volume = 0;
 				PlayState.changedDifficulty = true;
 				PlayState.chartingMode = false;
@@ -860,12 +861,14 @@ class PauseSubState extends MusicBeatSubstate
 
 		if(noTrans)
 		{
+			// Local restart (e.g. Skip Time): assets stay cached, reset state directly
 			FlxTransitionableState.skipNextTransOut = true;
 			FlxG.resetState();
 		}
 		else
 		{
-			MusicBeatState.resetState();
+			// Full song restart: load via LoadingState to allow async texture pre-decoding
+			states.LoadingState.loadAndSwitchState(new PlayState(), true);
 		}
 	}
 

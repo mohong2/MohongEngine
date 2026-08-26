@@ -124,6 +124,14 @@ import sys.io.Process;
 	public var limitNotes:Int = 0;
 	/** H-Slice 性能项: 游玩期禁用 hxcpp GC, 用内存换帧时间 (默认关, 防泄漏)。 */
 	public var disableGC:Bool = false;
+	/** Release CPU-side copies of large textures (>=2048px) during gameplay to save RAM while keeping identical rendering. */
+	public var gfxCpuRelease:Bool = true;
+	/** Decode character sheets in background threads during loading and display progress. */
+	public var asyncImageLoading:Bool = true;
+	/** Store uploaded graphics in LRU cache upon song exit to skip decoding and GPU uploading on replay. */
+	public var gfxLruCache:Bool = true;
+	/** Trim transparent borders and pack frames tightly in memory for large sheets (>=2048px) with XML to reduce VRAM and load time. */
+	public var gfxRuntimeRepack:Bool = true;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
 	public var gameplaySettings:Map<String, Dynamic> = [
@@ -394,6 +402,14 @@ class ClientPrefs {
 	static inline function get_ignoreErrorLoopScripts() return data.ignoreErrorLoopScripts;
 	static inline function get_scriptErrorLimit() return data.scriptErrorLimit;
 
+	/**
+	 * 存档是否已从磁盘加载 (loadPrefs 结束后置 true)。
+	 * 在此之前 data/keyBinds 仍是出厂默认值, saveSettings() 拒绝写盘,
+	 * 防止启动早期的保存调用 (如安卓 SUtil.getStorageDirectory) 用默认键位
+	 * 覆盖玩家已保存的 controls_v3 —— 安卓每次冷启动按键被重置的根因。
+	 */
+	public static var prefsLoaded:Bool = false;
+
 	public static var keyBinds:Map<String, Array<FlxKey>> = [
 		//Key Bind, Name for ControlsSubState
 		'note_left'		=> [A, LEFT],
@@ -658,6 +674,14 @@ class ClientPrefs {
 
 	public static function saveSettings()
 	{
+		// 启动早期保护: loadPrefs 之前写盘会把默认 data/keyBinds 存进存档,
+		// 直接覆盖玩家设置 (典型受害者的 controls_v3 键位, 且安卓每次开机必触发)。
+		if (!prefsLoaded)
+		{
+			FlxG.log.warn("ClientPrefs.saveSettings() called before loadPrefs() - ignored to protect saved data");
+			return;
+		}
+
 		for (key in Reflect.fields(data))
 			Reflect.setField(FlxG.save.data, key, Reflect.field(data, key));
 
@@ -854,6 +878,9 @@ class ClientPrefs {
 		// 将加载的按键绑定同步到 Controls 系统，否则 PlayerSettings 始终使用默认值
 		reloadControls();
 		reloadVolumeKeys();
+
+		// 存档加载完成, 此后 saveSettings() 允许写盘
+		prefsLoaded = true;
 	}
 
 	inline public static function getGameplaySetting(name:String, defaultValue:Dynamic = null, ?customDefaultValue:Bool = false):Dynamic {
