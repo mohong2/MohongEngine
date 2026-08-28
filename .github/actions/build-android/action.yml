@@ -60,18 +60,12 @@ runs:
       run: |
         $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
         New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
-        $config = "$env:USERPROFILE\.hxcpp_config.xml"
-        $content = @(
-          '<xml>'
-          '  <section id="vars">'
-          '    <set name="HXCPP_COMPILE_CACHE" value="' + $cacheDir + '" />'
-          '    <set name="HXCPP_CACHE_MB" value="4000" />'
-          '  </section>'
-          '  <section id="exes">'
-          '  </section>'
-          '</xml>'
-        )
-        Set-Content -Path $config -Value $content -Encoding UTF8
+        $example = "$env:GITHUB_WORKSPACE\.haxelib\hxcpp\git\toolchain\example.hxcpp_config.xml"
+        $config = "$env:GITHUB_WORKSPACE\.hxcpp-config.xml"
+        $content = Get-Content -Raw $example
+        $content = $content -replace '(?s)(<section id="vars">)', "`$1`n  <set name=""HXCPP_COMPILE_CACHE"" value=""$cacheDir"" />`n  <set name=""HXCPP_CACHE_MB"" value=""4000"" />"
+        [System.IO.File]::WriteAllText($config, $content, [System.Text.UTF8Encoding]::new($false))
+        Add-Content -Path $env:GITHUB_ENV -Value "HXCPP_CONFIG=$config"
         Write-Output "hxcpp compile cache: $cacheDir"
 
     - name: Configure Android SDK
