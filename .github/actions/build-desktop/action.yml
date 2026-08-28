@@ -61,11 +61,19 @@ runs:
         haxelib setup "$GITHUB_WORKSPACE/.haxelib"
         haxe -cp ./setup -main Main --interp
 
-    - name: Build hxcpp tools from source on macos-arm64
+    - name: Patch hxcpp mac toolchain for arm64
       if: inputs.target == 'macos-arm64'
       shell: bash
       run: |
         set -e
+        MAC_TOOLCHAIN="$GITHUB_WORKSPACE/.haxelib/hxcpp/git/toolchain/mac-toolchain.xml"
+        sed -i.bak '/-march=x86-64-v3/d' "$MAC_TOOLCHAIN"
+        rm -f "$MAC_TOOLCHAIN.bak"
+        if grep -q 'march=x86-64-v3' "$MAC_TOOLCHAIN"; then
+          echo "warning: march=x86-64-v3 still present in mac-toolchain.xml"
+        else
+          echo "removed march=x86-64-v3 from mac-toolchain.xml"
+        fi
         cd "$GITHUB_WORKSPACE/.haxelib/hxcpp/git/tools/run"
         haxe compile.hxml
         cd "$GITHUB_WORKSPACE/.haxelib/hxcpp/git/tools/hxcpp"
