@@ -58,6 +58,7 @@ runs:
     - name: Enable hxcpp compile cache
       shell: pwsh
       run: |
+        Remove-Item "$env:USERPROFILE\.hxcpp_config.xml", "$env:USERPROFILE\.lime\config.xml" -Force -ErrorAction SilentlyContinue
         $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
         $cacheDir = $cacheDir -replace '\\','/'
         New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
@@ -92,10 +93,7 @@ runs:
 
     - name: Rebuild Lime Android ndll (SDL3)
       shell: pwsh
-      run: |
-        $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
-        $cacheDir = $cacheDir -replace '\\','/'
-        haxelib run lime rebuild android ${{ inputs.arch }} -release -Dlime-sdl3 -D HXCPP_COMPILE_CACHE="$cacheDir" -D HXCPP_CACHE_MB=4000
+      run: haxelib run lime rebuild android ${{ inputs.arch }} -release -Dlime-sdl3
 
     - name: Compile Android
       shell: pwsh

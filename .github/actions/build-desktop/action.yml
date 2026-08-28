@@ -64,6 +64,7 @@ runs:
     - name: Enable hxcpp compile cache
       shell: bash
       run: |
+        rm -f "$HOME/.hxcpp_config.xml" "$HOME/.lime/config.xml"
         CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
         CACHE_DIR="${CACHE_DIR//\\//}"
         mkdir -p "$CACHE_DIR"
@@ -98,10 +99,7 @@ runs:
 
     - name: Rebuild Lime ndll (SDL3)
       shell: bash
-      run: |
-        CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
-        CACHE_DIR="${CACHE_DIR//\\//}"
-        ${{ inputs.rebuild }} -D HXCPP_COMPILE_CACHE="$CACHE_DIR" -D HXCPP_CACHE_MB=4000
+      run: ${{ inputs.rebuild }}
 
     - name: Compile
       shell: bash
