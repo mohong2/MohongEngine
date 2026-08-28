@@ -65,9 +65,23 @@ runs:
       shell: bash
       run: |
         rm -f "$HOME/.hxcpp_config.xml" "$HOME/.lime/config.xml"
+        mkdir -p "$HOME/.lime"
+        cat > "$HOME/.lime/config.xml" <<'EOF'
+        <?xml version="1.0" encoding="utf-8"?>
+        <config>
+          <section id="defines">
+          </section>
+        </config>
+        EOF
         CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
         CACHE_DIR="${CACHE_DIR//\\//}"
         mkdir -p "$CACHE_DIR"
+        EXAMPLE="$GITHUB_WORKSPACE/.haxelib/hxcpp/git/toolchain/example.hxcpp_config.xml"
+        EXAMPLE="${EXAMPLE//\\//}"
+        CONFIG="$GITHUB_WORKSPACE/.hxcpp-config.xml"
+        CONFIG="${CONFIG//\\//}"
+        awk -v cache="$CACHE_DIR" '/<section id="vars">/ { print; printf "  <set name=\"HXCPP_COMPILE_CACHE\" value=\"%s\" />\n", cache; print "  <set name=\"HXCPP_CACHE_MB\" value=\"4000\" />"; next } 1' "$EXAMPLE" > "$CONFIG"
+        echo "HXCPP_CONFIG=$CONFIG" >> "$GITHUB_ENV"
         echo "hxcpp compile cache: $CACHE_DIR"
 
     - name: Init discord_rpc submodules
@@ -103,10 +117,7 @@ runs:
 
     - name: Compile
       shell: bash
-      run: |
-        CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
-        CACHE_DIR="${CACHE_DIR//\\//}"
-        ${{ inputs.build }} -D "HXCPP_COMPILE_CACHE=$CACHE_DIR" -D "HXCPP_CACHE_MB=4000"
+      run: ${{ inputs.build }}
 
     - name: Ad-hoc codesign macOS app
       if: startsWith(inputs.target, 'macos')
