@@ -61,14 +61,6 @@ runs:
         $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
         $cacheDir = $cacheDir -replace '\\','/'
         New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
-        $example = "$env:GITHUB_WORKSPACE\.haxelib\hxcpp\git\toolchain\example.hxcpp_config.xml"
-        $example = $example -replace '\\','/'
-        $config = "$env:GITHUB_WORKSPACE\.hxcpp-config.xml"
-        $config = $config -replace '\\','/'
-        $content = Get-Content -Raw $example
-        $content = $content -replace '(?s)(<section id="vars">)', "`$1`n  <set name=""HXCPP_COMPILE_CACHE"" value=""$cacheDir"" />`n  <set name=""HXCPP_CACHE_MB"" value=""4000"" />"
-        [System.IO.File]::WriteAllText($config, $content, [System.Text.UTF8Encoding]::new($false))
-        Add-Content -Path $env:GITHUB_ENV -Value "HXCPP_CONFIG=$config"
         Write-Output "hxcpp compile cache: $cacheDir"
 
     - name: Configure Android SDK
@@ -100,13 +92,19 @@ runs:
 
     - name: Rebuild Lime Android ndll (SDL3)
       shell: pwsh
-      run: haxelib run lime rebuild android ${{ inputs.arch }} -release -Dlime-sdl3
+      run: |
+        $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
+        $cacheDir = $cacheDir -replace '\\','/'
+        haxelib run lime rebuild android ${{ inputs.arch }} -release -Dlime-sdl3 -D HXCPP_COMPILE_CACHE="$cacheDir" -D HXCPP_CACHE_MB=4000
 
     - name: Compile Android
       shell: pwsh
       env:
         _JAVA_OPTIONS: "-Xmx5g -XX:MaxMetaspaceSize=1g"
-      run: haxelib run lime build android ${{ inputs.arch }} --app-version="$env:APP_VERSION-${{ github.run_id }}"
+      run: |
+        $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
+        $cacheDir = $cacheDir -replace '\\','/'
+        haxelib run lime build android ${{ inputs.arch }} --app-version="$env:APP_VERSION-${{ github.run_id }}" -D HXCPP_COMPILE_CACHE="$cacheDir" -D HXCPP_CACHE_MB=4000
 
     - name: Prepare APK artifact
       shell: pwsh

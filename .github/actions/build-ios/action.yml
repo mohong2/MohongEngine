@@ -37,12 +37,6 @@ runs:
         CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
         CACHE_DIR="${CACHE_DIR//\\//}"
         mkdir -p "$CACHE_DIR"
-        EXAMPLE="$GITHUB_WORKSPACE/.haxelib/hxcpp/git/toolchain/example.hxcpp_config.xml"
-        EXAMPLE="${EXAMPLE//\\//}"
-        CONFIG="$GITHUB_WORKSPACE/.hxcpp-config.xml"
-        CONFIG="${CONFIG//\\//}"
-        awk -v cache="$CACHE_DIR" '/<section id="vars">/ { print; printf "  <set name=\"HXCPP_COMPILE_CACHE\" value=\"%s\" />\n", cache; print "  <set name=\"HXCPP_CACHE_MB\" value=\"4000\" />"; next } 1' "$EXAMPLE" > "$CONFIG"
-        echo "HXCPP_CONFIG=$CONFIG" >> "$GITHUB_ENV"
         echo "hxcpp compile cache: $CACHE_DIR"
 
     - name: Patch hxcpp zlib for iOS 18 SDK
@@ -84,11 +78,17 @@ runs:
 
     - name: Rebuild Lime iOS ndll
       shell: bash
-      run: haxelib run lime rebuild ios -arm64 -release
+      run: |
+        CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
+        CACHE_DIR="${CACHE_DIR//\\//}"
+        haxelib run lime rebuild ios -arm64 -release -D HXCPP_COMPILE_CACHE="$CACHE_DIR" -D HXCPP_CACHE_MB=4000
 
     - name: Compile iOS (device, arm64)
       shell: bash
-      run: haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}"
+      run: |
+        CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
+        CACHE_DIR="${CACHE_DIR//\\//}"
+        haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}" -D HXCPP_COMPILE_CACHE="$CACHE_DIR" -D HXCPP_CACHE_MB=4000
 
     - name: Package IPA
       shell: bash

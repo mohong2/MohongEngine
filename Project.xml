@@ -53,7 +53,7 @@
 	<define name="LUA_ALLOWED" if="desktop || mobile" />
 	<define name="HSCRIPT_ALLOWED" if="desktop || mobile" />
 	<define name="ACHIEVEMENTS_ALLOWED" />
-	<define name="CHECK_FOR_UPDATES" if="ONLINE_ALLOWED" />
+	<define name="CHECK_FOR_UPDATES" if="ONLINE_ALLOWED || release"/>
 
 	<define name="VIDEOS_ALLOWED" if="web || windows || linux || mac || android || ios" unless="32bits"/>
 	<define name="PSYCH_WATERMARKS"/>
