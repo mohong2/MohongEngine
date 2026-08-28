@@ -86,7 +86,7 @@ runs:
       run: |
         CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
         CACHE_DIR="${CACHE_DIR//\\//}"
-        haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}" -D HXCPP_COMPILE_CACHE="$CACHE_DIR" -D HXCPP_CACHE_MB=4000
+        haxelib run lime build ios -arm64 --app-version="$APP_VERSION-${{ github.run_id }}" -D "HXCPP_COMPILE_CACHE=$CACHE_DIR" -D "HXCPP_CACHE_MB=4000"
 
     - name: Package IPA
       shell: bash

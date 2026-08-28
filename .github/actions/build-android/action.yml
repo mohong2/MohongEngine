@@ -102,7 +102,7 @@ runs:
       run: |
         $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
         $cacheDir = $cacheDir -replace '\\','/'
-        haxelib run lime build android ${{ inputs.arch }} --app-version="$env:APP_VERSION-${{ github.run_id }}" -D HXCPP_COMPILE_CACHE="$cacheDir" -D HXCPP_CACHE_MB=4000
+        haxelib run lime build android ${{ inputs.arch }} --app-version="$env:APP_VERSION-${{ github.run_id }}" -D "HXCPP_COMPILE_CACHE=$cacheDir" -D "HXCPP_CACHE_MB=4000"
 
     - name: Prepare APK artifact
       shell: pwsh
