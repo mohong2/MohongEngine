@@ -40,8 +40,9 @@
     },
     {
       "name": "hxcpp",
-      "type": "haxelib",
-      "version": "4.2.1"
+      "type": "git",
+      "url": "https://github.com/mohong2/hxcpp.git",
+      "ref": "main"
     },
     {
       "name": "hscript-seiun",

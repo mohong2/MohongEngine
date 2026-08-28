@@ -4363,6 +4363,30 @@ function setupNoteData(i:Array<Dynamic>, isNextSection:Bool):Note
 		for (f in Reflect.fields(_song))
 			Reflect.setField(songCopy, f, Reflect.field(_song, f));
 		if (!includeManiaField) Reflect.deleteField(songCopy, 'mania');
+
+		// 深拷贝，避免 castVersion（旧格式转换）原地修改编辑器 _song 数据。
+		if (songCopy.notes != null)
+		{
+			var notesArr:Array<Dynamic> = cast songCopy.notes;
+			var newNotes:Array<Dynamic> = [];
+			for (sec in notesArr)
+			{
+				var newSec:Dynamic = Reflect.copy(sec);
+				var secNotes:Array<Dynamic> = sec.sectionNotes != null ? cast sec.sectionNotes : [];
+				var newSectionNotes:Array<Dynamic> = [];
+				for (note in secNotes)
+					newSectionNotes.push((note != null && Std.isOfType(note, Array)) ? note.copy() : note);
+				newSec.sectionNotes = newSectionNotes;
+				newNotes.push(newSec);
+			}
+			songCopy.notes = newNotes;
+		}
+
+		// 保存为 0.6.3/EK 可读的旧格式：去掉 psych_v1 format，
+		// 并把全局玩家/对手半区转换为按 mustHitSection 区分的左右半区。
+		if (Reflect.hasField(songCopy, 'format')) Reflect.deleteField(songCopy, 'format');
+		Song.castVersion((cast songCopy : SwagSong));
+
 		var json = { "song": songCopy };
 
 		var data:String = Json.stringify(json, "\t");

@@ -1,4 +1,11 @@
 {
+	"back": "◀ 返回",
+	"bg_title": "背景编辑器",
+	"object_explorer": "对象",
+	"add_sprite_short": "+ 精灵",
+	"delete_short": "删除",
+	"current_stage": "场景：",
+	"unsaved_badge": "● 未保存",
 	"edit_mode": "编辑模式：",
 	"mode_sprites": "[精灵编辑]",
 	"mode_chars": "[角色编辑]",

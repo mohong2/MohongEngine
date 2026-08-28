@@ -3,24 +3,35 @@ package editors;
 #if cpp
 import Discord.DiscordClient;
 #end
-import flixel.addons.display.FlxGridOverlay;
-import flixel.addons.transition.FlxTransitionableState;
-import flixel.system.FlxSound;
-import flixel.ui.FlxButton;
-import openfl.net.FileReference;
-import openfl.events.Event;
-import openfl.events.IOErrorEvent;
-import flash.net.FileFilter;
-import haxe.Json;
+
+import flixel.FlxG;
+import flixel.FlxSprite;
+import flixel.group.FlxGroup.FlxTypedGroup;
+import flixel.text.FlxText;
+import flixel.util.FlxColor;
 import backend.ui.*;
-#if sys
+import editors.content.EditorsText;
+import editors.content.Prompt;
+#if MODS_ALLOWED
 import sys.io.File;
 import sys.FileSystem;
 #end
 
 using StringTools;
-import mohong.TraceManager;
 
+/**
+ * Credits Editor — completely redesigned around a two-pane workflow:
+ *
+ *  - Left pane: scrollable entry list (sections, spacers and members).
+ *  - Right pane: contextual inspector + easy reorder/add/delete actions.
+ *  - Top/bottom bars keep navigation, save/load and status always visible.
+ *
+ * Editing follows the actual in-game mod credits format:
+ * `mods/<currentMod>/data/credits.txt`, one credit per line:
+ *   Section Name
+ *   Name::icon::description::link::color
+ *   (blank line = spacer)
+ */
 class CreditsEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent
 {
 	/** Unsaved changes flag — prompts confirm dialog on exit. */
@@ -35,523 +46,900 @@ class CreditsEditorState extends MusicBeatState implements PsychUIEventHandler.P
 		return staticUnsavedChanges;
 	}
 
-	function markUnsaved():Void { unsavedChanges = true; }
-	function clearUnsaved():Void { unsavedChanges = false; }
-	function confirmExitCredits():Void
+	// ---- Layout constants ----
+	static final TOP_H:Int = 52;
+	static final BOTTOM_H:Int = 34;
+	static final SIDE_GAP:Float = 12;
+	static final LEFT_W:Float = 380;
+
+	// ---- Data ----
+	var credits:Array<Array<String>> = [];
+	var curSelected:Int = 0;
+
+	// ---- Panels ----
+	var headerBg:FlxSprite;
+	var leftPanelBg:FlxSprite;
+	var rightPanelBg:FlxSprite;
+	var bottomBg:FlxSprite;
+
+	var titleText:EditorsText;
+	var unsavedLabel:EditorsText;
+	var listCountText:EditorsText;
+	var currentModText:EditorsText;
+	var statusText:EditorsText;
+	var statusTimer:Float = 0.0;
+
+	// ---- Left list ----
+	var rowGroup:FlxTypedGroup<CreditsListRow>;
+	var rows:Array<CreditsListRow> = [];
+	var listX:Float = 0;
+	var listY:Float = 0;
+	var listW:Float = 0;
+	var listH:Float = 0;
+	var listScroll:Int = 0;
+
+	// ---- Inspector widgets ----
+	var nameInput:PsychUIInputText;
+	var iconInput:PsychUIInputText;
+	var descInput:PsychUIInputText;
+	var linkInput:PsychUIInputText;
+	var colorInput:PsychUIInputText;
+	var modDirInput:PsychUIInputText;
+	var sectionCheck:PsychUICheckBox;
+	var colorSwatch:FlxSprite;
+
+	var typeLabel:EditorsText;
+	var actionHint:EditorsText;
+
+	var blockPressWhileTypingOn:Array<PsychUIInputText> = [];
+	var fieldLabels:Map<PsychUIInputText, EditorsText> = new Map();
+	var updatingFields:Bool = false;
+
+	override function create()
+	{
+		#if cpp
+		DiscordClient.changePresence("Credits Editor", "Editing Credits");
+		#end
+
+		credits = [];
+
+		_headerBg();
+		_leftPanel();
+		_rightPanel();
+		_bottomBar();
+
+		loadCurrentModCredits();
+		rebuildList();
+		if(credits.length > 0) selectIndex(0);
+
+		FlxG.mouse.visible = true;
+
+		#if (android || desktop)
+		addVirtualPad(LEFT_FULL, A_B);
+		#end
+
+		super.create();
+	}
+
+	// ---- Layout builders ------------------------------------------------
+
+	function _headerBg()
+	{
+		headerBg = new FlxSprite(0, 0).makeGraphic(Std.int(FlxG.width), TOP_H, FlxColor.BLACK);
+		headerBg.scrollFactor.set();
+		headerBg.alpha = 0.88;
+		add(headerBg);
+
+		var backBtn = new PsychUIButton(12, (TOP_H - 28) / 2, Language.get('creditsEditor_back', '◀ Back'), function() {
+			confirmExit();
+		}, 88, 28);
+		add(backBtn);
+
+		titleText = new EditorsText(0, (TOP_H - 30) / 2, FlxG.width, Language.get('creditsEditor_title', 'Credits Editor'), 20);
+		titleText.setFormat(Paths.font("editors.ttf"), 20, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		titleText.borderSize = 2;
+		titleText.scrollFactor.set();
+		add(titleText);
+
+		unsavedLabel = new EditorsText(FlxG.width / 2 + 120, (TOP_H - 26) / 2, 0, Language.get('creditsEditor_unsaved_badge', '● Unsaved'), 11);
+		unsavedLabel.color = 0xFFFFC46B;
+		unsavedLabel.scrollFactor.set();
+		unsavedLabel.visible = false;
+		add(unsavedLabel);
+
+		var loadBtn = new PsychUIButton(FlxG.width - 210, (TOP_H - 28) / 2, Language.get('creditsEditor_load_credits', 'Load'), function() {
+			loadCredits();
+		}, 90, 28);
+		add(loadBtn);
+
+		var saveBtn = new PsychUIButton(FlxG.width - 110, (TOP_H - 28) / 2, Language.get('creditsEditor_save_credits', 'Save'), function() {
+			saveCredits();
+		}, 90, 28);
+		add(saveBtn);
+	}
+
+	function _leftPanel()
+	{
+		leftPanelBg = makePanel(12, TOP_H + SIDE_GAP, LEFT_W, FlxG.height - TOP_H - BOTTOM_H - SIDE_GAP * 2, 0.78);
+		add(leftPanelBg);
+
+		var header = new EditorsText(24, TOP_H + 22, 0, Language.get('creditsEditor_list_title', 'Entries'), 16);
+		header.color = FlxColor.WHITE;
+		add(header);
+
+		listCountText = new EditorsText(LEFT_W - 80, TOP_H + 24, 60, '', 11);
+		listCountText.alignment = RIGHT;
+		listCountText.color = 0xFF9AA0B4;
+		add(listCountText);
+		listCountText.text = Std.string(credits.length);
+
+		currentModText = new EditorsText(24, TOP_H + 42, LEFT_W - 48, '', 10);
+		currentModText.color = 0xFF8A92A6;
+		add(currentModText);
+		updateCurrentModText();
+
+		listX = 24;
+		listY = TOP_H + 52;
+		listW = LEFT_W - 24;
+		listH = FlxG.height - listY - BOTTOM_H - SIDE_GAP * 2;
+
+		rowGroup = new FlxTypedGroup<CreditsListRow>();
+		add(rowGroup);
+	}
+
+	function _rightPanel()
+	{
+		var rightX = 12 + LEFT_W + SIDE_GAP;
+		var rightW = FlxG.width - rightX - 12;
+		rightPanelBg = makePanel(rightX, TOP_H + SIDE_GAP, rightW, FlxG.height - TOP_H - BOTTOM_H - SIDE_GAP * 2, 0.78);
+		add(rightPanelBg);
+
+		// ---- Quick action toolbar ----
+		var ax = rightX + 16;
+		var ay = TOP_H + 24;
+		actionBtn(ax, ay, Language.get('creditsEditor_add_entry', '+ Entry'), function() addEntry(), 86);
+		actionBtn(ax + 94, ay, Language.get('creditsEditor_add_section', '+ Section'), function() addSectionHeader(), 100);
+		actionBtn(ax + 202, ay, Language.get('creditsEditor_add_space', '+ Space'), function() addSpace(), 84);
+		actionBtn(ax + 294, ay, Language.get('creditsEditor_duplicate', 'Duplicate'), function() duplicateEntry(), 92);
+		actionBtn(ax + 394, ay, Language.get('creditsEditor_remove_entry', 'Delete'), function() removeCreditEntry(), 86);
+		actionBtn(ax + 488, ay, Language.get('creditsEditor_move_up', '▲ Up'), function() moveEntry(-1), 70);
+		actionBtn(ax + 566, ay, Language.get('creditsEditor_move_down', '▼ Down'), function() moveEntry(1), 80);
+
+		// Divider
+		var divY = ay + 42;
+		var divider = new FlxSprite(rightX + 14, divY).makeGraphic(Std.int(rightW - 28), 1, 0x33FFFFFF);
+		divider.scrollFactor.set();
+		add(divider);
+
+		// ---- Inspector ----
+		var fy = divY + 16;
+		var fieldW = Std.int(rightW - 160);
+		var labelX = rightX + 22;
+		var inputX = rightX + 100;
+		var inputW = rightW - 130;
+
+		typeLabel = new EditorsText(labelX, fy, 0, Language.get('creditsEditor_type', 'Type'), 12);
+		typeLabel.color = 0xFFCCCCFF;
+		add(typeLabel);
+		sectionCheck = new PsychUICheckBox(inputX, fy - 3, Language.get('creditsEditor_is_section_header', 'Section Header'), 140, null);
+		sectionCheck.onClick = function() { onSectionToggle(); };
+		add(sectionCheck);
+
+		fy += 34;
+		nameInput = makeInput(inputX, fy, Std.int(inputW), Language.get('creditsEditor_name', 'Name'));
+		fy += 46;
+		iconInput = makeInput(inputX, fy, Std.int(inputW), Language.get('creditsEditor_icon', 'Icon'));
+		fy += 46;
+		descInput = makeInput(inputX, fy, Std.int(inputW), Language.get('creditsEditor_description', 'Description'));
+		fy += 46;
+		linkInput = makeInput(inputX, fy, Std.int(inputW), Language.get('creditsEditor_link', 'Link'));
+		fy += 46;
+		colorInput = makeInput(inputX, fy, Std.int(inputW - 50), Language.get('creditsEditor_color', 'Color'));
+
+		colorSwatch = PsychUIHelper.createRoundedRectSprite(38, 28, 6);
+		colorSwatch.setPosition(inputX + inputW - 42, fy + 1);
+		colorSwatch.color = FlxColor.WHITE;
+		add(colorSwatch);
+
+		fy += 46;
+		modDirInput = makeInput(inputX, fy, Std.int(inputW), Language.get('creditsEditor_mod_dir', 'Mod folder (advanced)'));
+		modDirInput.visible = false;
+
+		// Hint line
+		actionHint = new EditorsText(rightX + 100, fy + 40, inputW,
+			Language.get('creditsEditor_hint', 'Tip: select an entry on the list, then edit it here. Use ▲/▼ or the buttons to reorder.'), 11);
+		actionHint.color = 0xFF8A92A6;
+		add(actionHint);
+	}
+
+	function _bottomBar()
+	{
+		bottomBg = new FlxSprite(0, FlxG.height - BOTTOM_H).makeGraphic(Std.int(FlxG.width), BOTTOM_H, FlxColor.BLACK);
+		bottomBg.scrollFactor.set();
+		bottomBg.alpha = 0.85;
+		add(bottomBg);
+
+		var hint = new EditorsText(12, FlxG.height - BOTTOM_H + 9, 0,
+			Language.get('creditsEditor_keys', '↑/↓ Select   ·   Delete removes selected   ·   Esc Back'), 10);
+		hint.color = 0xFF9AA0B4;
+		add(hint);
+
+		statusText = new EditorsText(0, FlxG.height - BOTTOM_H + 8, FlxG.width, '', 11);
+		statusText.setFormat(Paths.font("editors.ttf"), 11, FlxColor.YELLOW, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		statusText.borderSize = 1;
+		statusText.scrollFactor.set();
+		statusText.visible = false;
+		add(statusText);
+	}
+
+	function makePanel(x:Float, y:Float, w:Float, h:Float, alpha:Float):FlxSprite
+	{
+		var p = PsychUIHelper.createRoundedRectSprite(Std.int(w), Std.int(h), 12);
+		p.setPosition(x, y);
+		p.color = 0xFF171922;
+		p.alpha = alpha;
+		p.scrollFactor.set();
+		add(p);
+		return p;
+	}
+
+	function actionBtn(x:Float, y:Float, label:String, cb:Void->Void, w:Int)
+	{
+		var b = new PsychUIButton(x, y, label, cb, w, 26);
+		b.borderRadius = 6;
+		b.smoothAnimations = false;
+		add(b);
+		return b;
+	}
+
+	function makeInput(x:Float, y:Float, w:Int, label:String):PsychUIInputText
+	{
+		var lbl = new EditorsText(x - 78, y + 2, 70, label, 10);
+		lbl.color = 0xFFB8BFD1;
+		add(lbl);
+
+		var input = new PsychUIInputText(x, y, w, '', 9);
+		input.borderRadius = 5;
+		blockPressWhileTypingOn.push(input);
+		input.onChange = function(oldText:String, newText:String) { onFieldChange(input, newText); };
+		fieldLabels.set(input, lbl);
+		add(input);
+		return input;
+	}
+
+	// ---- List handling ---------------------------------------------------
+
+	function rebuildList()
+	{
+		rowGroup.clear();
+		for(row in rows) if(row != null) row.destroy();
+		rows = [];
+
+		for(i in 0...credits.length)
+		{
+			var row = new CreditsListRow(0, 0, Std.int(listW), 56);
+			var isSection = credits[i].length <= 1;
+			row.setInfo(credits[i][0], isSection ? Language.get('creditsEditor_section_badge', 'SECTION') : getEntrySubtitle(i), isSection);
+			if(!isSection)
+				row.setIcon(credits[i].length > 1 ? credits[i][1] : '', credits[i].length > 5 ? credits[i][5] : '');
+			rowGroup.add(row);
+			rows.push(row);
+		}
+
+		if(listCountText != null) listCountText.text = Std.string(credits.length);
+		layoutList();
+	}
+
+	function getEntrySubtitle(i:Int):String
+	{
+		if(i < 0 || i >= credits.length) return '';
+		var d = credits[i];
+		if(d.length > 2 && d[2] != null && d[2].length > 0) return d[2];
+		if(d.length > 1 && d[1] != null && d[1].length > 0) return d[1];
+		return '';
+	}
+
+	function layoutList()
+	{
+		if(rows.length == 0) return;
+		var rowH:Float = 56;
+		var gap:Float = 6;
+		var visibleCount = Math.floor((listH + gap) / (rowH + gap));
+		if(visibleCount < 1) visibleCount = 1;
+
+		var start = listScroll;
+		if(curSelected < start) { start = curSelected; listScroll = start; }
+		if(curSelected >= start + visibleCount) { start = curSelected - visibleCount + 1; listScroll = start; }
+		if(start + visibleCount > rows.length) { start = rows.length - visibleCount; listScroll = start; }
+		if(start < 0) { start = 0; listScroll = 0; }
+
+		for(i in 0...rows.length)
+		{
+			var vis = i >= start && i < start + visibleCount;
+			rows[i].visible = vis;
+			rows[i].active = vis;
+			if(vis)
+				rows[i].setPosition(listX, listY + (i - start) * (rowH + gap));
+		}
+	}
+
+	function selectIndex(index:Int)
+	{
+		var n = credits.length;
+		if(n == 0) { curSelected = -1; clearInspectorFields(); return; }
+		curSelected = (index + n) % n;
+
+		for(i in 0...rows.length)
+			rows[i].selected = (i == curSelected);
+
+		layoutList();
+		updateInputFields();
+	}
+
+	function updateRowTitle(i:Int)
+	{
+		if(i < 0 || i >= rows.length) return;
+		rows[i].setInfo(credits[i][0], credits[i].length <= 1 ? Language.get('creditsEditor_section_badge', 'SECTION') : getEntrySubtitle(i), credits[i].length <= 1);
+	}
+
+	// ---- Inspector --------------------------------------------------------
+
+	function updateCurrentModText()
+	{
+		if(currentModText == null) return;
+		var mod:String = (Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			? Paths.currentModDirectory
+			: Language.get('creditsEditor_no_mod', 'No Mod');
+		currentModText.text = Language.get('creditsEditor_current_mod', 'Mod: ') + mod;
+	}
+
+	function clearInspectorFields()
+	{
+		if(nameInput == null) return;
+		updatingFields = true;
+		nameInput.text = '';
+		iconInput.text = '';
+		descInput.text = '';
+		linkInput.text = '';
+		colorInput.text = '';
+		modDirInput.text = '';
+		sectionCheck.checked = false;
+		colorSwatch.color = FlxColor.WHITE;
+		updateFieldVisibility();
+		updatingFields = false;
+	}
+
+	function updateInputFields()
+	{
+		if(credits.length == 0 || curSelected < 0) return;
+		var d = credits[curSelected];
+		var isSection = d.length <= 1;
+
+		updatingFields = true;
+
+		sectionCheck.checked = isSection;
+		nameInput.text = d[0];
+		iconInput.text = isSection ? '' : (d.length > 1 ? d[1] : '');
+		descInput.text = isSection ? '' : (d.length > 2 ? d[2] : '');
+		linkInput.text = isSection ? '' : (d.length > 3 ? d[3] : '');
+		colorInput.text = isSection ? '' : (d.length > 4 ? d[4] : '');
+		modDirInput.text = isSection ? '' : (d.length > 5 ? d[5] : '');
+
+		updateFieldVisibility();
+		updateColorSwatch();
+
+		updatingFields = false;
+	}
+
+	function updateFieldVisibility()
+	{
+		var isSection = sectionCheck.checked;
+		setFieldVisible(iconInput, !isSection);
+		setFieldVisible(descInput, !isSection);
+		setFieldVisible(linkInput, !isSection);
+		setFieldVisible(colorInput, !isSection);
+		colorSwatch.visible = !isSection;
+		setFieldVisible(modDirInput, false); // advanced, hidden by default
+	}
+
+	function setFieldVisible(input:PsychUIInputText, visible:Bool)
+	{
+		input.visible = visible;
+		input.active = visible;
+		if(fieldLabels.exists(input))
+			fieldLabels.get(input).visible = visible;
+	}
+
+	function updateColorSwatch()
+	{
+		var hex = colorInput.text.trim();
+		if(hex.length < 3) { colorSwatch.color = FlxColor.WHITE; return; }
+		if(hex.startsWith('#')) hex = hex.substr(1);
+		if(hex.length > 0 && !hex.startsWith('0x') && !hex.startsWith('0X'))
+			hex = '0x' + hex;
+		try {
+			var c = FlxColor.fromString(hex);
+			colorSwatch.color = (c != null) ? c : FlxColor.WHITE;
+		} catch(e:Dynamic) {
+			colorSwatch.color = FlxColor.WHITE;
+		}
+	}
+
+	function onFieldChange(input:PsychUIInputText, newText:String)
+	{
+		if(updatingFields || curSelected < 0 || curSelected >= credits.length) return;
+		var d = credits[curSelected];
+
+		if(input == nameInput) {
+			d[0] = newText;
+			updateRowTitle(curSelected);
+		}
+		else if(!sectionCheck.checked) {
+			if(input == iconInput) { setCreditField(d, 1, newText); rows[curSelected].setIcon(newText, d.length > 5 ? d[5] : ''); updateRowTitle(curSelected); }
+			else if(input == descInput) { setCreditField(d, 2, newText); updateRowTitle(curSelected); }
+			else if(input == linkInput) setCreditField(d, 3, newText);
+			else if(input == colorInput) { setCreditField(d, 4, newText); updateColorSwatch(); }
+			else if(input == modDirInput) setCreditField(d, 5, newText);
+		}
+		markUnsaved();
+	}
+
+	function setCreditField(d:Array<String>, idx:Int, value:String)
+	{
+		while(d.length <= idx) d.push('');
+		d[idx] = value;
+	}
+
+	function onSectionToggle()
+	{
+		if(curSelected < 0 || curSelected >= credits.length) return;
+		var d = credits[curSelected];
+		if(sectionCheck.checked)
+		{
+			credits[curSelected] = [d[0]];
+		}
+		else
+		{
+			var modFolder:String = (modDirInput.text != null && modDirInput.text.length > 0) ? modDirInput.text : Paths.currentModDirectory;
+			credits[curSelected] = [
+				d[0],
+				iconInput.text,
+				descInput.text,
+				linkInput.text,
+				colorInput.text,
+				modFolder
+			];
+		}
+		rebuildList();
+		selectIndex(curSelected);
+		markUnsaved();
+	}
+
+	// ---- Actions -----------------------------------------------------------
+
+	function addEntry()
+	{
+		var idx = (curSelected < 0) ? credits.length : curSelected + 1;
+		var entry:Array<String> = ['New Person', 'icon', 'Description', 'https://example.com', 'FFFFFF'];
+		if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			entry.push(Paths.currentModDirectory);
+		credits.insert(idx, entry);
+		rebuildList();
+		selectIndex(idx);
+		markUnsaved();
+	}
+
+	function addSectionHeader()
+	{
+		var idx = (curSelected < 0) ? credits.length : curSelected + 1;
+		credits.insert(idx, ['New Section']);
+		rebuildList();
+		selectIndex(idx);
+		markUnsaved();
+	}
+
+	function addSpace()
+	{
+		var idx = (curSelected < 0) ? credits.length : curSelected + 1;
+		credits.insert(idx, ['']);
+		rebuildList();
+		selectIndex(idx);
+		markUnsaved();
+	}
+
+	function duplicateEntry()
+	{
+		if(credits.length == 0 || curSelected < 0) return;
+		var copy:Array<String> = credits[curSelected].copy();
+		if(copy.length > 1)
+			copy[0] = copy[0] + ' (copy)';
+		else if(copy.length > 0)
+			copy[0] = copy[0] + ' (copy)';
+		credits.insert(curSelected + 1, copy);
+		rebuildList();
+		selectIndex(curSelected + 1);
+		markUnsaved();
+	}
+
+	function removeCreditEntry()
+	{
+		if(credits.length <= 1 || curSelected < 0) return;
+		credits.remove(credits[curSelected]);
+		rebuildList();
+		if(curSelected >= credits.length) curSelected = credits.length - 1;
+		selectIndex(curSelected);
+		markUnsaved();
+	}
+
+	function moveEntry(change:Int)
+	{
+		if(credits.length == 0 || curSelected < 0) return;
+		var target = curSelected + change;
+		if(target < 0 || target >= credits.length) return;
+		var item = credits[curSelected];
+		credits.remove(item);
+		credits.insert(target, item);
+		rebuildList();
+		selectIndex(target);
+		markUnsaved();
+	}
+
+	// ---- Mod-based file I/O --------------------------------------------------
+
+	function getCurrentCreditsPath():String
+	{
+		#if MODS_ALLOWED
+		if(Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+			return Paths.mods(Paths.currentModDirectory + '/data/credits.txt');
+		return Paths.mods('data/credits.txt');
+		#else
+		return '';
+		#end
+	}
+
+	function loadCurrentModCredits()
+	{
+		#if MODS_ALLOWED
+		var path:String = getCurrentCreditsPath();
+		if(path.length > 0 && FileSystem.exists(path))
+		{
+			try
+			{
+				parseCreditsText(File.getContent(path));
+				clearUnsaved();
+			}
+			catch(e:Dynamic)
+			{
+				credits = [];
+				showStatus(Language.get('creditsEditor_load_failed', 'Could not load credits file.'), true);
+			}
+		}
+		else
+		{
+			credits = [];
+		}
+		#else
+		credits = [];
+		#end
+	}
+
+	function loadCredits()
+	{
+		#if MODS_ALLOWED
+		var path:String = getCurrentCreditsPath();
+		if(path.length > 0 && FileSystem.exists(path))
+		{
+			try
+			{
+				parseCreditsText(File.getContent(path));
+				rebuildList();
+				if(credits.length > 0) selectIndex(0);
+				clearUnsaved();
+				showStatus(Language.get('creditsEditor_loaded', 'Credits loaded from current mod!'));
+			}
+			catch(e:Dynamic)
+			{
+				showStatus(Language.get('creditsEditor_load_failed', 'Could not load credits file.'), true);
+			}
+		}
+		else
+		{
+			credits = [];
+			curSelected = -1;
+			rebuildList();
+			clearInspectorFields();
+			showStatus(Language.get('creditsEditor_no_credits', 'This mod has no credits file yet. Create one from scratch!'));
+		}
+		#else
+		showStatus(Language.get('creditsEditor_no_credits', 'Credits editor requires mods.'), true);
+		#end
+	}
+
+	function saveCredits()
+	{
+		#if MODS_ALLOWED
+		if(credits == null) return;
+		var path:String = getCurrentCreditsPath();
+		if(path.length == 0)
+		{
+			showStatus(Language.get('creditsEditor_save_failed', 'Could not determine credits path.'), true);
+			return;
+		}
+
+		try
+		{
+			var dir = path.substr(0, path.lastIndexOf('/'));
+			if(!FileSystem.exists(dir)) FileSystem.createDirectory(dir);
+			File.saveContent(path, creditsToText());
+			clearUnsaved();
+			showStatus(Language.get('creditsEditor_saved', 'Credits saved to the current mod!'));
+		}
+		catch(e:Dynamic)
+		{
+			showStatus(Language.get('creditsEditor_save_failed', 'Could not save credits file.'), true);
+		}
+		#else
+		showStatus(Language.get('creditsEditor_save_failed', 'Credits editor requires mods.'), true);
+		#end
+	}
+
+	function parseCreditsText(text:String)
+	{
+		credits = [];
+		if(text == null) return;
+		var lines:Array<String> = text.split('\n');
+		for(line in lines)
+		{
+			line = line.replace('\r', '');
+			if(line.length == 0)
+			{
+				credits.push(['']);
+				continue;
+			}
+			var arr:Array<String> = line.replace('\\n', '\n').split('::');
+			if(arr.length == 0) arr.push('');
+			// Match CreditsState: an entry from a mod remembers its source mod folder.
+			if(arr.length >= 5 && Paths.currentModDirectory != null && Paths.currentModDirectory.length > 0)
+				arr.push(Paths.currentModDirectory);
+			credits.push(arr);
+		}
+	}
+
+	function creditsToText():String
+	{
+		var buf = new StringBuf();
+		for(entry in credits)
+		{
+			if(entry == null || entry.length == 0)
+			{
+				buf.add('\n');
+				continue;
+			}
+
+			if(entry.length <= 1)
+			{
+				buf.add(entry[0] == null ? '' : entry[0]);
+			}
+			else
+			{
+				buf.add(entry[0] == null ? '' : entry[0]);
+				buf.add('::');
+				buf.add(entry.length > 1 && entry[1] != null ? entry[1] : '');
+				buf.add('::');
+				buf.add(entry.length > 2 && entry[2] != null ? entry[2] : '');
+				buf.add('::');
+				buf.add(entry.length > 3 && entry[3] != null ? entry[3] : '');
+				buf.add('::');
+				buf.add(entry.length > 4 && entry[4] != null ? entry[4] : '');
+			}
+			buf.add('\n');
+		}
+		return buf.toString();
+	}
+
+	// ---- Misc ---------------------------------------------------------------
+
+	function markUnsaved():Void { unsavedChanges = true; if(unsavedLabel != null) unsavedLabel.visible = true; }
+	function clearUnsaved():Void { unsavedChanges = false; if(unsavedLabel != null) unsavedLabel.visible = false; }
+
+	function showStatus(msg:String, err:Bool = false)
+	{
+		statusText.text = msg;
+		statusText.color = err ? FlxColor.RED : FlxColor.YELLOW;
+		statusText.visible = true;
+		statusTimer = 3;
+	}
+
+	function confirmExit()
 	{
 		if(unsavedChanges)
 		{
-			openSubState(new editors.content.Prompt(
-				'There\'s unsaved progress,\nare you sure you want to exit?',
+			openSubState(new Prompt(
+				Language.get('creditsEditor_unsaved', 'There\'s unsaved progress,\nare you sure you want to exit?'),
 				function()
 				{
 					clearUnsaved();
 					MusicBeatState.switchState(new editors.MasterEditorMenu());
+					FlxG.mouse.visible = false;
 				}
 			));
 		}
 		else
 		{
 			MusicBeatState.switchState(new editors.MasterEditorMenu());
+			FlxG.mouse.visible = false;
 		}
 	}
 
-	var grpCredits:FlxTypedGroup<Alphabet>;
-	var iconArray:Array<AttachedSprite> = [];
-	var creditsStuff:Array<Array<String>> = [];
+	function handleListClick()
+	{
+		var mx = FlxG.mouse.screenX;
+		var my = FlxG.mouse.screenY;
+		if(mx < listX || mx > listX + listW || my < listY || my > listY + listH) return;
 
-	var bg:FlxSprite;
-	var descText:EditorsText;
-	var descBox:FlxSprite;
-
-	var curSelected:Int = 0;
-
-	override function create() {
-		#if cpp
-		DiscordClient.changePresence("Credits Editor", "Editing Credits");
-		#end
-
-		bg = new FlxSprite().loadGraphic(Paths.image('menuDesat'));
-		bg.color = 0xFF353535;
-		add(bg);
-
-		grpCredits = new FlxTypedGroup<Alphabet>();
-		add(grpCredits);
-
-		creditsStuff = [
-			['Mohong Engine Team'],
-			['Mo_Hong', 'mohong', 'Main Programmer of mohong Engine', 'https://space.bilibili.com/672029688', '87ceeb'],
-			['Li.tmc', 'Li.tmc', 'Engine icon', 'https://space.bilibili.com/3537117498051255', 'FF69B4'],
-			[''],
-			['Psych Engine Team'],
-			['Shadow Mario', 'shadowmario', 'Main Programmer of Psych Engine', 'https://twitter.com/Shadow_Mario_', '444444'],
-			['RiverOaken', 'river', 'Main Artist/Animator of Psych Engine', 'https://twitter.com/RiverOaken', 'B42F71'],
-			['']
-		];
-
-		descBox = new FlxSprite().loadGraphic(Paths.image('customBox'));
-		descBox.antialiasing = ClientPrefs.data.globalAntialiasing;
-		descBox.alpha = 0.8;
-		add(descBox);
-
-		descText = new EditorsText(50, FlxG.height - 150, 1180, "", 24);
-		descText.setFormat(Paths.font("editors.ttf"), 24, FlxColor.WHITE, CENTER);
-		descText.scrollFactor.set();
-		add(descText);
-
-		reloadCreditsList();
-		addEditorBox();
-		changeSelection();
-
-		FlxG.mouse.visible = true;
-		#if (android || desktop)
-		addVirtualPad(LEFT_FULL, A_B_C);
-		#end
-		super.create();
-	}
-
-	var UI_box:PsychUIBox;
-	var blockPressWhileTypingOn:Array<PsychUIInputText> = [];
-
-	function addEditorBox() {
-		var tabs = [
-			Language.get('creditsEditor_credits', 'Credits'),
-			Language.get('creditsEditor_section', 'Section')
-		];
-		UI_box = new PsychUIBox(FlxG.width - 320, 20, 300, 400, tabs);
-		UI_box.scrollFactor.set();
-
-		addCreditsUI();
-		addSectionUI();
-		add(UI_box);
-		for (tab in UI_box.tabs) tab.text.font = 'assets/fonts/editors.ttf';
-
-		var loadButton = new PsychUIButton(UI_box.x, UI_box.y + UI_box.height + 10, Language.get('creditsEditor_load_credits', 'Load Credits'), function() {
-			loadCredits();
-		}, 80, 20);
-		loadButton.x -= loadButton.width + 10;
-		add(loadButton);
-
-		var addButton = new PsychUIButton(UI_box.x, loadButton.y, Language.get('creditsEditor_add_entry', 'Add Entry'), function() {
-			addCreditEntry();
-		}, 80, 20);
-		addButton.x -= addButton.width + 10;
-		add(addButton);
-
-		var removeButton = new PsychUIButton(UI_box.x, addButton.y + addButton.height + 10, Language.get('creditsEditor_remove_entry', 'Remove Entry'), function() {
-			removeCreditEntry();
-		}, 80, 20);
-		removeButton.x -= removeButton.width + 10;
-		add(removeButton);
-
-		var saveButton = new PsychUIButton(UI_box.x, removeButton.y + removeButton.height + 10, Language.get('creditsEditor_save_credits', 'Save Credits'), function() {
-			saveCredits();
-		}, 80, 20);
-		saveButton.x -= saveButton.width + 10;
-		add(saveButton);
-	}
-
-	var nameInputText:PsychUIInputText;
-	var iconInputText:PsychUIInputText;
-	var descInputText:PsychUIInputText;
-	var linkInputText:PsychUIInputText;
-	var colorInputText:PsychUIInputText;
-	var isSectionCheckbox:PsychUICheckBox;
-
-	function addCreditsUI() {
-		var tab = UI_box.getTab(Language.get('creditsEditor_credits', 'Credits'));
-		if(tab == null) return;
-		var tab_group = tab.menu;
-
-		nameInputText = new PsychUIInputText(10, 30, 200, '', 8);
-		blockPressWhileTypingOn.push(nameInputText);
-		nameInputText.onChange = function(oldText:String, newText:String) {
-			if(creditsStuff[curSelected] != null) {
-				creditsStuff[curSelected][0] = newText;
-				reloadCreditsList();
-				updateDescBox();
-			}
-		};
-
-		iconInputText = new PsychUIInputText(10, nameInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(iconInputText);
-		iconInputText.onChange = function(oldText:String, newText:String) {
-			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
-				if(creditsStuff[curSelected].length < 2) creditsStuff[curSelected].push('');
-				creditsStuff[curSelected][1] = newText;
-				reloadCreditsList();
-				updateDescBox();
-			}
-		};
-
-		descInputText = new PsychUIInputText(10, iconInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(descInputText);
-		descInputText.onChange = function(oldText:String, newText:String) {
-			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
-				if(creditsStuff[curSelected].length < 3) creditsStuff[curSelected].push('');
-				creditsStuff[curSelected][2] = newText;
-				reloadCreditsList();
-				updateDescBox();
-			}
-		};
-
-		linkInputText = new PsychUIInputText(10, descInputText.y + 50, 200, '', 8);
-		blockPressWhileTypingOn.push(linkInputText);
-		linkInputText.onChange = function(oldText:String, newText:String) {
-			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
-				if(creditsStuff[curSelected].length < 4) creditsStuff[curSelected].push('');
-				creditsStuff[curSelected][3] = newText;
-				reloadCreditsList();
-				updateDescBox();
-			}
-		};
-
-		colorInputText = new PsychUIInputText(10, linkInputText.y + 50, 120, '', 8);
-		blockPressWhileTypingOn.push(colorInputText);
-		colorInputText.onChange = function(oldText:String, newText:String) {
-			if(creditsStuff[curSelected] != null && !isSectionCheckbox.checked) {
-				if(creditsStuff[curSelected].length < 5) creditsStuff[curSelected].push('');
-				creditsStuff[curSelected][4] = newText;
-				reloadCreditsList();
-				updateDescBox();
-			}
-		};
-
-		isSectionCheckbox = new PsychUICheckBox(colorInputText.x + 130, colorInputText.y, Language.get('creditsEditor_is_section_header', 'Is Section Header'), 100, null);
-		isSectionCheckbox.onClick = function() {
-			if(creditsStuff[curSelected] != null) {
-				if(isSectionCheckbox.checked) {
-					creditsStuff[curSelected] = [nameInputText.text];
-				} else {
-					var name:String = nameInputText.text;
-					creditsStuff[curSelected] = [name, iconInputText.text, descInputText.text, linkInputText.text, colorInputText.text];
-				}
-			}
-			updateInputFields();
-		};
-
-		var reloadIconButton = new PsychUIButton(10, colorInputText.y + 40, Language.get('creditsEditor_reload_icon', 'Reload Icon'), function() {
-			reloadSelectedIcon();
-		}, 80, 20);
-
-		tab_group.add(new EditorsText(nameInputText.x, nameInputText.y - 18, 0, Language.get('creditsEditor_name', 'Name:')));
-		tab_group.add(new EditorsText(iconInputText.x, iconInputText.y - 18, 0, Language.get('creditsEditor_icon', 'Icon:')));
-		tab_group.add(new EditorsText(descInputText.x, descInputText.y - 18, 0, Language.get('creditsEditor_description', 'Description:')));
-		tab_group.add(new EditorsText(linkInputText.x, linkInputText.y - 18, 0, Language.get('creditsEditor_link', 'Link:')));
-		tab_group.add(new EditorsText(colorInputText.x, colorInputText.y - 18, 0, Language.get('creditsEditor_color', 'Color:')));
-
-		tab_group.add(nameInputText);
-		tab_group.add(iconInputText);
-		tab_group.add(descInputText);
-		tab_group.add(linkInputText);
-		tab_group.add(colorInputText);
-		tab_group.add(isSectionCheckbox);
-		tab_group.add(reloadIconButton);
-	}
-
-	var moveUpButton:PsychUIButton;
-	var moveDownButton:PsychUIButton;
-	var addSectionButton:PsychUIButton;
-
-	function addSectionUI() {
-		var tab = UI_box.getTab(Language.get('creditsEditor_section', 'Section'));
-		if(tab == null) return;
-		var tab_group = tab.menu;
-
-		moveUpButton = new PsychUIButton(20, 30, Language.get('creditsEditor_move_up', 'Move Up'), function() {
-			moveEntry(-1);
-		}, 80, 20);
-
-		moveDownButton = new PsychUIButton(moveUpButton.x + moveUpButton.width + 10, 30, Language.get('creditsEditor_move_down', 'Move Down'), function() {
-			moveEntry(1);
-		}, 80, 20);
-
-		addSectionButton = new PsychUIButton(20, moveUpButton.y + 50, Language.get('creditsEditor_add_section', 'Add Section'), function() {
-			addSectionHeader();
-		}, 80, 20);
-
-		var addSpaceButton = new PsychUIButton(20, addSectionButton.y + 50, Language.get('creditsEditor_add_space', 'Add Space'), function() {
-			addSpace();
-		}, 80, 20);
-
-		tab_group.add(new EditorsText(20, 10, 0, Language.get('creditsEditor_entry_management', 'Entry Management:')));
-		tab_group.add(moveUpButton);
-		tab_group.add(moveDownButton);
-		tab_group.add(addSectionButton);
-		tab_group.add(addSpaceButton);
-	}
-
-	function reloadCreditsList() {
-		grpCredits.clear();
-		iconArray = [];
-
-		for (i in 0...creditsStuff.length) {
-			var isSelectable:Bool = creditsStuff[i].length > 1;
-			var creditText:Alphabet = new Alphabet(0, 0, creditsStuff[i][0], !isSelectable);
-			creditText.isMenuItem = true;
-			creditText.targetY = i;
-			creditText.x = 100;
-			creditText.y = (i * 60) + 200;
-			grpCredits.add(creditText);
-
-			if (isSelectable) {
-				Paths.currentModDirectory = creditsStuff[i].length > 5 ? creditsStuff[i][5] : '';
-				var icon:AttachedSprite = new AttachedSprite('credits/' + creditsStuff[i][1]);
-				icon.xAdd = creditText.width + 10;
-				icon.sprTracker = creditText;
-				iconArray.push(icon);
-				add(icon);
-				Paths.currentModDirectory = '';
+		for(i in 0...rows.length)
+		{
+			var row = rows[i];
+			if(!row.visible) continue;
+			if(mx >= row.x && mx <= row.x + row.bg.width && my >= row.y && my <= row.y + row.bg.height)
+			{
+				selectIndex(i);
+				return;
 			}
 		}
-		changeSelection();
 	}
 
-	function changeSelection(change:Int = 0) {
-		FlxG.sound.play(Paths.sound('scrollMenu'), 0.4);
+	public function UIEvent(id:String, sender:Dynamic) {}
 
-		curSelected += change;
-		if (curSelected < 0) curSelected = creditsStuff.length - 1;
-		if (curSelected >= creditsStuff.length) curSelected = 0;
-
-		var bullShit:Int = 0;
-		for (item in grpCredits.members) {
-			item.targetY = bullShit - curSelected;
-			bullShit++;
-
-			item.alpha = 0.6;
-			if (item.targetY == 0) {
-				item.alpha = 1;
-			}
-		}
-
-		updateInputFields();
-		updateDescBox();
-	}
-
-	function updateInputFields() {
-		var creditData:Array<String> = creditsStuff[curSelected];
-		var isSection:Bool = creditData.length <= 1;
-
-		isSectionCheckbox.checked = isSection;
-
-		nameInputText.text = creditData[0];
-		iconInputText.text = isSection ? '' : (creditData.length > 1 ? creditData[1] : '');
-		descInputText.text = isSection ? '' : (creditData.length > 2 ? creditData[2] : '');
-		linkInputText.text = isSection ? '' : (creditData.length > 3 ? creditData[3] : '');
-		colorInputText.text = isSection ? '' : (creditData.length > 4 ? creditData[4] : '');
-
-		updateInputVisibility();
-	}
-
-	function updateInputVisibility() {
-		var isSection:Bool = isSectionCheckbox.checked;
-
-		iconInputText.visible = !isSection;
-		descInputText.visible = !isSection;
-		linkInputText.visible = !isSection;
-		colorInputText.visible = !isSection;
-	}
-
-	function updateDescBox() {
-		var creditData:Array<String> = creditsStuff[curSelected];
-		if (creditData.length > 2) {
-			descText.text = creditData[2];
-		} else {
-			descText.text = creditData[0];
-		}
-
-		descBox.setPosition(descText.x - 10, descText.y - 10);
-		descBox.setGraphicSize(Std.int(descText.width + 20), Std.int(descText.height + 20));
-		descBox.updateHitbox();
-	}
-
-	function reloadSelectedIcon() {
-		if (iconArray[curSelected] != null) {
-			iconArray[curSelected].kill();
-			iconArray.remove(iconArray[curSelected]);
-		}
-
-		var creditData:Array<String> = creditsStuff[curSelected];
-		if (creditData.length > 1) {
-			Paths.currentModDirectory = creditData.length > 5 ? creditData[5] : '';
-			var icon:AttachedSprite = new AttachedSprite('credits/' + creditData[1]);
-			icon.xAdd = grpCredits.members[curSelected].width + 10;
-			icon.sprTracker = grpCredits.members[curSelected];
-			iconArray[curSelected] = icon;
-			add(icon);
-			Paths.currentModDirectory = '';
-		}
-	}
-
-	function addCreditEntry() {
-		var newEntry:Array<String> = ['New Person', 'icon', 'Description', 'https://example.com', 'FFFFFF'];
-		creditsStuff.insert(curSelected + 1, newEntry);
-		reloadCreditsList();
-		curSelected++;
-		changeSelection();
-	}
-
-	function removeCreditEntry() {
-		if (creditsStuff.length > 1) {
-			creditsStuff.remove(creditsStuff[curSelected]);
-			reloadCreditsList();
-			changeSelection();
-		}
-	}
-
-	function moveEntry(change:Int) {
-		if (curSelected + change >= 0 && curSelected + change < creditsStuff.length) {
-			var movedItem = creditsStuff[curSelected];
-			creditsStuff.remove(movedItem);
-			creditsStuff.insert(curSelected + change, movedItem);
-			reloadCreditsList();
-			curSelected += change;
-			changeSelection();
-		}
-	}
-
-	function addSectionHeader() {
-		var newSection:Array<String> = ['New Section'];
-		creditsStuff.insert(curSelected + 1, newSection);
-		reloadCreditsList();
-		curSelected++;
-		changeSelection();
-	}
-
-	function addSpace() {
-		var space:Array<String> = [''];
-		creditsStuff.insert(curSelected + 1, space);
-		reloadCreditsList();
-		curSelected++;
-		changeSelection();
-	}
-
-	public function UIEvent(id:String, sender:Dynamic) {
-		// events handled via callbacks
-	}
-
-	override function update(elapsed:Float) {
-		var blockInput:Bool = false;
-		for (inputText in blockPressWhileTypingOn) {
-			if(PsychUIInputText.focusOn == inputText) {
+	override function update(elapsed:Float)
+	{
+		var blocked = false;
+		for(inputText in blockPressWhileTypingOn)
+		{
+			if(PsychUIInputText.focusOn == inputText)
+			{
 				FlxG.sound.muteKeys = [];
 				FlxG.sound.volumeDownKeys = [];
 				FlxG.sound.volumeUpKeys = [];
-				blockInput = true;
+				blocked = true;
 				if(FlxG.keys.justPressed.ENTER) PsychUIInputText.focusOn = null;
 				break;
 			}
 		}
 
-		if(!blockInput) {
+		if(!blocked)
+		{
 			FlxG.sound.muteKeys = TitleState.muteKeys;
 			FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys;
 			FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys;
 
-			if(controls.UI_UP_P) {
-				changeSelection(-1);
-			}
-			if(controls.UI_DOWN_P) {
-				changeSelection(1);
+			if(FlxG.mouse.justPressed) handleListClick();
+			if(FlxG.mouse.wheel != 0 && FlxG.mouse.screenX >= listX && FlxG.mouse.screenX <= listX + listW && FlxG.mouse.screenY >= listY && FlxG.mouse.screenY <= listY + listH)
+			{
+				listScroll -= Std.int(FlxG.mouse.wheel);
+				layoutList();
 			}
 
-			if(#if (android || desktop) (virtualPad != null && virtualPad.buttonB.justPressed) || #end controls.BACK) {
-				confirmExitCredits();
-			}
+			if(controls.UI_UP_P) selectIndex(curSelected - 1);
+			if(controls.UI_DOWN_P) selectIndex(curSelected + 1);
+			if(FlxG.keys.justPressed.DELETE) removeCreditEntry();
+			if(controls.BACK) confirmExit();
+		}
+
+		if(statusTimer > 0)
+		{
+			statusTimer -= elapsed;
+			if(statusTimer <= 0) statusText.visible = false;
 		}
 
 		super.update(elapsed);
 	}
+}
 
-	var _file:FileReference = null;
-	function loadCredits() {
-		var jsonFilter:FileFilter = new FileFilter('JSON', 'json');
-		_file = new FileReference();
-		_file.addEventListener(Event.SELECT, onLoadComplete);
-		_file.addEventListener(Event.CANCEL, onLoadCancel);
-		_file.addEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file.browse([jsonFilter]);
+// ---------------------------------------------------------------------------
+// A single row in the credit list.
+// ---------------------------------------------------------------------------
+class CreditsListRow extends FlxSpriteGroup
+{
+	public var bg:FlxSprite;
+	public var accent:FlxSprite;
+	public var icon:FlxSprite;
+	public var titleText:EditorsText;
+	public var subText:EditorsText;
+	public var badge:EditorsText;
+	public var selected(default, set):Bool;
+
+	public function new(x:Float, y:Float, w:Int, h:Int)
+	{
+		super(x, y);
+		width = w;
+		height = h;
+
+		bg = PsychUIHelper.createRoundedRectSprite(w, h, 6);
+		bg.color = 0xFF262A38;
+		bg.alpha = 0.95;
+		add(bg);
+
+		accent = new FlxSprite(0, 0).makeGraphic(4, h, FlxColor.TRANSPARENT);
+		add(accent);
+
+		icon = new FlxSprite(10, (h - 28) / 2);
+		icon.visible = false;
+		add(icon);
+
+		titleText = new EditorsText(48, 7, w - 90, '', 13, false);
+		titleText.color = FlxColor.WHITE;
+		add(titleText);
+
+		subText = new EditorsText(48, 27, w - 90, '', 10, false);
+		subText.color = 0xFF9AA0B4;
+		add(subText);
+
+		badge = new EditorsText(w - 78, 20, 68, '', 8, false);
+		badge.alignment = RIGHT;
+		badge.color = 0xFF8A92A6;
+		add(badge);
+
+		selected = false;
 	}
 
-	function onLoadComplete(_):Void {
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
+	public function setInfo(title:String, sub:String, isSection:Bool)
+	{
+		titleText.text = title;
+		subText.text = sub;
+		badge.text = isSection ? Language.get('creditsEditor_section_badge', 'SECTION') : '';
+		if(isSection)
+		{
+			badge.color = 0xFFFFC46B;
+			subText.color = 0xFF8A92A6;
+		}
+		else
+		{
+			badge.color = 0xFF8A92A6;
+			subText.color = 0xFF9AA0B4;
+		}
+	}
 
-		#if sys
-		var fullPath:String = null;
-		@:privateAccess
-		if(_file.__path != null) fullPath = _file.__path;
-
-		if(fullPath != null) {
-			var rawJson:String = File.getContent(fullPath);
-			if(rawJson != null) {
-				var loadedCredits:Array<Array<String>> = cast Json.parse(rawJson);
-				if(loadedCredits != null && loadedCredits.length > 0) {
-					creditsStuff = loadedCredits;
-					reloadCreditsList();
-					changeSelection();
-				}
+	public function setIcon(name:String, modDir:String)
+	{
+		if(name == null || name.length == 0) { icon.visible = false; return; }
+		Paths.currentModDirectory = modDir;
+		try
+		{
+			var bmp = Paths.image('credits/' + name);
+			if(bmp != null)
+			{
+				icon.loadGraphic(bmp);
+				var maxSide = 28;
+				var scale = Math.min(maxSide / icon.width, maxSide / icon.height);
+				icon.scale.set(scale, scale);
+				icon.updateHitbox();
+				icon.visible = true;
 			}
+			else icon.visible = false;
 		}
-		_file = null;
-		#else
-		TraceManager.warn('trace.editor.fileLoadFailed', "File couldn't be loaded! You aren't on Desktop, are you?");
-		#end
-	}
-
-	function onLoadCancel(_):Void {
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file = null;
-		TraceManager.info('trace.editor.fileLoadCancelled', "Cancelled file loading.");
-	}
-
-	function onLoadError(_):Void {
-		_file.removeEventListener(Event.SELECT, onLoadComplete);
-		_file.removeEventListener(Event.CANCEL, onLoadCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onLoadError);
-		_file = null;
-		TraceManager.error('trace.editor.fileLoadProblem', "Problem loading file");
-	}
-
-	function saveCredits() {
-		var data:String = Json.stringify(creditsStuff, "\t");
-		if (data.length > 0) {
-			#if android
-			SUtil.saveContent("credits", ".json", data);
-			#else
-			_file = new FileReference();
-			_file.addEventListener(Event.COMPLETE, onSaveComplete);
-			_file.addEventListener(Event.CANCEL, onSaveCancel);
-			_file.addEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-			_file.save(data, "credits.json");
-			#end
+		catch(e:Dynamic)
+		{
+			icon.visible = false;
 		}
+		Paths.currentModDirectory = '';
 	}
 
-	function onSaveComplete(_):Void {
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
-		FlxG.log.notice("Successfully saved credits.");
-	}
-
-	function onSaveCancel(_):Void {
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
-	}
-
-	function onSaveError(_):Void {
-		_file.removeEventListener(Event.COMPLETE, onSaveComplete);
-		_file.removeEventListener(Event.CANCEL, onSaveCancel);
-		_file.removeEventListener(IOErrorEvent.IO_ERROR, onSaveError);
-		_file = null;
-		FlxG.log.error("Problem saving credits");
+	function set_selected(v:Bool):Bool
+	{
+		selected = v;
+		if(selected)
+		{
+			bg.color = 0xFF3B4A6B;
+			accent.color = 0xFF4EA4FF;
+			titleText.color = FlxColor.WHITE;
+		}
+		else
+		{
+			bg.color = 0xFF262A38;
+			accent.color = FlxColor.TRANSPARENT;
+			titleText.color = 0xFFD5D9E6;
+		}
+		return v;
 	}
 }

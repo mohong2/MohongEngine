@@ -924,6 +924,13 @@ class PlayState extends MusicBeatState
 		stageBackdrop = createStageHandler(curStage);
 		stageBackdrop.create();
 
+		#if android
+		// Upload/keep large stage textures early and drop their CPU copies.
+		// Opt-in only: FNF_EARLY_CPU_RELEASE=1.
+		if (Sys.getEnv("FNF_EARLY_CPU_RELEASE") == "1")
+			backend.GfxPolicy.preloadWarm();
+		#end
+
 		switch(Paths.formatToSongPath(SONG.song))
 		{
 			case 'stress':
@@ -1859,6 +1866,13 @@ class PlayState extends MusicBeatState
 		}
 		#end
 
+		#if cpp
+		// Force a full GC after creation so the load-time collection does not
+		// hit first gameplay. Disable with FNF_GC_FULL_ON_PLAY_CREATE=0.
+		if (!ClientPrefs.data.disableGC && Sys.getEnv("FNF_GC_FULL_ON_PLAY_CREATE") != "0")
+			cpp.vm.Gc.run(true);
+		#end
+
 		CustomFadeTransition.nextCamera = camOther;
 	}
 
@@ -2656,6 +2670,9 @@ class PlayState extends MusicBeatState
 			return;
 		}
 
+		if (Conductor.crochet <= 0 || !Math.isFinite(Conductor.crochet))
+			Conductor.changeBPM((SONG != null && SONG.bpm > 0 && Math.isFinite(SONG.bpm)) ? SONG.bpm : 100);
+
 		#if ONLINE_ALLOWED
 		// 实时对战统一起跑: 没收到 MSG_GAME_SYNC 前冻结在等待状态,
 		// 收到后把 startOnTime 换算到所有端共同的服务器时刻。
@@ -3332,7 +3349,7 @@ class PlayState extends MusicBeatState
 		// 时间点的生效键数解释轨道, 保证事件前后的 Note 各归各的键数 (无事件时与旧行为一致)。
 		for (section in noteData)
 		{
-			if (section.changeBPM)
+			if (section.changeBPM && section.bpm > 0 && Math.isFinite(section.bpm))
 			{
 				Conductor.changeBPM(section.bpm);
 				stepCrochet = Conductor.stepCrochet;
@@ -3507,6 +3524,12 @@ class PlayState extends MusicBeatState
 			eventNotes.sort(sortByTime);
 
 		checkEventNote();
+
+		if (Math.isNaN(songData.bpm) || songData.bpm <= 0)
+			Conductor.changeBPM(100);
+		else
+			Conductor.changeBPM(songData.bpm);
+
 		generatedMusic = true;
 	}
 
@@ -8579,7 +8602,7 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 				camHUD.zoom += 0.03 * camZoomingMult;
 			}
 
-			if (SONG.notes[curSection].changeBPM)
+			if (SONG.notes[curSection].changeBPM && SONG.notes[curSection].bpm > 0 && Math.isFinite(SONG.notes[curSection].bpm))
 			{
 				Conductor.changeBPM(SONG.notes[curSection].bpm);
 				setOnScripts('curBpm', Conductor.bpm);

@@ -52,8 +52,27 @@ runs:
     - name: Install haxelib dependencies
       shell: pwsh
       run: |
-        haxelib setup "$HOME/haxelib"
+        haxelib setup "$env:GITHUB_WORKSPACE\.haxelib"
         haxe -cp ./setup -main Main --interp
+
+    - name: Enable hxcpp compile cache
+      shell: pwsh
+      run: |
+        $cacheDir = "$env:GITHUB_WORKSPACE\.hxcpp-cache"
+        New-Item -ItemType Directory -Force -Path $cacheDir | Out-Null
+        $config = "$env:USERPROFILE\.hxcpp_config.xml"
+        $content = @(
+          '<xml>'
+          '  <section id="vars">'
+          '    <set name="HXCPP_COMPILE_CACHE" value="' + $cacheDir + '" />'
+          '    <set name="HXCPP_CACHE_MB" value="4000" />'
+          '  </section>'
+          '  <section id="exes">'
+          '  </section>'
+          '</xml>'
+        )
+        Set-Content -Path $config -Value $content -Encoding UTF8
+        Write-Output "hxcpp compile cache: $cacheDir"
 
     - name: Configure Android SDK
       shell: pwsh
@@ -63,13 +82,13 @@ runs:
     - name: Init discord_rpc submodules
       shell: pwsh
       run: |
-        cd "$HOME/haxelib/discord_rpc/git"
+        cd "$env:GITHUB_WORKSPACE\.haxelib/discord_rpc/git"
         git submodule update --init --recursive
 
     - name: Apply Android template patches
       shell: pwsh
       run: |
-        $LT = "$HOME/haxelib/lime/git/templates/android/template"
+        $LT = "$env:GITHUB_WORKSPACE\.haxelib/lime/git/templates/android/template"
         New-Item -ItemType Directory -Force -Path "$LT/app/src/main/java/org/haxe/extension", "$LT/app/src/main/res/drawable" | Out-Null
         Copy-Item "templates/android/java/org/haxe/extension/SeiunOverlay.java" "$LT/app/src/main/java/org/haxe/extension/SeiunOverlay.java" -Force
         Copy-Item "templates/android/template/app/src/main/res/drawable/seiun_ic_keyboard.xml" "$LT/app/src/main/res/drawable/seiun_ic_keyboard.xml" -Force

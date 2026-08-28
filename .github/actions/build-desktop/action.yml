@@ -58,30 +58,48 @@ runs:
     - name: Install haxelib dependencies
       shell: bash
       run: |
-        haxelib setup ~/haxelib
+        haxelib setup "$GITHUB_WORKSPACE/.haxelib"
         haxe -cp ./setup -main Main --interp
+
+    - name: Enable hxcpp compile cache
+      shell: bash
+      run: |
+        CACHE_DIR="$GITHUB_WORKSPACE/.hxcpp-cache"
+        mkdir -p "$CACHE_DIR"
+        CONFIG="$HOME/.hxcpp_config.xml"
+        {
+          printf '<xml>\n'
+          printf '  <section id="vars">\n'
+          printf '    <set name="HXCPP_COMPILE_CACHE" value="%s" />\n' "$CACHE_DIR"
+          printf '    <set name="HXCPP_CACHE_MB" value="4000" />\n'
+          printf '  </section>\n'
+          printf '  <section id="exes">\n'
+          printf '  </section>\n'
+          printf '</xml>\n'
+        } > "$CONFIG"
+        echo "hxcpp compile cache: $CACHE_DIR"
 
     - name: Init discord_rpc submodules
       shell: bash
       run: |
-        cd ~/haxelib/discord_rpc/git
+        cd "$GITHUB_WORKSPACE/.haxelib/discord_rpc/git"
         git submodule update --init --recursive
 
     - name: Patch hxcpp zlib for modern macOS SDK
       if: startsWith(inputs.target, 'macos')
       shell: bash
       run: |
-        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
-        find "$HOME/haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
-        ! grep -rq 'define fdopen(fd,mode) NULL' "$HOME/haxelib/hxcpp"
+        find "$GITHUB_WORKSPACE/.haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h' -exec sed -i.bak '/# *define fdopen(fd,mode) NULL/d' {} +
+        find "$GITHUB_WORKSPACE/.haxelib/hxcpp" -path '*/thirdparty/zlib-*/zutil.h.bak' -delete
+        ! grep -rq 'define fdopen(fd,mode) NULL' "$GITHUB_WORKSPACE/.haxelib/hxcpp"
 
     - name: Silence unused -stdlib=libc++ warning on macOS
       if: startsWith(inputs.target, 'macos')
       shell: bash
       run: |
-        find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' \
+        find "$GITHUB_WORKSPACE/.haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' \
           -exec perl -0pi -e 's{(<flag value="-stdlib=libc\+\+" unless="STDLIBCPP" />)}{$1\n  <flag value="-Wno-unused-command-line-argument" if="HXCPP_CLANG" />}' {} +
-        find "$HOME/haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' -exec grep -q 'Wno-unused-command-line-argument' {} \;
+        find "$GITHUB_WORKSPACE/.haxelib/hxcpp" -path '*/toolchain/mac-toolchain.xml' -exec grep -q 'Wno-unused-command-line-argument' {} \;
 
     - name: Read app version
       shell: bash

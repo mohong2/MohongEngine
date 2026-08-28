@@ -270,21 +270,28 @@ class Song
 
 	public static function castVersion(songJson:SwagSong):SwagSong // Convert psych_v1 format to old format
 	{
+		// 多k: 键数由谱面 mania 决定，避免 9K/18K 谱面在旧引擎里按 4K 翻转错位。
+		var mania:Int = (songJson != null && songJson.mania != null && songJson.mania >= 0 && songJson.mania < Note.ammo.length) ? Std.int(songJson.mania) : Note.defaultMania;
+		var ammo:Int = Note.ammo[mania];
+
 		for (i in 0...songJson.notes.length)
 		{
 			for (ii in 0...songJson.notes[i].sectionNotes.length)
 			{
 				var gottaHitNote:Bool = songJson.notes[i].mustHitSection;
+				var noteData:Int = Std.int(songJson.notes[i].sectionNotes[ii][1]);
+				if (noteData < 0) continue;
 				if (!gottaHitNote)
 				{
-					if (songJson.notes[i].sectionNotes[ii][1] >= 4)
+					if (noteData >= ammo)
 					{
-						songJson.notes[i].sectionNotes[ii][1] -= 4;
+						noteData -= ammo;
 					}
-					else if (songJson.notes[i].sectionNotes[ii][1] <= 3)
+					else
 					{
-						songJson.notes[i].sectionNotes[ii][1] += 4;
+						noteData += ammo;
 					}
+					songJson.notes[i].sectionNotes[ii][1] = noteData;
 				}
 			}
 		}
@@ -327,6 +334,11 @@ class Song
 		var sectionsData:Array<SwagSection> = songJson.notes;
 		if(sectionsData == null) return;
 
+		// 多k: 使用谱面自身键数（mania 0 基），而不是写死 4。
+		// 没有 mania 字段的旧谱面按默认 4K 处理。
+		var mania:Int = (songJson.mania != null && songJson.mania >= 0 && songJson.mania < Note.ammo.length) ? Std.int(songJson.mania) : Note.defaultMania;
+		var ammo:Int = Note.ammo[mania];
+
 		for (section in sectionsData)
 		{
 			var beats:Null<Float> = cast section.sectionBeats;
@@ -338,8 +350,10 @@ class Song
 
 			for (note in section.sectionNotes)
 			{
-				var gottaHitNote:Bool = (note[1] < 4) ? section.mustHitSection : !section.mustHitSection;
-				note[1] = (note[1] % 4) + (gottaHitNote ? 0 : 4);
+				var rawData:Int = Std.int(note[1]);
+				if (rawData < 0) continue;
+				var gottaHitNote:Bool = (rawData < ammo) ? section.mustHitSection : !section.mustHitSection;
+				note[1] = (rawData % ammo) + (gottaHitNote ? 0 : ammo);
 
 				// 旧格式 (0.1 – 0.3.2) 的数字 noteType 转换为字符串
 				if(note.length > 3 && !Std.isOfType(note[3], String) && note[3] != null)

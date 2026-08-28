@@ -11,6 +11,7 @@ import flixel.math.FlxMath;
 import flixel.math.FlxRect;
 import flixel.util.FlxSpriteUtil;
 import backend.MusicBeatState;
+import backend.SystemDiag;
 import mohong.TraceManager;
 #if sys
 import sys.io.File;
@@ -685,19 +686,14 @@ class CrashCatcherState extends MusicBeatState
 	{
 		try
 		{
-			var report:String = "=== FNF-SeiunEngine Crash Report ===\n";
-			report += "Date: " + Date.now().toString() + "\n";
-			report += "Crash Count: " + crashCount + "\n\n";
-			report += "Device: " + backend.DeviceInfo.summary() + "\n\n";
-			report += "Error:\n" + lastCrashMessage + "\n\n";
-			report += "Stack Trace:\n" + lastCrashStack + "\n";
+			// Full report: error + stack + system/renderer/GPU info + recent logs + native crash logs
+			var report:String = SystemDiag.buildCrashDump(lastCrashMessage, lastCrashStack, crashCount);
 
-			// Try to include the full crash dump file if it exists.
+			// The dump on disk is generated from the same data - just point at it.
 			#if sys
 			if (lastCrashPath != "" && sys.FileSystem.exists(lastCrashPath))
 			{
-				report += "\n--- Full Crash Dump ---\n";
-				report += sys.io.File.getContent(lastCrashPath);
+				report += "\n[Full dump on disk: " + lastCrashPath + "]\n";
 			}
 			#end
 
@@ -813,15 +809,10 @@ class CrashCatcherState extends MusicBeatState
 			if (!FileSystem.exists("./crash/"))
 				FileSystem.createDirectory("./crash/");
 
-			var report:String = "=== FNF-SeiunEngine Crash Report ===\n";
-			report += "Date: " + Date.now().toString() + "\n";
-			report += "Crash Count: " + crashCount + "\n\n";
-			report += "Device: " + backend.DeviceInfo.summary() + "\n\n";
-			report += "Error:\n" + lastCrashMessage + "\n\n";
-			report += "Stack Trace:\n" + lastCrashStack + "\n";
-			report += "\n--- Replay Data Available ---\n";
-			report += "If this crash happened during gameplay, consider including your replay file for debugging.\n";
-			report += "===============================\n";
+			// Full report: error + stack + system/renderer/GPU info + recent logs + native crash logs
+			var report:String = SystemDiag.buildCrashDump(lastCrashMessage, lastCrashStack, crashCount);
+			report += "\nIf this crash happened during gameplay, consider including your replay file for debugging.\n";
+			report += "Please report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n";
 
 			File.saveContent(path, report);
 

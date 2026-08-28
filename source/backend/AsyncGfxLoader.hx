@@ -214,7 +214,7 @@ class AsyncGfxLoader
 					var bmp:BitmapData = null;
 					try
 					{
-						bmp = BitmapData.fromBytes(File.getBytes(job.filePath));
+						bmp = BitmapData.fromFile(job.filePath);
 					}
 					catch (e:Dynamic)
 					{
@@ -230,6 +230,8 @@ class AsyncGfxLoader
 						var rep = GfxRepack.process(job.cacheKey, job.filePath, bmp);
 						if (rep != null)
 						{
+							// Repack owns the pixels; free the original decode immediately.
+							if (bmp != rep.bmp) bmp.dispose();
 							bmp = rep.bmp;
 							packedXml = rep.xml;
 							TraceManager.info('trace.gfx.repack',

@@ -162,6 +162,31 @@ class GfxPolicy
 		return 1;
 	}
 
+	/**
+	 * Immediate CPU-release for one graphic: upload it to GPU (if not already)
+	 * and drop the readable CPU copy right away. Used on Android to keep the
+	 * loading-time Native Heap peak low; rendering remains identical because the
+	 * hardware texture stays attached to the BitmapData.
+	 */
+	public static function releaseNow(key:String, g:FlxGraphic):Void
+	{
+		if (!enabled || !ClientPrefs.data.gfxCpuRelease) return;
+		// Opt-in: bulk-uploading large textures early caused black screen on Android.
+		if (Sys.getEnv("FNF_EARLY_CPU_RELEASE") != "1") return;
+		if (key == null || key.length == 0 || g == null || g.bitmap == null || !g.bitmap.readable) return;
+		if (excludedKeys.exists(key)) return;
+		if (g.bitmap.width < minDimension && g.bitmap.height < minDimension) return;
+		if (hasLiveTexture(g.bitmap))
+		{
+			tryRelease(key, g);
+			return;
+		}
+		var ctx = FlxG.stage != null ? FlxG.stage.context3D : null;
+		if (ctx == null) return;
+		try { g.bitmap.getTexture(ctx, true); } catch (e:Dynamic) { return; }
+		tryRelease(key, g);
+	}
+
 	public static function onContextRestored():Int
 	{
 		if (Lambda.count(cpuReleased) == 0) return 0;

@@ -10,6 +10,7 @@ export/*
 .vscode/*
 .claude/*
 .haxelib/*
+.hxcpp-cache/
 *.code-workspace
 # Local history which shouldn't be shared.
 .history

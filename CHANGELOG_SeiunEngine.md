@@ -1,7 +1,7 @@
 # SeiunEngine 更新日志 · Changelog
 
-> 完整记录 2026年6月19日 至 8月25日 的所有改进、修复与突破
-> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 25, 2026.
+> 完整记录 2026年6月19日 至 8月27日 的所有改进、修复与突破
+> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 27, 2026.
 
 ---
 
@@ -302,6 +302,25 @@
 - 引擎按钮层（android.flixel.FlxButton）：快速点击恢复——按下+抬起落在同一帧窗口内时，flixel 只剩 justReleased 边沿而无任何 justPressed 帧，原逻辑会丢掉整次点击（表现为有概率无法按下）；现补发一次完整的按下/抬起回调，快速连打不再丢键。仅触摸平台启用，多相机遍历防重复触发，槽位被占用时不干扰。Hitbox 与虚拟手柄共用该按钮类，一并受益。
 
 （你知道吗？我是讨厌先更新公告的，还是交给AI吧）
+
+---
+
+### 2026年8月27日（渲染/帧率优化收尾）
+
+- 修复 SDL3 帧调度超速与抖动，改用墙钟调度 + 高精度时钟。
+- 增加 uniform 上传缓存、override 槽位缓存、drawQuads 可选快路径、顶点色合批。
+- Android 剥离 GLES 非法 uniform 初始化；进歌前主动 GC 降低游玩首段卡顿。
+- FlxText 按缩放倍率重栅格化，修复窗口放大后字体模糊
+
+---
+
+### 2026年8月27日（崩溃报告与诊断增强）
+
+- 崩溃报告全面增强：新增 SystemDiag 报告构建器，崩溃 dump / 复制 / 保存统一包含系统信息（OS/CPU/内存/显示器）、Lime 渲染上下文（类型/版本/属性）、GPU 信息（Vendor / Renderer / GL Version / GLSL / 驱动版本 / 扩展列表）、运行时状态（draw call / FPS / 图形缓存 / 当前界面与歌曲）以及最近 400 条游戏日志；报告里的引擎名称统一为 SeiunEngine。
+- 新增 GL 错误哨兵（GlErrorWatchdog）：渲染帧轮询 glGetError，渲染器驱动报错（如 GL_OUT_OF_MEMORY / GL_CONTEXT_LOST_WEBGL）会写入日志并随崩溃报告输出；相同错误去重，防止错误风暴刷爆日志。
+- 新增原生崩溃钩子（NativeCrash）：Windows SEH 记录异常码、出错指令指针、访问目标内存指针、寄存器与出错模块；Linux/macOS 捕获 SIGSEGV/SIGABRT 等并记录 si_addr 内存指针与 backtrace —— 原生层硬崩溃不再无痕闪退，日志会被下一次报告原样收录。
+- 新增心跳文件（crash/heartbeat.txt）：每 5 秒记录当前状态/帧率/内存/GL 错误（变化时才写盘），进程被驱动层直接杀掉时也能指认崩溃位置。
+- 崩溃堆栈采集增强：非 FilePos 的栈项也保留进报告，为空时回退当前调用栈。
 
 ---
 
@@ -614,11 +633,30 @@ Bundled regression harness (temp/touch-fix-test/TouchFixTest.hx): replicates the
 
 ---
 
+### August 27, 2026 — Rendering/Frame-rate Optimization Wrap-up
+
+- Fixed SDL3 frame scheduling overspeed and jitter with wall-clock scheduling and high-resolution timing.
+- Added uniform upload cache, override slot cache, optional drawQuads bounds fast path, and vertex-color batching.
+- Android: strips invalid GLES uniform initializers; full GC before gameplay reduces first-hit stutter.
+- FlxText re-rasterizes at the target scale to fix blurry text when the window is scaled up.
+  
+---
+
+### August 27, 2026 — Crash Reporting & Diagnostics
+
+- New SystemDiag report builder: every crash dump / copy / save now includes OS/CPU/memory/display info, Lime render context (type, version, attributes), GPU details (vendor, renderer, GL version, GLSL, driver, extension list), runtime state (draw calls, FPS, graphic cache, current state & song) and the last 400 game-log lines. Engine name is consistently "SeiunEngine".
+- New GlErrorWatchdog: polls glGetError on render frames; renderer faults (GL_OUT_OF_MEMORY, GL_CONTEXT_LOST_WEBGL, ...) are logged and included in crash reports, de-duplicated to avoid log flooding.
+- New NativeCrash hooks: Windows SEH captures exception code, faulting instruction pointer, access-target memory pointer, registers and faulting module; Linux/macOS catch SIGSEGV/SIGABRT/... with si_addr pointer and backtrace. Native hard crashes are no longer silent — the logs are attached verbatim to the next report.
+- New heartbeat file (crash/heartbeat.txt): current state/fps/memory/GL error every ~5s (written only on real change), so even a process killed by the driver layer still leaves a location clue.
+- Stack collection improved: non-FilePos entries are kept and the current call stack is used as fallback.
+
+---
+
 ### Acknowledgments
 
 A huge thank you to all testers — your feedback has been invaluable in shaping SeiunEngine into what it is today.
 
 ---
 
-*本日志覆盖 SeiunEngine 自 6.19 至 8.25 全部主要变动。*
-*This changelog covers all significant changes from June 19 to August 25, 2026.*
+*本日志覆盖 SeiunEngine 自 6.19 至 8.27 全部主要变动。*
+*This changelog covers all significant changes from June 19 to August 27, 2026.*

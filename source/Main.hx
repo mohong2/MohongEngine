@@ -28,6 +28,9 @@ import mohong.Windows;
 import mohong.TraceManager;
 import mohong.TraceConsole;
 import backend.Dialog;
+import backend.SystemDiag;
+import backend.GlErrorWatchdog;
+import backend.NativeCrash;
 import states.CrashCatcherState;
 #if VIDEOS_ALLOWED
 import backend.VideoPreloader;
@@ -71,6 +74,9 @@ class Main extends Sprite
 
 	public static function main():Void
 	{
+		// Install native crash hooks first, so even early startup faults leave a log with memory pointers.
+		NativeCrash.install();
+
 		#if mac
 		// macOS: .app 由 Finder 双击启动时，进程工作目录是根目录 "/"，
 		// 会导致 assets/、mods/、lang/ 等所有相对路径读取失败。
@@ -232,6 +238,12 @@ class Main extends Sprite
 		}
 		catch (e:Dynamic) {}
 
+		// Poll GL errors on render frames: renderer faults end up in crash reports.
+		GlErrorWatchdog.install();
+
+		// Heartbeat: last known state survives even a process killed below the Haxe layer.
+		SystemDiag.setupHeartbeat();
+
 		// Sync separateUpdateDraw (property setter handles timer + FlxG sync)
 		if (FlxG.game != null)
 			FlxG.game.separateUpdateDraw = ClientPrefs.data.separateUpdateDraw;
@@ -253,7 +265,12 @@ class Main extends Sprite
 				dateNow = dateNow.replace(":", "'");
 				path = "./crash/" + "SeiunEngine_" + dateNow + ".txt";
 
-				var fullMsg:String = stack + "\nUncaught Error: " + msg + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
+				// Capture the GL error state at the crash moment (main thread).
+				GlErrorWatchdog.pollNow(true);
+
+				// Full dump: error + stack + system/renderer info + recent logs.
+				var fullMsg:String = SystemDiag.buildCrashDump(msg, stack, states.CrashCatcherState.crashCount + 1);
+				fullMsg += "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
 				#if sys
 				if (!sys.FileSystem.exists("./crash/"))
@@ -764,10 +781,21 @@ class Main extends Sprite
 					#if sys
 					Sys.println(stackItem);
 					#end
+					// keep non-FilePos entries too, otherwise the report stack may end up empty
+					stackLines += Std.string(stackItem) + "\n";
 			}
 		}
 
-		var fullMsg:String = stackLines + "\nUncaught Error: " + e.error + "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
+		// Fall back to the current call stack when exceptionStack is unavailable on cpp.
+		if (stackLines == null || stackLines.length == 0)
+			stackLines = CallStack.toString(CallStack.callStack());
+
+		// Capture the GL error state at the crash moment (main thread).
+		GlErrorWatchdog.pollNow(true);
+
+		// Full dump: error + stack + system/renderer info + recent logs.
+		var fullMsg:String = SystemDiag.buildCrashDump(Std.string(e.error), stackLines, CrashCatcherState.crashCount + 1);
+		fullMsg += "\nPlease report this error to the GitHub page: https://github.com/mohong2/FNF-SeiunEngine\n\n> Crash Handler written by: sqirra-rng ";
 
 		#if sys
 		if (!FileSystem.exists("./crash/"))

@@ -864,6 +864,10 @@ class Paths
 				return null;
 			}
 			var frames:FlxAtlasFrames = FlxAtlasFrames.fromSparrow(imageLoaded, xmlContent);
+			#if android
+			// Frames need only the GPU texture; drop the CPU sheet immediately.
+			backend.GfxPolicy.releaseNow(imageLoaded.key, imageLoaded);
+			#end
 			atlasFramesCache.set(cacheKey, frames);
 			return frames;
 		}
@@ -976,14 +980,24 @@ class Paths
 	{
 		#if MODS_ALLOWED
 		var imageLoaded:FlxGraphic = returnGraphic(key);
+		if (imageLoaded == null) imageLoaded = image(key, library);
 		var txtExists:Bool = false;
 		if(FileSystem.exists(modsTxt(key))) {
 			txtExists = true;
 		}
 
-		return FlxAtlasFrames.fromSpriteSheetPacker((imageLoaded != null ? imageLoaded : image(key, library)), (txtExists ? File.getContent(modsTxt(key)) : file('images/$key.txt', library)));
+		var frames:FlxAtlasFrames = FlxAtlasFrames.fromSpriteSheetPacker(imageLoaded, (txtExists ? File.getContent(modsTxt(key)) : file('images/$key.txt', library)));
+		#if android
+		backend.GfxPolicy.releaseNow(imageLoaded.key, imageLoaded);
+		#end
+		return frames;
 		#elseif sys
-		return FlxAtlasFrames.fromSpriteSheetPacker(image(key, library), file('images/$key.txt', library));
+		var imageLoaded:FlxGraphic = image(key, library);
+		var frames:FlxAtlasFrames = FlxAtlasFrames.fromSpriteSheetPacker(imageLoaded, file('images/$key.txt', library));
+		#if android
+		backend.GfxPolicy.releaseNow(imageLoaded.key, imageLoaded);
+		#end
+		return frames;
 		#else
 		var txtContent:String = null;
 		var txtPath:String = file('images/$key.txt', library);
@@ -1128,6 +1142,9 @@ class Paths
 				var newGraphic:FlxGraphic = FlxGraphic.fromBitmapData(newBitmap, false, modKey);
 				newGraphic.persist = true;
 				currentTrackedAssets.set(modKey, newGraphic);
+				#if android
+				backend.GfxPolicy.releaseNow(modKey, newGraphic);
+				#end
 			}
 			trackLocalAsset(modKey);
 			return currentTrackedAssets.get(modKey);
@@ -1149,6 +1166,9 @@ class Paths
 					: FlxG.bitmap.add(path, false, path);
 				newGraphic.persist = true;
 				currentTrackedAssets.set(path, newGraphic);
+				#if android
+				backend.GfxPolicy.releaseNow(path, newGraphic);
+				#end
 			}
 			trackLocalAsset(path);
 			return currentTrackedAssets.get(path);

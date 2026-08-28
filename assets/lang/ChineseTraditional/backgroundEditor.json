@@ -1,4 +1,11 @@
 {
+	"back": "◀ 返回",
+	"bg_title": "背景編輯器",
+	"object_explorer": "對象",
+	"add_sprite_short": "+ 精靈",
+	"delete_short": "刪除",
+	"current_stage": "場景：",
+	"unsaved_badge": "● 未儲存",
 	"edit_mode": "編輯模式：",
 	"mode_sprites": "[精靈編輯]",
 	"mode_chars": "[角色編輯]",

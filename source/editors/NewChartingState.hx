@@ -8127,25 +8127,28 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		}
 
 		// ── 将 psych_v1 格式的 note data 转换为旧格式 ──
-		// psych_v1: data 0-3 = 当前活跃方（mustHitSection=true→BF, false→Dad）
-		//           data 4-7 = 对方
-		// 旧格式:   data 0-3 = 左半（mustHitSection=true→BF, false→Dad）
-		//           data 4-7 = 右半（mustHitSection=true→Dad, false→BF）
-		// 当 mustHitSection=false 时需要翻转 0-3 ↔ 4-7
+		// psych_v1: data 0~(K-1) = 玩家/当前活跃方，K~2K-1 = 对方
+		// 旧格式:   data 0~(K-1) = 左半，K~2K-1 = 右半，
+		//           必须按 mustHitSection 决定哪一半是玩家。
+		// 多k: K 取谱面 mania 对应的键数；当 mustHitSection=false 时翻转两半。
+		var mania:Int = (oldSong.mania != null && oldSong.mania >= 0 && oldSong.mania < Note.ammo.length) ? Std.int(oldSong.mania) : Note.defaultMania;
+		var ammo:Int = Note.ammo[mania];
 		for (sec in oldSong.notes)
 		{
 			for (note in sec.sectionNotes)
 			{
 				// 跳过事件 note（data = -1）
-				if (note[1] < 0) continue;
+				var noteData:Int = Std.int(note[1]);
+				if (noteData < 0) continue;
 
 				// 转换 note data 布局
 				if (!sec.mustHitSection)
 				{
-					if (note[1] >= 4)
-						note[1] -= 4;
-					else if (note[1] <= 3)
-						note[1] += 4;
+					if (noteData >= ammo)
+						noteData -= ammo;
+					else
+						noteData += ammo;
+					note[1] = noteData;
 				}
 
 				// 转换 noteType：字符串 → 数字索引（旧格式用数字）

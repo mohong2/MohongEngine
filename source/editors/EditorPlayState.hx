@@ -213,6 +213,11 @@ class EditorPlayState extends MusicBeatState
 
 		for (section in noteData)
 		{
+			// 编辑器预览也按 changeBPM 切换 Conductor.stepCrochet，
+			// 否则 BPM 变化小节的 sustain 长条会用错误的步长生成，出现拉长/突出。
+			if (section.changeBPM && section.bpm > 0 && Math.isFinite(section.bpm))
+				Conductor.changeBPM(section.bpm);
+
 			for (songNotes in section.sectionNotes)
 			{
 				if(songNotes[1] > -1) { //Real notes

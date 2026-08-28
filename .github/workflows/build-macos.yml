@@ -35,15 +35,14 @@ jobs:
       - uses: krdlab/setup-haxe@d93667502be3b4f31a94a3308a74388f2e178a8d # v2.1.0
         with:
           haxe-version: 4.2.5
-          cache-dependency-path: hmm.json
 
-      - name: Restore build cache
+      - name: Restore hxcpp compile cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          path: export/release/macos
-          key: seiu-export-${{ matrix.target }}-v1-${{ hashFiles('Project.xml', 'hmm.json') }}
+          path: .hxcpp-cache
+          key: seiu-hxcpp-${{ matrix.target }}-v1-${{ hashFiles('source/**/*.hx', 'assets/**/*', 'art/**/*', 'templates/**/*', 'Project.xml', 'hmm.json') }}
           restore-keys: |
-            seiu-export-${{ matrix.target }}-v1-
+            seiu-hxcpp-${{ matrix.target }}-v1-
 
       - uses: ./.github/actions/build-desktop
         with:

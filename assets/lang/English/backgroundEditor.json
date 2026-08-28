@@ -1,4 +1,11 @@
 {
+	"back": "◀ Back",
+	"bg_title": "Background Editor",
+	"object_explorer": "Objects",
+	"add_sprite_short": "+ Sprite",
+	"delete_short": "Delete",
+	"current_stage": "Stage: ",
+	"unsaved_badge": "● Unsaved",
 	"edit_mode": "Edit Mode:",
 	"mode_sprites": "[Sprites]",
 	"mode_chars": "[Characters]",

@@ -38,7 +38,20 @@ typedef StageSpriteData = {
 
 class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandler.PsychUIEvent
 {
-	var stageDirectory:String = ''; var defaultZoom:Float = 0.9; var isPixelStage:Bool = false;
+	/** Unsaved changes flag — central tracker + window title support. */
+	public static var staticUnsavedChanges:Bool = false;
+	public var unsavedChanges(get, set):Bool;
+	function get_unsavedChanges():Bool return staticUnsavedChanges;
+	function set_unsavedChanges(v:Bool):Bool
+	{
+		staticUnsavedChanges = v;
+		backend.UnsavedChangesTracker.hasUnsavedChanges = v;
+		if(v) backend.UnsavedChangesTracker.currentEditorState = this;
+		if(unsavedLabel != null) unsavedLabel.visible = v;
+		return staticUnsavedChanges;
+	}
+
+	var stageDirectory:String = ''; var currentStageName:String = 'stage'; var defaultZoom:Float = 0.9; var isPixelStage:Bool = false;
 	var hideGF:Bool = false; var cameraSpeed:Float = 1.0;
 	var bfX:Float = 770; var bfY:Float = 100;
 	var dadX:Float = 100; var dadY:Float = 100;
@@ -58,13 +71,25 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 	var charDadLabel:EditorsText; var charBFLabel:EditorsText; var charGFLabel:EditorsText;
 	var charBorder:FlxSprite; var selectedChar:String = '';
 
-	var isDragging = false; var dragTarget = ''; var dragOffsetX = 0.0; var dragOffsetY = 0.0;
-	var dragStartScreenX:Float = 0; var dragStartScreenY:Float = 0;
-	var dragStartSpriteX:Float = 0; var dragStartSpriteY:Float = 0;
-	var isResizing = false; var resizeCorner = -1;
-	var resizeStartScaleX = 1.0; var resizeStartScaleY = 1.0;
-	var resizeStartX = 0.0; var resizeStartY = 0.0;
-	var resizeStartMouseX = 0.0; var resizeStartMouseY = 0.0;
+	// ---- Direct-manipulation state (world-space, rewritten) ----
+	var dragging:Bool = false;
+	var dragKind:String = '';            // 'sprite' | 'char'
+	var dragSpriteIndex:Int = -1;
+	var dragCharKey:String = '';
+	var dragStartWorldX:Float = 0;
+	var dragStartWorldY:Float = 0;
+	var dragStartObjX:Float = 0;
+	var dragStartObjY:Float = 0;
+	var resizing:Bool = false;
+	var resizeCorner:Int = -1;
+	var resizeStartScaleX:Float = 1;
+	var resizeStartScaleY:Float = 1;
+	var resizeStartX:Float = 0;
+	var resizeStartY:Float = 0;
+	var resizeStartWorldX:Float = 0;
+	var resizeStartWorldY:Float = 0;
+	var resizeFrameW:Float = 1;
+	var resizeFrameH:Float = 1;
 
 	var UI_box:PsychUIBox;
 	var stageDropDown:PsychUIDropDownMenu; var spriteDropDown:PsychUIDropDownMenu;
@@ -91,7 +116,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 	var gfXStepper:PsychUINumericStepper; var gfYStepper:PsychUINumericStepper;
 
 	var outputMsg:EditorsText; var outputTimer = 0.0;
-	var unsavedChanges = false; var _file:FileDialogHandler;
+	var _file:FileDialogHandler;
 
 	// ---- Performance caches ----
 	var _lastSelW:Float = -1; var _lastSelH:Float = -1;
@@ -100,6 +125,21 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 	var editMode:String = 'sprites'; // 'sprites' or 'characters'
 	var modeToggleBtn:PsychUIButton;
 	var modeBg:FlxSprite;
+
+	// ---- Redesigned chrome ----
+	var headerBg:FlxSprite;
+	var objectPanelBg:FlxSprite;
+	var bottomBarBg:FlxSprite;
+	var stageNameText:EditorsText;
+	var unsavedLabel:EditorsText;
+	var objectListGroup:FlxTypedGroup<BgObjectListRow>;
+	var objectListRows:Array<BgObjectListRow> = [];
+	var objectListKinds:Array<String> = [];
+	var objectListScroll:Int = 0;
+	var objectListX:Float = 0;
+	var objectListY:Float = 0;
+	var objectListW:Float = 0;
+	var objectListH:Float = 0;
 
 	override function create() {
 		#if cpp DiscordClient.changePresence("Background Editor", "Editing a Stage"); #end
@@ -124,45 +164,14 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 
 		loadCharacterPreviews(); reorderCanvasLayers();
 
-		// ---- Top Mode Toggle Bar ----
-		modeBg = new FlxSprite(0, 0).makeGraphic(Std.int(FlxG.width), 28, FlxColor.BLACK);
-		modeBg.scrollFactor.set(); modeBg.alpha = 0.6; modeBg.cameras = [camHUD]; add(modeBg);
+		// ---- Redesigned chrome: header, object explorer, inspector ----
+		addHeader();
+		addObjectListPanel();
 
-		var modeTxt = new EditorsText(8, 4, 0, T('edit_mode','Edit Mode:'), 11);
-		modeTxt.setFormat(null, 11, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
-		modeTxt.borderSize = 1; modeTxt.scrollFactor.set(); modeTxt.cameras = [camHUD]; add(modeTxt);
-
-		modeToggleBtn = new PsychUIButton(modeTxt.x + modeTxt.width + 4, 2, getModeBtnLabel(), function() {
-			editMode = (editMode == 'sprites') ? 'characters' : 'sprites';
-			modeToggleBtn.label = getModeBtnLabel();
-			// Clear selection when switching
-			selectedSprite = -1;
-			selectedChar = '';
-			updateSelectionVisuals();
-			updateCharBorder();
-			show(T('mode_switched','Switched to ' + editMode + ' mode'));
-		}, 80, 24);
-		modeToggleBtn.cameras = [camMenu]; modeToggleBtn.scrollFactor.set(); add(modeToggleBtn);
-
-		// Tips line - compact
-		var tipY = 30.0;
-		var tipText = T('tip1','E/Q/Wheel-Zoom | R-Reset | JKLI/Arrows-Pan | F-Center | DEL-Remove');
-		var tip = new EditorsText(4, tipY, FlxG.width - 8, tipText, 10);
-		tip.setFormat(null, 10, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
-		tip.scrollFactor.set(); tip.borderSize = 1; tip.cameras = [camHUD]; add(tip);
-
-		outputMsg = new EditorsText(4, tipY + 14, FlxG.width - 8, '', 10);
-		outputMsg.setFormat(null, 10, FlxColor.YELLOW, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
-		outputMsg.borderSize = 1; outputMsg.scrollFactor.set(); outputMsg.cameras = [camHUD]; outputMsg.visible = false; add(outputMsg);
-
-		camFollow = new FlxObject(400, 200, 2, 2); camFollow.screenCenter(); add(camFollow);
-		FlxG.camera.follow(camFollow);
-
-		// ---- Right Panel (wider, like NewChartingState) ----
-		var panelX = FlxG.width - 350;
-		var panelY = 55;
-		var panelW = 340;
-		var panelH = FlxG.height - panelY - 28;
+		var panelX = FlxG.width - 370;
+		var panelY = 54;
+		var panelW = 360;
+		var panelH = FlxG.height - panelY - 32 - 8;
 		UI_box = new PsychUIBox(panelX, panelY, panelW, panelH, [
 			T('sprites','Sprites'),
 			T('characters','Characters'),
@@ -176,8 +185,11 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		addStageUI();
 		UI_box.selectedIndex = (editMode == 'sprites') ? 0 : 1;
 
-		addBottomButtons();
+		addBottomBar();
 		updateAnimatedFields();
+
+		camFollow = new FlxObject(400, 200, 2, 2); camFollow.screenCenter(); add(camFollow);
+		FlxG.camera.follow(camFollow);
 
 		FlxG.mouse.visible = true;
 		_file = new FileDialogHandler();
@@ -186,6 +198,258 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		// ---- Default: load "stage" scene ----
 		refreshStageDropdown();
 		loadStageByName('stage');
+		rebuildObjectList();
+	}
+
+	// ---- Redesigned chrome helpers ----
+	function addHeader()
+	{
+		headerBg = new FlxSprite(0, 0).makeGraphic(Std.int(FlxG.width), 46, FlxColor.BLACK);
+		headerBg.scrollFactor.set(); headerBg.alpha = 0.9; headerBg.cameras = [camHUD]; add(headerBg);
+
+		var backBtn = new PsychUIButton(10, 9, T('back','◀ Back'), function() confirmExitBackground(), 84, 28);
+		backBtn.cameras = [camMenu]; backBtn.scrollFactor.set(); add(backBtn);
+
+		var title = new EditorsText(100, 12, FlxG.width - 200, T('bg_title','Background Editor'), 18);
+		title.setFormat(Paths.font("editors.ttf"), 18, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		title.borderSize = 2; title.scrollFactor.set(); title.cameras = [camHUD]; add(title);
+
+		stageNameText = new EditorsText(0, 31, FlxG.width, '', 10);
+		stageNameText.setFormat(Paths.font("editors.ttf"), 10, 0xFF9AA0B4, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		stageNameText.borderSize = 1; stageNameText.scrollFactor.set(); stageNameText.cameras = [camHUD]; add(stageNameText);
+
+		unsavedLabel = new EditorsText(FlxG.width / 2 + 130, 13, 0, T('unsaved_badge','● Unsaved'), 11);
+		unsavedLabel.color = 0xFFFFC46B;
+		unsavedLabel.scrollFactor.set();
+		unsavedLabel.cameras = [camHUD];
+		unsavedLabel.visible = false;
+		add(unsavedLabel);
+
+		modeToggleBtn = new PsychUIButton(FlxG.width - 110, 9, getModeBtnLabel(), function() switchMode(), 96, 28);
+		modeToggleBtn.cameras = [camMenu]; modeToggleBtn.scrollFactor.set(); add(modeToggleBtn);
+	}
+
+	function addObjectListPanel()
+	{
+		var x = 10.0;
+		var y = 54.0;
+		var w = 270.0;
+		var h = FlxG.height - y - 32 - 8;
+		objectPanelBg = PsychUIHelper.createRoundedRectSprite(Std.int(w), Std.int(h), 12);
+		objectPanelBg.setPosition(x, y);
+		objectPanelBg.color = 0xFF171922;
+		objectPanelBg.alpha = 0.8;
+		objectPanelBg.scrollFactor.set();
+		objectPanelBg.cameras = [camMenu];
+		add(objectPanelBg);
+
+		var title = new EditorsText(x + 14, y + 10, 0, T('object_explorer','Objects'), 15);
+		title.scrollFactor.set(); title.cameras = [camMenu]; add(title);
+
+		var addBtn = new PsychUIButton(x + 14, y + 34, T('add_sprite_short','+ Sprite'), function() addNewSprite(), 82, 24);
+		addBtn.cameras = [camMenu]; addBtn.scrollFactor.set(); addBtn.smoothAnimations = false; add(addBtn);
+
+		var delBtn = new PsychUIButton(x + 102, y + 34, T('delete_short','Delete'), function() removeSelectedSprite(), 78, 24);
+		delBtn.cameras = [camMenu]; delBtn.scrollFactor.set(); delBtn.smoothAnimations = false; add(delBtn);
+
+		var upBtn = new PsychUIButton(x + 186, y + 34, '▲', function() moveSpriteLayer(-1), 30, 24);
+		upBtn.cameras = [camMenu]; upBtn.scrollFactor.set(); upBtn.smoothAnimations = false; add(upBtn);
+
+		var downBtn = new PsychUIButton(x + 220, y + 34, '▼', function() moveSpriteLayer(1), 30, 24);
+		downBtn.cameras = [camMenu]; downBtn.scrollFactor.set(); downBtn.smoothAnimations = false; add(downBtn);
+
+		objectListX = x + 12;
+		objectListY = y + 66;
+		objectListW = w - 24;
+		objectListH = h - 78;
+
+		objectListGroup = new FlxTypedGroup<BgObjectListRow>();
+		objectListGroup.cameras = [camMenu];
+		add(objectListGroup);
+	}
+
+	function addBottomBar()
+	{
+		bottomBarBg = new FlxSprite(0, FlxG.height - 32).makeGraphic(Std.int(FlxG.width), 32, FlxColor.BLACK);
+		bottomBarBg.scrollFactor.set(); bottomBarBg.alpha = 0.88; bottomBarBg.cameras = [camHUD]; add(bottomBarBg);
+
+		var tip = new EditorsText(10, FlxG.height - 24, 0,
+			T('tip1','E/Q/Wheel-Zoom | R-Reset | JKLI/Arrows-Pan | F-Center | DEL-Remove'), 9);
+		tip.color = 0xFF8A92A6; tip.scrollFactor.set(); tip.cameras = [camHUD]; add(tip);
+
+		outputMsg = new EditorsText(0, FlxG.height - 24, FlxG.width - 410, '', 10);
+		outputMsg.setFormat(Paths.font("editors.ttf"), 10, FlxColor.YELLOW, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		outputMsg.borderSize = 1; outputMsg.scrollFactor.set(); outputMsg.cameras = [camHUD]; outputMsg.visible = false; add(outputMsg);
+
+		var bx = FlxG.width - 370 + 10;
+		var btnW = 68;
+		var by = FlxG.height - 32 + 5;
+		addBB(bx, by, 'save_json', 'Save JSON', function() saveStageJSON(), btnW); bx += btnW + 4;
+		addBB(bx, by, 'save_lua', 'Save LUA', function() saveAsLua(), btnW); bx += btnW + 4;
+		addBB(bx, by, 'save_hscript', 'HSCRIPT', function() {
+			openSubState(new Prompt(T('hscript_warn','Saving as HSCRIPT can only be used with Psych Engine 0.7.1h that supports HSCRIPT loading. Continue?'), function() saveAsHscript()));
+		}, btnW); bx += btnW + 4;
+		addBB(bx, by, 'clear_all', 'Clear', function() {
+			openSubState(new Prompt(T('clear_confirm','Clear all sprites and reset stage?'), function() {
+				sprites = []; clearSpritePreviews(); selectedSprite = -1; selectedChar = '';
+				rebuildSpriteDropdown(); updateSelectionVisuals(); updateCharBorder(); reorderCanvasLayers(); markUnsaved();
+			}));
+		}, btnW);
+	}
+
+	function switchMode()
+	{
+		editMode = (editMode == 'sprites') ? 'characters' : 'sprites';
+		modeToggleBtn.label = getModeBtnLabel();
+		selectedSprite = -1;
+		selectedChar = '';
+		updateSelectionVisuals();
+		updateCharBorder();
+		UI_box.selectedIndex = (editMode == 'sprites') ? 0 : 1;
+		rebuildObjectList();
+		show(T('mode_switched','Switched to ' + editMode + ' mode'));
+	}
+
+	function confirmExitBackground()
+	{
+		if(unsavedChanges)
+		{
+			openSubState(new Prompt(T('unsaved_changes','You have unsaved changes. Exit anyway?'), function() {
+				unsavedChanges = false;
+				MusicBeatState.switchState(new editors.MasterEditorMenu());
+				FlxG.mouse.visible = false;
+				FlxG.sound.playMusic(Paths.music('freakyMenu'));
+			}));
+		}
+		else
+		{
+			unsavedChanges = false;
+			MusicBeatState.switchState(new editors.MasterEditorMenu());
+			FlxG.mouse.visible = false;
+			FlxG.sound.playMusic(Paths.music('freakyMenu'));
+		}
+	}
+
+	function rebuildObjectList()
+	{
+		if(objectListGroup == null) return;
+		objectListGroup.clear();
+		for(row in objectListRows) if(row != null) row.destroy();
+		objectListRows = [];
+		objectListKinds = [];
+
+		for(i in 0...sprites.length)
+		{
+			var s = sprites[i];
+			var kind = 'sprite:' + i;
+			objectListKinds.push(kind);
+			var row = new BgObjectListRow(0, 0, Std.int(objectListW), 34);
+			row.cameras = [camMenu];
+			row.setInfo(s.tag, '[' + (s.front ? 'F' : 'B') + '] ' + (s.image == null || s.image == '' ? 'empty' : s.image), (editMode == 'sprites' && selectedSprite == i));
+			objectListGroup.add(row);
+			objectListRows.push(row);
+		}
+
+		// Character roles
+		var charDefs:Array<{key:String, name:String, sub:String}> = [
+			{key:'dad', name:'Opponent', sub:'X' + dadX + '  Y' + dadY},
+			{key:'bf', name:'Boyfriend', sub:'X' + bfX + '  Y' + bfY},
+			{key:'gf', name:'Girlfriend', sub:'X' + gfX + '  Y' + gfY}
+		];
+		for(c in charDefs)
+		{
+			objectListKinds.push('char:' + c.key);
+			var row = new BgObjectListRow(0, 0, Std.int(objectListW), 34);
+			row.cameras = [camMenu];
+			var isSel = (editMode == 'characters' && selectedChar == c.key);
+			row.setInfo(c.name, c.sub, isSel);
+			objectListGroup.add(row);
+			objectListRows.push(row);
+		}
+
+		layoutObjectList();
+	}
+
+	function layoutObjectList()
+	{
+		if(objectListRows.length == 0) return;
+		var rowH:Float = 34;
+		var gap:Float = 4;
+		var visibleCount = Math.floor((objectListH + gap) / (rowH + gap));
+		if(visibleCount < 1) visibleCount = 1;
+
+		// Keep selected item visible
+		var selectedRow:Int = -1;
+		if(editMode == 'sprites' && selectedSprite >= 0) selectedRow = selectedSprite;
+		else if(editMode == 'characters' && selectedChar != '')
+		{
+			for(i in 0...objectListKinds.length)
+				if(objectListKinds[i] == 'char:' + selectedChar) { selectedRow = i; break; }
+		}
+
+		if(selectedRow >= 0)
+		{
+			if(selectedRow < objectListScroll) objectListScroll = selectedRow;
+			if(selectedRow >= objectListScroll + visibleCount) objectListScroll = selectedRow - visibleCount + 1;
+		}
+		if(objectListScroll + visibleCount > objectListRows.length)
+			objectListScroll = objectListRows.length - visibleCount;
+		if(objectListScroll < 0) objectListScroll = 0;
+
+		for(i in 0...objectListRows.length)
+		{
+			var vis = i >= objectListScroll && i < objectListScroll + visibleCount;
+			objectListRows[i].visible = vis;
+			objectListRows[i].active = vis;
+			if(vis)
+				objectListRows[i].setPosition(objectListX, objectListY + (i - objectListScroll) * (rowH + gap));
+		}
+	}
+
+	function handleObjectListClick()
+	{
+		var mx = FlxG.mouse.screenX;
+		var my = FlxG.mouse.screenY;
+		if(mx < objectListX || mx > objectListX + objectListW || my < objectListY || my > objectListY + objectListH) return;
+
+		for(i in 0...objectListRows.length)
+		{
+			var row = objectListRows[i];
+			if(!row.visible) continue;
+			if(mx >= row.x && mx <= row.x + row.bg.width && my >= row.y && my <= row.y + row.bg.height)
+			{
+				var kind = objectListKinds[i];
+				if(kind.startsWith('sprite:'))
+				{
+					var idx = Std.parseInt(kind.substr(7));
+					editMode = 'sprites';
+					UI_box.selectedIndex = 0;
+					modeToggleBtn.label = getModeBtnLabel();
+					selectSprite(idx);
+				}
+				else if(kind.startsWith('char:'))
+				{
+					var key = kind.substr(5);
+					editMode = 'characters';
+					UI_box.selectedIndex = 1;
+					modeToggleBtn.label = getModeBtnLabel();
+					selectedSprite = -1;
+					selectedChar = key;
+					updateSelectionVisuals();
+					updateCharBorder();
+					disableSpriteUI();
+					updateCharacterUIFromData();
+					rebuildObjectList();
+				}
+				return;
+			}
+		}
+	}
+
+	function updateStageNameText()
+	{
+		if(stageNameText != null)
+			stageNameText.text = T('current_stage','Stage: ') + (Paths.currentModDirectory.length > 0 ? '[' + Paths.currentModDirectory + '] ' : '') + currentStageName;
 	}
 
 	// ---- helpers ----
@@ -266,6 +530,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		stageDropDown.list=stages;
 	}
 	function loadStageByName(name:String) {
+		currentStageName = name;
 		sprites=[];clearSpritePreviews();selectedSprite=-1;selectedChar='';updateCharBorder();
 		// Find and set the mod directory that contains this stage
 		Paths.currentModDirectory='';Paths.setCurrentLevel('shared');
@@ -282,7 +547,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		// STEP 4: Rebuild previews for all sprites
 		for(j in 0...sprites.length) createSpritePreview(j);
 		reorderCanvasLayers();rebuildSpriteDropdown();updateCharPositions();updateStageUIFromData();updateSelectionVisuals();
-		unsavedChanges=false;updateCharBorder();show(T('stage_loaded','Loaded: ')+name,!loaded);
+		unsavedChanges=false;updateCharBorder();updateStageNameText();rebuildObjectList();show(T('stage_loaded','Loaded: ')+name,!loaded);
 	}
 	function tryLoadFile(path:String):String{
 		#if MODS_ALLOWED
@@ -365,8 +630,15 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 	function moveSpriteLayer(dir:Int) { if(selectedSprite<0||sprites.length<2)return;var ni=selectedSprite+dir;if(ni<0||ni>=sprites.length)return;swap(sprites,selectedSprite,ni);swap(spritePreviews,selectedSprite,ni);selectedSprite=ni;reorderCanvasLayers();rebuildSpriteDropdown();markUnsaved(); }
 	inline function swap<T>(arr:Array<T>,i:Int,j:Int){var t=arr[i];arr[i]=arr[j];arr[j]=t;}
 
-	function selectSprite(idx:Int){selectedSprite=idx;selectedChar='';updateCharBorder();updateSpriteUIFromData();updateSelectionVisuals();if(idx>=0&&spriteDropDown!=null)spriteDropDown.selectedIndex=idx;}
-	function rebuildSpriteDropdown(){if(spriteDropDown==null)return;var list:Array<String>=[];for(i in 0...sprites.length)list.push('['+(sprites[i].front?'F':'B')+'] '+i+': '+sprites[i].tag);if(list.length==0)list.push(T('no_sprites','(no sprites)'));spriteDropDown.list=list;if(selectedSprite>=0&&selectedSprite<list.length)spriteDropDown.selectedIndex=selectedSprite;}
+	function selectSprite(idx:Int){
+		selectedSprite=idx;selectedChar='';editMode='sprites';
+		if(UI_box!=null)UI_box.selectedIndex=0;
+		if(modeToggleBtn!=null)modeToggleBtn.label=getModeBtnLabel();
+		updateCharBorder();updateSpriteUIFromData();updateSelectionVisuals();
+		if(idx>=0&&spriteDropDown!=null)spriteDropDown.selectedIndex=idx;
+		rebuildObjectList();
+	}
+	function rebuildSpriteDropdown(){if(spriteDropDown==null)return;var list:Array<String>=[];for(i in 0...sprites.length)list.push('['+(sprites[i].front?'F':'B')+'] '+i+': '+sprites[i].tag);if(list.length==0)list.push(T('no_sprites','(no sprites)'));spriteDropDown.list=list;if(selectedSprite>=0&&selectedSprite<list.length)spriteDropDown.selectedIndex=selectedSprite;rebuildObjectList();}
 	function clearSpritePreviews(){for(p in spritePreviews){canvasGroup.remove(p);p.destroy();}spritePreviews=[];}
 
 	function createSpritePreview(idx:Int){var d=sprites[idx];var spr=new FlxSprite(d.x,d.y);spr.origin.set(0,0);loadSpriteImg(spr,d);spr.scale.set(d.scaleX,d.scaleY);spr.alpha=d.alpha;spr.antialiasing=d.antialiasing;spr.flipX=d.flipX;spr.flipY=d.flipY;spritePreviews[idx]=spr;canvasGroup.add(spr);}
@@ -402,9 +674,13 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		selectionBorder.visible = true;
 		var hs = 12;
 		var ps:Array<Array<Float>> = [[0.0, 0.0], [w - hs, 0.0], [0.0, hh - hs], [w - hs, hh - hs]];
+		var hScale = 1 / FlxG.camera.zoom;
 		for(i in 0...4) {
-			resizeHandles[i].setPosition(spr.x + ps[i][0], spr.y + ps[i][1]);
-			resizeHandles[i].visible = true;
+			var h = resizeHandles[i];
+			h.scale.set(hScale, hScale);
+			h.updateHitbox();
+			h.setPosition(spr.x + ps[i][0], spr.y + ps[i][1]);
+			h.visible = true;
 		}
 	}
 	function dashRect(spr:FlxSprite, w:Float, h:Float) {
@@ -712,25 +988,6 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		pixelStageCheck = chkCompact(g, 90, yy, T('pixel_stage','Pixel Stage'), function(v) { isPixelStage = v; markUnsaved(); });
 	}
 
-	function addBottomButtons(){
-		var by = FlxG.height - 24.0;
-		var btnW = 68;
-		var bx = FlxG.width - 350 + 8; // aligned with right panel
-		addBB(bx, by, 'save_json', 'Save JSON', function() saveStageJSON(), btnW);
-		bx += btnW + 4;
-		addBB(bx, by, 'save_lua', 'Save LUA', function() saveAsLua(), btnW);
-		bx += btnW + 4;
-		addBB(bx, by, 'save_hscript', 'HSCRIPT', function() {
-			openSubState(new Prompt(T('hscript_warn','Saving as HSCRIPT can only be used with Psych Engine 0.7.1h that supports HSCRIPT loading. Continue?'), function() saveAsHscript()));
-		}, btnW);
-		bx += btnW + 4;
-		addBB(bx, by, 'clear_all', 'Clear', function() {
-			openSubState(new Prompt(T('clear_confirm','Clear all sprites and reset stage?'), function() {
-				sprites = []; clearSpritePreviews(); selectedSprite = -1; selectedChar = '';
-				rebuildSpriteDropdown(); updateSelectionVisuals(); updateCharBorder(); reorderCanvasLayers(); markUnsaved();
-			}));
-		}, btnW);
-	}
 	function addBB(x:Float, y:Float, k:String, fb:String, cb:Void->Void, w:Int):Void {
 		var b = new PsychUIButton(x, y, T(k, fb), cb, w, 20);
 		b.cameras = [camMenu]; b.scrollFactor.set(); add(b);
@@ -745,11 +1002,18 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		if(blocked) { FlxG.sound.muteKeys = []; FlxG.sound.volumeDownKeys = []; FlxG.sound.volumeUpKeys = []; }
 		else { FlxG.sound.muteKeys = TitleState.muteKeys; FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys; FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys; }
 		if(outputTimer > 0) { outputTimer -= elapsed; if(outputTimer <= 0) outputMsg.visible = false; }
+		if(!blocked && FlxG.mouse.justPressed) handleObjectListClick();
+		if(!blocked && FlxG.mouse.wheel != 0 && FlxG.mouse.screenX >= objectListX && FlxG.mouse.screenX <= objectListX + objectListW && FlxG.mouse.screenY >= objectListY && FlxG.mouse.screenY <= objectListY + objectListH)
+		{
+			objectListScroll -= Std.int(FlxG.mouse.wheel);
+			layoutObjectList();
+		}
 		if(!blocked && FlxG.keys.justPressed.ESCAPE) {
 			if(unsavedChanges) openSubState(new Prompt(T('unsaved_changes','You have unsaved changes. Exit anyway?'), function() {
+				unsavedChanges = false;
 				MusicBeatState.switchState(new editors.MasterEditorMenu()); FlxG.mouse.visible = false; FlxG.sound.playMusic(Paths.music('freakyMenu'));
 			}));
-			else { MusicBeatState.switchState(new editors.MasterEditorMenu()); FlxG.mouse.visible = false; FlxG.sound.playMusic(Paths.music('freakyMenu')); }
+			else { unsavedChanges = false; MusicBeatState.switchState(new editors.MasterEditorMenu()); FlxG.mouse.visible = false; FlxG.sound.playMusic(Paths.music('freakyMenu')); }
 			return;
 		}
 		if(!blocked && FlxG.keys.justPressed.DELETE && selectedSprite >= 0) removeSelectedSprite();
@@ -767,7 +1031,9 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		if(FlxG.keys.pressed.E && FlxG.camera.zoom < 3) { FlxG.camera.zoom += elapsed * FlxG.camera.zoom; if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3; }
 		if(FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) { FlxG.camera.zoom -= elapsed * FlxG.camera.zoom; if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1; }
 		if(FlxG.keys.justPressed.R) FlxG.camera.zoom = 1;
-		if(FlxG.mouse.wheel != 0) { FlxG.camera.zoom += FlxG.mouse.wheel * 0.05 * FlxG.camera.zoom; if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3; else if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1; }
+		if(FlxG.mouse.wheel != 0 && FlxG.mouse.screenX > 290 && FlxG.mouse.screenX < FlxG.width - 370 && FlxG.mouse.screenY > 54 && FlxG.mouse.screenY < FlxG.height - 32)
+			FlxG.camera.zoom += FlxG.mouse.wheel * 0.05 * FlxG.camera.zoom;
+		if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3; else if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1;
 		if(FlxG.mouse.pressedMiddle) { camFollow.x -= FlxG.mouse.deltaScreenX / FlxG.camera.zoom; camFollow.y -= FlxG.mouse.deltaScreenY / FlxG.camera.zoom; }
 		if(FlxG.keys.justPressed.F) resetCamera();
 
@@ -790,77 +1056,60 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		var msx = FlxG.mouse.screenX;
 		var msy = FlxG.mouse.screenY;
 
-		// Block clicks over right panel area (like NewChartingState)
-		if(msx > FlxG.width - 350) return;
-		if(msy > FlxG.height - 28) return; // bottom buttons bar
-		if(msy < 55) return; // top toolbar area
+		var inCanvas = msx > 290 && msx < FlxG.width - 370 && msy > 54 && msy < FlxG.height - 32;
+		// Only start new interactions inside the canvas, but keep an active drag alive
+		// even when the cursor travels over a panel.
+		if(!inCanvas && !dragging && !resizing) return;
 		if(FlxG.mouse.pressedMiddle) return;
 
-		// ---- Click: handle resize handles always, then mode-specific selection ----
-		if(FlxG.mouse.justPressed) {
-			var hitHandle = -1;
-			if(selectedSprite >= 0) for(i in 0...4) {
-				var h = resizeHandles[i];
-				if(h.visible && mx >= h.x && mx <= h.x + 12 && my >= h.y && my <= h.y + 12) { hitHandle = i; break; }
+		if(FlxG.mouse.justPressed && !dragging && !resizing) {
+			// Resize handles first. Hit testing is done in screen space so it is
+			// always accurate at any camera zoom / pan level.
+			var corner = (selectedSprite >= 0) ? hitResizeHandleScreen(msx, msy) : -1;
+			if(corner >= 0)
+				startResize(corner, mx, my);
+			else if(isCharMode())
+				selectCharacterAt(msx, msy, mx, my);
+			else
+				selectSpriteAt(msx, msy, mx, my);
+
+			rebuildObjectList();
+		}
+
+		// ---- Drag / resize using world-space deltas (robust at any zoom/pan) ----
+		if((dragging || resizing) && FlxG.mouse.pressed)
+		{
+			if(resizing)
+				updateResize(mx, my);
+			else if(dragKind == 'sprite' && dragSpriteIndex >= 0 && dragSpriteIndex < sprites.length)
+			{
+				var idx = dragSpriteIndex;
+				sprites[idx].x = N(dragStartObjX + (mx - dragStartWorldX));
+				sprites[idx].y = N(dragStartObjY + (my - dragStartWorldY));
+				refreshSpritePreview(idx);
+				updateSpriteUIFromData();
 			}
-			if(hitHandle >= 0) {
-				startResize(hitHandle, mx, my);
-			}
-			// CHARACTER MODE: select/drag characters only
-			else if(isCharMode()) {
-				if(overlapsChar(charDad, mx, my)) { selectedSprite = -1; updateSelectionVisuals(); selectedChar = 'dad'; updateCharBorder(); startDrag('dad', mx, my, dadX, dadY); }
-				else if(overlapsChar(charBF, mx, my)) { selectedSprite = -1; updateSelectionVisuals(); selectedChar = 'bf'; updateCharBorder(); startDrag('bf', mx, my, bfX, bfY); }
-				else if(!hideGF && overlapsChar(charGF, mx, my)) { selectedSprite = -1; updateSelectionVisuals(); selectedChar = 'gf'; updateCharBorder(); startDrag('gf', mx, my, gfX, gfY); }
-				else { selectedChar = ''; updateCharBorder(); selectedSprite = -1; updateSelectionVisuals(); if(spriteDropDown != null) spriteDropDown.selectedIndex = -1; disableSpriteUI(); }
-			}
-			// SPRITE MODE: select/drag sprites only
-			else {
-				selectedChar = ''; updateCharBorder();
-				var hit = -1;
-				var j = spritePreviews.length - 1;
-				while(j >= 0) {
-					var spr = spritePreviews[j];
-					if(spr != null && spr.visible && spr.graphic != null) {
-						var sw = spr.frameWidth * spr.scale.x;
-						var sh = spr.frameHeight * spr.scale.y;
-						if(mx >= spr.x && mx <= spr.x + sw && my >= spr.y && my <= spr.y + sh) { hit = j; break; }
-					}
-					j--;
+			else if(dragKind == 'char')
+			{
+				var dx = mx - dragStartWorldX;
+				var dy = my - dragStartWorldY;
+				switch(dragCharKey) {
+					case 'bf': bfX = N(dragStartObjX + dx); bfY = N(dragStartObjY + dy);
+					case 'dad': dadX = N(dragStartObjX + dx); dadY = N(dragStartObjY + dy);
+					case 'gf': gfX = N(dragStartObjX + dx); gfY = N(dragStartObjY + dy);
 				}
-				if(hit >= 0) { selectSprite(hit); startDrag('sprite:' + hit, mx, my, sprites[hit].x, sprites[hit].y); }
-				else { selectedSprite = -1; if(spriteDropDown != null) spriteDropDown.selectedIndex = -1; updateSelectionVisuals(); disableSpriteUI(); }
+				updateCharPositions();
 			}
 		}
 
-		// ---- Drag (zoom-independent using screen-space delta) ----
-		if(isDragging && FlxG.mouse.pressed) {
-			var zoom = FlxG.camera.zoom;
-			var sdx = (FlxG.mouse.screenX - dragStartScreenX) / zoom;
-			var sdy = (FlxG.mouse.screenY - dragStartScreenY) / zoom;
-			if(isResizing) updateResize(mx, my);
-			else if(dragTarget.startsWith('sprite:')) {
-				var idx = Std.parseInt(dragTarget.substr(7));
-				if(idx >= 0 && idx < sprites.length) {
-					sprites[idx].x = N(dragStartSpriteX + sdx);
-					sprites[idx].y = N(dragStartSpriteY + sdy);
-					refreshSpritePreview(idx); updateSpriteUIFromData();
-				}
-			} else {
-				switch(dragTarget) {
-					case 'bf': bfX = N(dragStartSpriteX + sdx); bfY = N(dragStartSpriteY + sdy);
-					case 'dad': dadX = N(dragStartSpriteX + sdx); dadY = N(dragStartSpriteY + sdy);
-					case 'gf': gfX = N(dragStartSpriteX + sdx); gfY = N(dragStartSpriteY + sdy);
-				}
-				updateCharPositions(); // skip reorderCanvasLayers & updateCharacterUIFromData during drag
-			}
-		}
-		if(FlxG.mouse.justReleased) {
-			isDragging = false; isResizing = false; dragTarget = ''; resizeCorner = -1;
-			markUnsaved(); // mark unsaved on drop
+		if(FlxG.mouse.justReleased && (dragging || resizing))
+		{
+			endDrag();
+			markUnsaved();
 		}
 
 		// ---- Keyboard Nudge (mode-aware) ----
-		if(selectedSprite >= 0 && !isDragging && isSpriteMode()) {
+		if(selectedSprite >= 0 && !dragging && isSpriteMode()) {
 			var nudge = FlxG.keys.pressed.SHIFT ? 10 : 1;
 			var nudged = false;
 			if(FlxG.keys.justPressed.LEFT) { sprites[selectedSprite].x -= nudge; nudged = true; }
@@ -869,7 +1118,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 			if(FlxG.keys.justPressed.DOWN) { sprites[selectedSprite].y += nudge; nudged = true; }
 			if(nudged) { refreshSpritePreview(selectedSprite); updateSpriteUIFromData(); markUnsaved(); }
 		}
-		if(selectedChar != '' && !isDragging && isCharMode()) {
+		if(selectedChar != '' && !dragging && isCharMode()) {
 			var nudge = FlxG.keys.pressed.SHIFT ? 10 : 1;
 			var nudged = false;
 			if(FlxG.keys.justPressed.LEFT) { switch(selectedChar) { case 'bf': bfX -= nudge; case 'dad': dadX -= nudge; case 'gf': gfX -= nudge; } nudged = true; }
@@ -879,29 +1128,266 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 			if(nudged) { updateCharPositions(); reorderCanvasLayers(); updateCharacterUIFromData(); markUnsaved(); }
 		}
 	}
+
 	function resetCamera(){
 		camFollow.setPosition(400, 200); // center on typical stage area
 		camFollow.screenCenter();
 		FlxG.camera.zoom = 1;
 	}
-	function overlapsChar(ch:Character, mx:Float, my:Float):Bool {
+
+	// ---- Screen-space hit helpers (accurate under any camera zoom/pan) ----
+	function worldToScreenX(wx:Float):Float {
+		return (wx - camEditor.scroll.x) * camEditor.zoom - 0.5 * camEditor.width * (camEditor.zoom - camEditor.initialZoom) + camEditor.x;
+	}
+	function worldToScreenY(wy:Float):Float {
+		return (wy - camEditor.scroll.y) * camEditor.zoom - 0.5 * camEditor.height * (camEditor.zoom - camEditor.initialZoom) + camEditor.y;
+	}
+
+	function hitSpriteScreen(sx:Float, sy:Float):Int {
+		var j = spritePreviews.length - 1;
+		while(j >= 0) {
+			var spr = spritePreviews[j];
+			if(spr != null && spr.visible && spr.graphic != null) {
+				var rx = worldToScreenX(spr.x);
+				var ry = worldToScreenY(spr.y);
+				var rw = spr.frameWidth * spr.scale.x * camEditor.zoom;
+				var rh = spr.frameHeight * spr.scale.y * camEditor.zoom;
+				if(sx >= rx && sx <= rx + rw && sy >= ry && sy <= ry + rh)
+					return j;
+			}
+			j--;
+		}
+		return -1;
+	}
+
+	function hitResizeHandleScreen(sx:Float, sy:Float):Int {
+		if(selectedSprite < 0 || selectedSprite >= spritePreviews.length) return -1;
+		var spr = spritePreviews[selectedSprite];
+		if(spr == null || spr.graphic == null || spr.frameWidth <= 0) return -1;
+		var rx = worldToScreenX(spr.x);
+		var ry = worldToScreenY(spr.y);
+		var rw = spr.frameWidth * spr.scale.x * camEditor.zoom;
+		var rh = spr.frameHeight * spr.scale.y * camEditor.zoom;
+		var hs = 12.0; // screen-space handle target
+		var pts:Array<Array<Float>> = [[0, 0], [rw - hs, 0], [0, rh - hs], [rw - hs, rh - hs]];
+		for(i in 0...4) {
+			if(sx >= rx + pts[i][0] && sx <= rx + pts[i][0] + hs && sy >= ry + pts[i][1] && sy <= ry + pts[i][1] + hs)
+				return i;
+		}
+		return -1;
+	}
+
+	function overlapsCharScreen(ch:Character, sx:Float, sy:Float):Bool {
 		if(ch == null || ch.graphic == null) return false;
-		if(ch.frameWidth <= 0 || ch.frameHeight <= 0) return false; // not loaded yet
-		return mx >= ch.x && mx <= ch.x + ch.frameWidth && my >= ch.y && my <= ch.y + ch.frameHeight;
+		if(ch.frameWidth <= 0 || ch.frameHeight <= 0) return false;
+		var rx = worldToScreenX(ch.x);
+		var ry = worldToScreenY(ch.y);
+		var rw = ch.frameWidth * camEditor.zoom;
+		var rh = ch.frameHeight * camEditor.zoom;
+		return sx >= rx && sx <= rx + rw && sy >= ry && sy <= ry + rh;
 	}
-	function startDrag(target:String, mx:Float, my:Float, ox:Float, oy:Float) {
-		isDragging = true; isResizing = false; dragTarget = target;
-		dragOffsetX = mx - ox; dragOffsetY = my - oy;
-		// Store screen-space reference for zoom-independent dragging
-		dragStartScreenX = FlxG.mouse.screenX;
-		dragStartScreenY = FlxG.mouse.screenY;
-		dragStartSpriteX = ox;
-		dragStartSpriteY = oy;
+
+	function selectSpriteAt(sx:Float, sy:Float, wx:Float, wy:Float) {
+		selectedChar = '';
+		updateCharBorder();
+		var hit = hitSpriteScreen(sx, sy);
+		if(hit >= 0) {
+			selectSprite(hit);
+			startDragSprite(hit, wx, wy);
+		} else {
+			selectedSprite = -1;
+			if(spriteDropDown != null) spriteDropDown.selectedIndex = -1;
+			updateSelectionVisuals();
+			disableSpriteUI();
+		}
 	}
-	function startResize(c:Int,mx:Float,my:Float){if(selectedSprite<0)return;var d=sprites[selectedSprite];isDragging=true;isResizing=true;dragTarget='sprite:'+selectedSprite;resizeCorner=c;resizeStartScaleX=d.scaleX;resizeStartScaleY=d.scaleY;resizeStartX=d.x;resizeStartY=d.y;resizeStartMouseX=mx;resizeStartMouseY=my;}
-	function updateResize(mx:Float,my:Float){if(selectedSprite<0||resizeCorner<0)return;var spr=spritePreviews[selectedSprite];if(spr==null||spr.graphic==null||spr.frameWidth<=0)return;var d=sprites[selectedSprite];var ow=spr.frameWidth,oh=spr.frameHeight;var dx=mx-resizeStartMouseX,dy=my-resizeStartMouseY;var nsx=resizeStartScaleX,nsy=resizeStartScaleY,nx=resizeStartX,ny=resizeStartY;switch(resizeCorner){case 0:nsx=resizeStartScaleX-dx/ow;nsy=resizeStartScaleY-dy/oh;nx=resizeStartX+dx;ny=resizeStartY+dy;case 1:nsx=resizeStartScaleX+dx/ow;nsy=resizeStartScaleY-dy/oh;ny=resizeStartY+dy;case 2:nsx=resizeStartScaleX-dx/ow;nsy=resizeStartScaleY+dy/oh;nx=resizeStartX+dx;case 3:nsx=resizeStartScaleX+dx/ow;nsy=resizeStartScaleY+dy/oh;}if(nsx<0.05)nsx=0.05;if(nsy<0.05)nsy=0.05;if(nsx>10)nsx=10;if(nsy>10)nsy=10;d.scaleX=nsx;d.scaleY=nsy;d.x=nx;d.y=ny;refreshSpritePreview(selectedSprite);updateSpriteUIFromData();markUnsaved();}
+
+	function selectCharacterAt(sx:Float, sy:Float, wx:Float, wy:Float) {
+		selectedSprite = -1;
+		updateSelectionVisuals();
+		selectedChar = '';
+		updateCharBorder();
+		if(overlapsCharScreen(charDad, sx, sy)) {
+			selectedChar = 'dad'; updateCharBorder(); startDragChar('dad', wx, wy);
+		} else if(overlapsCharScreen(charBF, sx, sy)) {
+			selectedChar = 'bf'; updateCharBorder(); startDragChar('bf', wx, wy);
+		} else if(!hideGF && overlapsCharScreen(charGF, sx, sy)) {
+			selectedChar = 'gf'; updateCharBorder(); startDragChar('gf', wx, wy);
+		} else {
+			if(spriteDropDown != null) spriteDropDown.selectedIndex = -1;
+			disableSpriteUI();
+		}
+		if(selectedChar != '') updateCharacterUIFromData();
+	}
+
+	function startDragSprite(idx:Int, wx:Float, wy:Float) {
+		dragging = true;
+		resizing = false;
+		dragKind = 'sprite';
+		dragSpriteIndex = idx;
+		dragCharKey = '';
+		dragStartWorldX = wx;
+		dragStartWorldY = wy;
+		dragStartObjX = sprites[idx].x;
+		dragStartObjY = sprites[idx].y;
+	}
+
+	function startDragChar(key:String, wx:Float, wy:Float) {
+		dragging = true;
+		resizing = false;
+		dragKind = 'char';
+		dragSpriteIndex = -1;
+		dragCharKey = key;
+		dragStartWorldX = wx;
+		dragStartWorldY = wy;
+		switch(key) {
+			case 'bf': dragStartObjX = bfX; dragStartObjY = bfY;
+			case 'dad': dragStartObjX = dadX; dragStartObjY = dadY;
+			case 'gf': dragStartObjX = gfX; dragStartObjY = gfY;
+		}
+	}
+
+	function startResize(c:Int, wx:Float, wy:Float) {
+		if(selectedSprite < 0 || selectedSprite >= sprites.length) return;
+		var d = sprites[selectedSprite];
+		dragging = true;
+		resizing = true;
+		dragKind = 'sprite';
+		dragSpriteIndex = selectedSprite;
+		dragCharKey = '';
+		resizeCorner = c;
+		resizeStartScaleX = d.scaleX;
+		resizeStartScaleY = d.scaleY;
+		resizeStartX = d.x;
+		resizeStartY = d.y;
+		resizeStartWorldX = wx;
+		resizeStartWorldY = wy;
+		var spr = spritePreviews[selectedSprite];
+		resizeFrameW = (spr != null && spr.graphic != null) ? spr.frameWidth : 1;
+		resizeFrameH = (spr != null && spr.graphic != null) ? spr.frameHeight : 1;
+	}
+
+	function updateResize(wx:Float, wy:Float) {
+		if(selectedSprite < 0 || resizeCorner < 0) return;
+		if(selectedSprite >= sprites.length) return;
+		var d = sprites[selectedSprite];
+		var ow = resizeFrameW;
+		var oh = resizeFrameH;
+		if(ow <= 0 || oh <= 0) return;
+
+		var dx = wx - resizeStartWorldX;
+		var dy = wy - resizeStartWorldY;
+		var nsx = resizeStartScaleX;
+		var nsy = resizeStartScaleY;
+		var nx = resizeStartX;
+		var ny = resizeStartY;
+
+		switch(resizeCorner) {
+			case 0:
+				nsx = resizeStartScaleX - dx / ow;
+				nsy = resizeStartScaleY - dy / oh;
+				nx = resizeStartX + dx;
+				ny = resizeStartY + dy;
+			case 1:
+				nsx = resizeStartScaleX + dx / ow;
+				nsy = resizeStartScaleY - dy / oh;
+				ny = resizeStartY + dy;
+			case 2:
+				nsx = resizeStartScaleX - dx / ow;
+				nsy = resizeStartScaleY + dy / oh;
+				nx = resizeStartX + dx;
+			case 3:
+				nsx = resizeStartScaleX + dx / ow;
+				nsy = resizeStartScaleY + dy / oh;
+		}
+
+		if(nsx < 0.05) nsx = 0.05;
+		if(nsy < 0.05) nsy = 0.05;
+		if(nsx > 10) nsx = 10;
+		if(nsy > 10) nsy = 10;
+
+		d.scaleX = nsx;
+		d.scaleY = nsy;
+		d.x = nx;
+		d.y = ny;
+		refreshSpritePreview(selectedSprite);
+		updateSpriteUIFromData();
+	}
+
+	function endDrag() {
+		dragging = false;
+		resizing = false;
+		dragKind = '';
+		dragSpriteIndex = -1;
+		dragCharKey = '';
+		resizeCorner = -1;
+	}
+
 	function updateCharacterUIFromData(){if(bfXStepper!=null)bfXStepper.value=bfX;if(bfYStepper!=null)bfYStepper.value=bfY;if(dadXStepper!=null)dadXStepper.value=dadX;if(dadYStepper!=null)dadYStepper.value=dadY;if(gfXStepper!=null)gfXStepper.value=gfX;if(gfYStepper!=null)gfYStepper.value=gfY;}
 
 	public function UIEvent(id:String,sender:Dynamic){}
 	override function destroy(){_file=null;charDad=null;charBF=null;charGF=null;super.destroy();}
+}
+
+// ---------------------------------------------------------------------------
+// A compact row for the background editor's object explorer.
+// ---------------------------------------------------------------------------
+class BgObjectListRow extends FlxSpriteGroup
+{
+	public var bg:FlxSprite;
+	public var accent:FlxSprite;
+	public var titleText:EditorsText;
+	public var subText:EditorsText;
+	public var selected(default, set):Bool;
+
+	public function new(x:Float, y:Float, w:Int, h:Int)
+	{
+		super(x, y);
+		width = w;
+		height = h;
+
+		bg = PsychUIHelper.createRoundedRectSprite(w, h, 5);
+		bg.color = 0xFF222633;
+		bg.alpha = 0.95;
+		add(bg);
+
+		accent = new FlxSprite(0, 0).makeGraphic(3, h, FlxColor.TRANSPARENT);
+		add(accent);
+
+		titleText = new EditorsText(10, 3, w - 80, '', 11, false);
+		titleText.color = 0xFFD5D9E6;
+		add(titleText);
+
+		subText = new EditorsText(w - 78, 5, 70, '', 8, false);
+		subText.alignment = RIGHT;
+		subText.color = 0xFF8A92A6;
+		add(subText);
+
+		selected = false;
+	}
+
+	public function setInfo(title:String, sub:String, isSelected:Bool)
+	{
+		titleText.text = title;
+		subText.text = sub;
+		this.selected = isSelected;
+	}
+
+	function set_selected(v:Bool):Bool
+	{
+		selected = v;
+		if(selected)
+		{
+			bg.color = 0xFF35476B;
+			accent.color = 0xFF4EA4FF;
+			titleText.color = FlxColor.WHITE;
+		}
+		else
+		{
+			bg.color = 0xFF222633;
+			accent.color = FlxColor.TRANSPARENT;
+			titleText.color = 0xFFD5D9E6;
+		}
+		return v;
+	}
 }

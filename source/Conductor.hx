@@ -120,9 +120,19 @@ class Conductor
 		var totalPos:Float = 0;
 		for (i in 0...song.notes.length)
 		{
-			if(song.notes[i].changeBPM && song.notes[i].bpm != curBPM)
+			//你家bpm他妈可以等于零是吧？
+			var sectionBpm:Float = song.notes[i].bpm;
+			if (song.notes[i].changeBPM && (sectionBpm <= 0 || !Math.isFinite(sectionBpm)))
 			{
-				curBPM = song.notes[i].bpm;
+				TraceManager.warn('trace.conductor.invalidBpm',
+					'他妈的到底是谁把歌曲BPM写成0啊？！无效BPM {} 在第 {} 小节，用上一个 {} 顶着，气死我了',
+					[sectionBpm, i, curBPM]);
+				sectionBpm = curBPM;
+			}
+
+			if(song.notes[i].changeBPM && sectionBpm != curBPM)
+			{
+				curBPM = sectionBpm;
 				var event:BPMChangeEvent = {
 					stepTime: totalSteps,
 					songTime: totalPos,
@@ -152,6 +162,15 @@ class Conductor
 
 	public static function changeBPM(newBpm:Float)
 	{
+		// 防止 bpm=0 / NaN / Infinity 把 crochet 变成非有限值，导致倒计时或
+		// 步骤换算卡死（常见于某些模组谱面在收尾小节把 BPM 写成 0）。
+		if (newBpm <= 0 || !Math.isFinite(newBpm))
+		{
+			TraceManager.warn('trace.conductor.invalidBpmFallback',
+				'操，遇到无效BPM {} 了，只能先按1硬撑', [newBpm]);
+			newBpm = 1;
+		}
+
 		bpm = newBpm;
 
 		crochet = calculateCrochet(bpm);

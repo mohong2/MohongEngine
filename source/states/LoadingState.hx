@@ -135,27 +135,29 @@ class LoadingState extends MusicBeatState
 		);
 	}
 	
-	function checkLoadSong(path:String)
+	function checkLoadSong(path:Dynamic)
 	{
-		if (!Assets.cache.hasSound(path))
+		if (path == null || !Std.isOfType(path, String)) return;
+		var pathStr:String = cast path;
+		if (!Assets.cache.hasSound(pathStr))
 		{
 			var library = Assets.getLibrary("songs");
-			final symbolPath = path.split(":").pop();
+			final symbolPath = pathStr.split(":").pop();
 			// @:privateAccess
 			// library.types.set(symbolPath, SOUND);
 			// @:privateAccess
 			// library.pathGroups.set(symbolPath, [library.__cacheBreak(symbolPath)]);
-			var callback = callbacks.add("song:" + path);
-			var fut = Assets.loadSound(path);
+			var callback = callbacks.add("song:" + pathStr);
+			var fut = Assets.loadSound(pathStr);
 			fut.onComplete(function(_)
 			{
-				TraceManager.info('trace.loading.soundOk', 'sound loaded: {}', [path]);
+				TraceManager.info('trace.loading.soundOk', 'sound loaded: {}', [pathStr]);
 				callback();
 			});
 			// Allow continuation on failure to prevent sound issues from hanging the loading screen
 			fut.onError(function(e)
 			{
-				TraceManager.warn('trace.loading.soundFail', 'sound load FAILED (skipping wait): {} [{}]', [path, e]);
+				TraceManager.warn('trace.loading.soundFail', 'sound load FAILED (skipping wait): {} [{}]', [pathStr, e]);
 				callback();
 			});
 		}
