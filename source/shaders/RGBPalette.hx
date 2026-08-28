@@ -157,7 +157,12 @@ class RGBShaderReference
 		if (value && !forceDisabled && ClientPrefs.data.shaders)
 			_owner.shader = parent.shader;
 		else if (fallbackColorSwap != null)
-			_owner.shader = fallbackColorSwap.isNeutral() ? null : fallbackColorSwap.shader;
+		{
+			if (ClientPrefs.data.perfMode && fallbackColorSwap.isNeutral())
+				_owner.shader = null;
+			else
+				_owner.shader = fallbackColorSwap.shader;
+		}
 		else
 			_owner.shader = fallbackShader;
 		return enabled;

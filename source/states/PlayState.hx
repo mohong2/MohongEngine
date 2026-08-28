@@ -4322,8 +4322,9 @@ class PlayState extends MusicBeatState
 
 			fastSkipPastNotes();
 			var targetData:PreloadedChartNote = (notesAddedCount < unspawnNotes.length) ? unspawnNotes[notesAddedCount] : null;
-			// 精确存活数: 直接读存活紧凑列表长度 (物化/回收 O(1) 维护)。
-			limitNC = activeNotes.length;
+			// 精确存活数: perfMode 关闭时与提交前一致，用 FlxTypedGroup 的 countLiving()，
+			// 避免脚本额外加入 notes 的音符不被计数；perfMode 开启时读紧凑列表 (O(1))。
+			limitNC = ClientPrefs.data.perfMode ? activeNotes.length : notes.countLiving();
 
 			// 自适应物化预算: 帧时间越长允许生成越多 (掉帧后自动追赶积压, 恢复流畅);
 			// 同时判定线前的音符 (hardDeadline 内) 无视预算强制生成 —— 保证可玩性优先于削峰。
@@ -4442,8 +4443,13 @@ class PlayState extends MusicBeatState
 
 			if(startedCountdown)
 			{
-				refreshNoteCullRanges(elapsed);
-				refreshLaneTrigCaches();
+				// perfMode 关闭时不做离屏剔除，也不使用每帧 trig 缓存，
+				// 这两项都属于 H-Slice 优化，关闭时应保持提交前逐音符实时计算。
+				if (ClientPrefs.data.perfMode)
+				{
+					refreshNoteCullRanges(elapsed);
+					refreshLaneTrigCaches();
+				}
 				_frameAliveTally = 0;
 
 				// 复用 strumsHit 数组，避免每帧分配新数组（密集谱面下是主要的每帧垃圾来源之一）
@@ -4458,17 +4464,26 @@ class PlayState extends MusicBeatState
 
 				_phaseT = haxe.Timer.stamp();
 				bulkHitDueMaterialized(); // botplay 到点已物化音符的批量命中 (合并逐击调用链)
-				// 遍历存活紧凑列表 (O(存活数), 不再扫全量 members 槽位)。
-				// 正向遍历 + swap-remove 补偿: updateDaNote 可能回收当前元素,
-				// 尾元素补位到当前下标, 此时 i 不前进即可补上新换入的元素。
-				var ai:Int = 0;
-				while (ai < activeNotes.length)
+				if (ClientPrefs.data.perfMode)
 				{
-					var an:Note = activeNotes[ai];
-					var lenBefore:Int = activeNotes.length;
-					updateDaNote(an);
-					if (activeNotes.length == lenBefore && ai < activeNotes.length && activeNotes[ai] == an)
-						ai++;
+					// 遍历存活紧凑列表 (O(存活数), 不再扫全量 members 槽位)。
+					// 正向遍历 + swap-remove 补偿: updateDaNote 可能回收当前元素,
+					// 尾元素补位到当前下标, 此时 i 不前进即可补上新换入的元素。
+					var ai:Int = 0;
+					while (ai < activeNotes.length)
+					{
+						var an:Note = activeNotes[ai];
+						var lenBefore:Int = activeNotes.length;
+						updateDaNote(an);
+						if (activeNotes.length == lenBefore && ai < activeNotes.length && activeNotes[ai] == an)
+							ai++;
+					}
+				}
+				else
+				{
+					// 关闭性能模式时保持提交前行为: 遍历 notes 全组 alive 成员，
+					// 脚本额外加入/移动的 Note 也会被正常更新。
+					notes.forEachAlive(updateDaNote);
 				}
 				_lastAliveTally = _frameAliveTally;
 
@@ -4542,8 +4557,15 @@ class PlayState extends MusicBeatState
 			else
 			{
 				_frameAliveTally = 0;
-				for (rn in activeNotes)
-					resetNote(rn);
+				if (ClientPrefs.data.perfMode)
+				{
+					for (rn in activeNotes)
+						resetNote(rn);
+				}
+				else
+				{
+					notes.forEachAlive(resetNote);
+				}
 				_lastAliveTally = _frameAliveTally;
 				// 倒计时前同样不 remove/destroy，dead Note 留在 members 中复用。
 			}
@@ -6787,15 +6809,15 @@ class PlayState extends MusicBeatState
 			}
 			for (i in 0...laneCount)
 			{
-				// osu! 尾判/按键释放回调: 桌面轮询路径也走 keyReleased (之前只有移动端/回放会触发)
-				//if (releaseArray[i])
-				//	keyReleased(i, time);
+				if (releaseArray[i])
+					keyReleased(i, time);
+				
 				var spr:StrumNote = playerStrums.members[i];
 				// 反卡键 (多绑定/触摸释放丢失的幻按): 该轨道当前确实没有按住, 但 strum 仍停在 'pressed',
 				// 说明释放事件被吞, 强制回 'static'。只在"确实未按住"时才复位, 因此不误伤长按/真按住。
 				var stuckPressed:Bool = (spr != null && !holdArray[i]
 					&& spr.animation.curAnim != null && spr.animation.curAnim.name == 'pressed');
-				if (releaseArray[i] || strumsBlocked[i] == true || stuckPressed)
+				if (strumsBlocked[i] == true || stuckPressed)
 				{
 					if (spr != null)
 					{
@@ -7407,26 +7429,31 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 		// 无需逐帧三角函数/裁剪/绘制 (visible=false 让 group.draw 直接跳过)。
 		// 只对位置完全由引擎派生 (copyX&&copyY) 的音符生效; 已过击杀窗口的音符
 		// 永不驻留 —— 它们必须走正常 miss/kill 流程。
-		if (daNote.copyX && daNote.copyY && !daNote.inEditor)
+		// perfMode 关闭时完全不剔除，保持提交前“所有 alive Note 都参与更新/绘制”的逻辑。
+		if (ClientPrefs.data.perfMode)
 		{
-			if (!(Conductor.songPosition > noteKillOffset + daNote.strumTime))
+			if (daNote.copyX && daNote.copyY && !daNote.inEditor)
 			{
-				var distPx:Float = Conductor.songPosition - daNote.strumTime;
-				if (distPx < 0) distPx = -distPx;
-				distPx *= 0.45 * songSpeed * daNote.multSpeed * Note.getManiaScale(daNote.mania);
-				if (distPx > (daNote.mustPress ? _cullDistPlayer : _cullDistOpponent))
+				if (!(Conductor.songPosition > noteKillOffset + daNote.strumTime))
 				{
-					if (!daNote.culled)
+					var distPx:Float = Conductor.songPosition - daNote.strumTime;
+					if (distPx < 0) distPx = -distPx;
+					distPx *= 0.45 * songSpeed * daNote.multSpeed * Note.getManiaScale(daNote.mania);
+					if (distPx > (daNote.mustPress ? _cullDistPlayer : _cullDistOpponent))
 					{
-						daNote.culled = true;
-						daNote.visible = false;
-						daNote.active = false;
-						_culledCount++;
+						if (!daNote.culled)
+						{
+							daNote.culled = true;
+							daNote.visible = false;
+							daNote.active = false;
+							_culledCount++;
+						}
+						return;
 					}
-					return;
 				}
 			}
 		}
+		// 如果从 perfMode 开启切回关闭，或既有 culled 标记需要恢复，统一在这里解除驻留。
 		if (daNote.culled)
 		{
 			daNote.culled = false;
@@ -7467,6 +7494,7 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 		var angleDir:Float = strumDirection * Math.PI / 180;
 		var cosDir:Float = Math.cos(angleDir);
 		var sinDir:Float = Math.sin(angleDir);
+		if (ClientPrefs.data.perfMode)
 		{
 			var cosArr:Array<Float> = daNote.mustPress ? _playerLaneCos : _oppLaneCos;
 			var sinArr:Array<Float> = daNote.mustPress ? _playerLaneSin : _oppLaneSin;
@@ -7486,7 +7514,7 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 		if (daNote.copyX)
 			daNote.x = strumX + cosDir * daNote.distance;
 
-		if (daNote.copyY)
+				if (daNote.copyY)
 		{
 			daNote.y = strumY + sinDir * daNote.distance;
 

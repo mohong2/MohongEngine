@@ -417,6 +417,7 @@ class Note extends FlxSprite {
         scale.y = (stepCrochet / 100) * 1.05 * newSongSpeed * multSpeed * Note.getManiaScale(mania);
         // 皮肤自适应: 非默认帧高时按 (44/frameHeight) 归一化 (默认皮肤行为不变)
         if(!PlayState.isPixelStage) scale.y *= (44.0 / frameHeight);
+        if(!PlayState.isPixelStage) scale.y += (2.0 / frameHeight);
         if(PlayState.isPixelStage) {
             scale.y *= 1.19;
             scale.y *= (6 / frameHeight);
@@ -487,7 +488,9 @@ class Note extends FlxSprite {
     function refreshSwapShader():Void
     {
         if (colorSwap == null) return;
-        var target:FlxShader = colorSwap.isNeutral() ? null : colorSwap.shader;
+        // perfMode 关闭时保持提交前行为：始终挂 colorSwap.shader，
+        // 不因“中性色”而省略着色器，脚本/渲染路径与旧逻辑一致。
+        var target:FlxShader = (ClientPrefs.data.perfMode && colorSwap.isNeutral()) ? null : colorSwap.shader;
         if (shader != target)
             shader = target;
     }
@@ -497,8 +500,10 @@ class Note extends FlxSprite {
 
     override function draw():Void
     {
-        if (FlxG.renderTile && !pixelPerfectPosition && cameras != null && cameras.length == 1
+        if (ClientPrefs.data.perfMode
+            && FlxG.renderTile && !pixelPerfectPosition && cameras != null && cameras.length == 1
             && alpha > 0 && angle == 0 && scale.x == scale.y && scale.x != 0
+            && !isSustainNote && sustainLength <= 0 && clipRect == null
             && !flipX && !flipY && blend == null && shader == null)
         {
             @:privateAccess
@@ -1196,6 +1201,7 @@ class Note extends FlxSprite {
                     scale.y = (stepCrochet / 100) * 1.05 * songSpeedVal * multSpeed * Note.getManiaScale(mania);
                     // 皮肤自适应: 非默认帧高时按 (44/frameHeight) 归一化 (默认皮肤行为不变)
                     if(!PlayState.isPixelStage) scale.y *= (44.0 / frameHeight);
+                    if(!PlayState.isPixelStage) scale.y += (2.0 / frameHeight);
                     if(PlayState.isPixelStage) {
                         scale.y *= 1.19;
                         scale.y *= (6 / frameHeight);
