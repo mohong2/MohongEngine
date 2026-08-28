@@ -61,6 +61,14 @@ runs:
         haxelib setup "$GITHUB_WORKSPACE/.haxelib"
         haxe -cp ./setup -main Main --interp
 
+    - name: Use official hxcpp on macos-arm64
+      if: inputs.target == 'macos-arm64'
+      shell: bash
+      run: |
+        haxelib install hxcpp 4.2.1 --never
+        haxelib set hxcpp 4.2.1
+        haxelib path hxcpp
+
     - name: Enable hxcpp compile cache
       shell: bash
       run: |
