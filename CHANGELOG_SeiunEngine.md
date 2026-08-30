@@ -1,7 +1,7 @@
 # SeiunEngine 更新日志 · Changelog
 
-> 完整记录 2026年6月19日 至 8月27日 的所有改进、修复与突破
-> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 27, 2026.
+> 完整记录 2026年6月19日 至 8月30日 的所有改进、修复与突破
+> A comprehensive record of every improvement, fix, and breakthrough from June 19 to August 30, 2026.
 
 ---
 
@@ -285,8 +285,8 @@
 针对上万 Note 密集谱面的掉帧问题，落地 H-Slice 风格优化体系（默认全关，可在「图形设置」按需开启）：
 
 - 新增「性能模式」总开关及子项：批量跳过期 Note / 快速 Note 排序 / 最大同时音符数 / 游玩期禁用 GC；总开关开启后启用批量结算、弹窗与溅射合并、生成节流等极限优化；
-- 离屏剔除 + 可视物化地平线 + 回池复用：屏外音符零更新零绘制，内存与 CPU 只随同时存活数增长；
-- 命中与渲染热点全面降阶：存活紧凑列表、O(1) 组追加、下标/三角函数缓存、中性色免着色器合批（同贴图数千音符合并为 1 次 draw call）；
+- 离屏剔除（off-screen culling）+ 可视物化地平线 + 回池复用（object pooling）：屏外音符零更新零绘制，内存与 CPU 只随同时存活数增长；
+- 命中与渲染热点全面降阶：存活紧凑列表、O(1) 组追加、下标/三角函数缓存、中性色免 shader 合批（同贴图数千音符合并为 1 次 draw call）；
 - Botplay 到点音符走数据层批量结算，表现层按帧合并，极限 NPS 不再进入死亡螺旋；
 - Change Mania 时间线缓存，谱面加载不再随事件数平方增长；
 - 兼容性：有 Lua/HScript 时回调语义保持原版不变，关闭开关即回到 stock 行为。
@@ -321,6 +321,42 @@
 - 新增原生崩溃钩子（NativeCrash）：Windows SEH 记录异常码、出错指令指针、访问目标内存指针、寄存器与出错模块；Linux/macOS 捕获 SIGSEGV/SIGABRT 等并记录 si_addr 内存指针与 backtrace —— 原生层硬崩溃不再无痕闪退，日志会被下一次报告原样收录。
 - 新增心跳文件（crash/heartbeat.txt）：每 5 秒记录当前状态/帧率/内存/GL 错误（变化时才写盘），进程被驱动层直接杀掉时也能指认崩溃位置。
 - 崩溃堆栈采集增强：非 FilePos 的栈项也保留进报告，为空时回退当前调用栈。
+
+---
+
+### 2026年8月28日（构建小修）
+
+- 修好 macOS arm64 的工具链后，CI 里把 hxcpp 缓存重新打开了，Mac 构建能快一点。
+- 顺手修了"性能模式"的锅：关掉性能模式（perfMode）时行为跟原版完全一致，不会因为之前的优化把 shader 或 off-screen culling 偷偷改掉。
+
+---
+
+### 2026年8月30日（肝了三连发：fix bugs → fix too → android）
+
+#### 大杂烩（fix bugs）
+
+- 新增 **Turbo 模式**（默认关）：粪谱终极方案——开启后强制 botplay，高密度段落走预计算聚合 + ghost note 合并 + 数据级批量结算，不再真的物化几万个 sprite。顺带做了字符串驻留和 Note 字段重排（按类型连排省对齐空洞），百万级谱面能省几百 MB 内存。
+- 图形缓存重做：AsyncGfxLoader / GfxLru / GfxPolicy 这一轮把解码和打包挪回主线程、按帧小批量处理，加载界面不再一顿一顿；缓存 key 和别名注册也理顺了，淘汰不再误杀还在用的图。
+- 联机侧：server.zip（15KB → 33MB）和 online.zip 更新；PlayState 联机逻辑加了一堆——spectate（观战）、角色 skin 替换 + 头顶 nameplate、start gate、房主暂停权限文案。
+- ⚠ 先声明一下：目前的联机我压根就没想编译进游戏（ONLINE_ALLOWED 还是注释掉的），因为它真的太一坨了，你们别抱期待，也别问什么时候上。代码先放着占个坑而已。
+- PlayState 按键检测改为预分配缓冲 + 防重入保护，安卓上不再每帧新建一堆数组。
+- 修了 PsychUIDropDownMenu 在滚轮 / 重新挂载下的定位问题，顺带修了编辑器、暂停菜单、LoadingState 的一堆小问题。
+- 新设置项：Turbo Mode、Note RGB Shader。
+- 崩溃报告顺带补了模块基址和偏移（native_crash.inc）。
+
+#### GitHub 更新检查重做（fix too）
+
+- 新增 GitHubAPI.hx，封装了 GitHub REST API（releases / tags / commits / issues / PR 都能查），带版本号比较。
+- 检查更新从拉 gitVersion.txt 改成查 GitHub Releases，新增 prerelease（是否接受预发布版）选项；主菜单显示"有新版本"，OutdatedState 也重写了。
+- 版本号升到 0.2.1hotfix；CHECK_FOR_UPDATES 改为桌面 / 移动端都参与编译（之前只在联机开启时才编译）。
+
+#### 安卓权限弹窗本地化（android）
+
+- 安卓 All files access、悬浮窗（overlay）权限弹窗不再硬编码中英文，改为等语言加载完再用引擎自己的多语言对话框弹。
+- Dialog 加 cancelable 支持，设置备份对话框改用新弹窗（"备份 / 稍后"按钮走本地化文案）。
+- 新增 Android.json（简 / 繁 / 英）语言文件，SeiunOverlay.java 也精简了一圈。
+
+（今天的活就这些……日志老规矩，还是 AI 代笔。）
 
 ---
 
@@ -652,11 +688,47 @@ Bundled regression harness (temp/touch-fix-test/TouchFixTest.hx): replicates the
 
 ---
 
+### August 28, 2026 — Build Fixes
+
+- Re-enabled the hxcpp cache in CI for macOS arm64 after the toolchain fix, so Mac builds are faster again.
+- Fixed perfMode regressions: with performance mode OFF, behavior is now exactly stock (no sneaky shader skipping / off-screen culling changes).
+
+---
+
+### August 30, 2026 (three commits: fix bugs → fix too → android)
+
+#### The Big One (fix bugs)
+
+- New **Turbo Mode** (off by default): the ultimate extreme-chart switch — forces botplay and turns high-density sections into precomputed aggregation + ghost-note collapsing + data-level bulk settlement instead of materializing tens of thousands of sprites. Also added string interning and Note field reordering (grouped by type to kill alignment holes), saving hundreds of MB on million-note charts.
+- Graphics cache overhaul: AsyncGfxLoader / GfxLru / GfxPolicy now decode/repack on the main thread in small per-frame batches (no more stuttery loading screen), with stable canonical keys + alias registration so eviction can't kill textures still in use.
+- Online: server.zip (15KB → 33MB) and online.zip refreshed; PlayState gained spectate mode, per-player skin replacement + nameplates, start gate, and host-only pause messaging.
+- ⚠ Heads up: the current online code is NOT compiled into the game at all (ONLINE_ALLOWED is still commented out) — it's honestly a mess, so don't get your hopes up or ask when it ships. The code is just sitting there for now.
+- PlayState key-check now uses pre-allocated buffers with reentrancy guards — no more per-frame array allocations on Android.
+- Fixed PsychUIDropDownMenu positioning under wheel / re-parenting, plus a pile of small editor, pause-menu and LoadingState fixes.
+- New settings: Turbo Mode, Note RGB Shader.
+- Crash reports now include module base / fault offset (native_crash.inc).
+
+#### GitHub Update Check Rework (fix too)
+
+- New GitHubAPI.hx wrapping the GitHub REST API (releases / tags / commits / issues / PRs) with version comparison.
+- Update check now queries GitHub Releases instead of pulling gitVersion.txt; new "accept prereleases" option; main menu shows "update available"; OutdatedState rewritten.
+- Version bumped to 0.2.1hotfix; CHECK_FOR_UPDATES now compiles on desktop/mobile (previously only with online).
+
+#### Android Permission Prompt Localization (android)
+
+- "All files access" and "overlay" permission prompts no longer hardcode Chinese/English — they wait for language load and use the engine's own localized dialogs.
+- Dialog gained cancelable support; the settings backup prompt now uses the new dialog API ("Backup Now / Later" with localized strings).
+- New Android.json language files (SC / TC / EN); SeiunOverlay.java slimmed down.
+
+(That's today's work... changelog written by AI as usual.)
+
+---
+
 ### Acknowledgments
 
 A huge thank you to all testers — your feedback has been invaluable in shaping SeiunEngine into what it is today.
 
 ---
 
-*本日志覆盖 SeiunEngine 自 6.19 至 8.27 全部主要变动。*
-*This changelog covers all significant changes from June 19 to August 27, 2026.*
+*本日志覆盖 SeiunEngine 自 6.19 至 8.30 全部主要变动。*
+*This changelog covers all significant changes from June 19 to August 30, 2026.*

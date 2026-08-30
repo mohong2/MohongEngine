@@ -12,6 +12,10 @@ on:
           - none
           - alpha
           - release
+      custom_notes:
+        description: 'Optional custom release notes (Markdown). Overrides release-notes/<version>.md; leave empty to use the version file.'
+        required: false
+        type: string
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
@@ -34,7 +38,7 @@ jobs:
       - name: Parse version
         id: parse
         run: |
-          VERSION=$(sed -n 's/.*<app[^>]*version="\([0-9][0-9.]*\)".*/\1/p' Project.xml | head -n1)
+          VERSION=$(sed -n 's/.*<app[^>]*version="\([0-9][0-9A-Za-z._-]*\)".*/\1/p' Project.xml | head -n1)
           echo "version_name=$VERSION" >> "$GITHUB_OUTPUT"
           echo "commit_sha=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
 
@@ -126,11 +130,25 @@ jobs:
           ls -la
 
       - name: Prepare release body
+        env:
+          CUSTOM_NOTES: ${{ inputs.custom_notes }}
         run: |
-          if [ -f CHANGELOG_SeiunEngine.md ]; then
-            cp CHANGELOG_SeiunEngine.md release_body.md
+          # Release notes priority:
+          #   1. custom_notes input (workflow_dispatch) — full override
+          #   2. release-notes/<version>.md — per-version file (recommended)
+          #   3. generated placeholder (no more dumping the whole CHANGELOG)
+          VERSION="${{ needs.prepare.outputs.version_name }}"
+          if [ -n "$CUSTOM_NOTES" ]; then
+            printf '%s\n' "$CUSTOM_NOTES" > release_body.md
+          elif [ -f "release-notes/${VERSION}.md" ]; then
+            cp "release-notes/${VERSION}.md" release_body.md
           else
-            : > release_body.md
+            cat > release_body.md <<EOF
+          # SeiunEngine v$VERSION
+
+          No per-version release notes found (\`release-notes/$VERSION.md\`).
+          See \`CHANGELOG_SeiunEngine.md\` for the full changelog.
+          EOF
           fi
           cat >> release_body.md <<'EOF'
 

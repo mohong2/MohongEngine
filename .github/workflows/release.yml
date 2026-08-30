@@ -7,6 +7,10 @@ on:
         description: 'Numeric build run ID (e.g. 31261975698; leave empty to use the latest Build run)'
         required: false
         type: string
+      custom_notes:
+        description: 'Optional custom release notes (Markdown). Overrides release-notes/<version>.md; leave empty to use the version file.'
+        required: false
+        type: string
 
 permissions:
   contents: write
@@ -35,7 +39,7 @@ jobs:
 
       - name: Read app version
         run: |
-          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9.]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
+          echo "APP_VERSION=$(sed -n 's/.*<app[^>]*version=\"\([0-9][0-9A-Za-z._-]*\)\".*/\1/p' Project.xml | head -n1)" >> "$GITHUB_ENV"
 
       - name: Download artifacts
         uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
@@ -73,14 +77,24 @@ jobs:
           ls -la
 
       - name: Prepare release body
+        env:
+          CUSTOM_NOTES: ${{ inputs.custom_notes }}
         run: |
-          # Default release notes: CHANGELOG_SeiunEngine.md (repo-root changelog).
-          # Falls back to a generated placeholder only if the file is absent so
-          # the release still succeeds.
-          if [ -f CHANGELOG_SeiunEngine.md ]; then
-            cp CHANGELOG_SeiunEngine.md release_body.md
+          # Release notes priority:
+          #   1. custom_notes input (workflow_dispatch) — full override
+          #   2. release-notes/<version>.md — per-version file (recommended)
+          #   3. generated placeholder (no more dumping the whole CHANGELOG)
+          if [ -n "$CUSTOM_NOTES" ]; then
+            printf '%s\n' "$CUSTOM_NOTES" > release_body.md
+          elif [ -f "release-notes/${APP_VERSION}.md" ]; then
+            cp "release-notes/${APP_VERSION}.md" release_body.md
           else
-            : > release_body.md
+            cat > release_body.md <<EOF
+          # SeiunEngine v$APP_VERSION
+
+          No per-version release notes found (\`release-notes/$APP_VERSION.md\`).
+          See \`CHANGELOG_SeiunEngine.md\` for the full changelog.
+          EOF
           fi
           cat >> release_body.md <<'EOF'
 
