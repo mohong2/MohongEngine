@@ -91,7 +91,7 @@ class LoadingState extends MusicBeatState
 
 				// Pre-decode character sheets on background threads in parallel
 				#if sys
-				if (ClientPrefs.data.asyncImageLoading && Std.isOfType(target, PlayState) && PlayState.SONG != null)
+				if (backend.AsyncGfxLoader.available() && Std.isOfType(target, PlayState) && PlayState.SONG != null)
 				{
 					backend.AsyncGfxLoader.beginBatch(); // Reset batch counter for current song session
 					var gfxJobs = backend.AsyncGfxLoader.collectSongImages(PlayState.SONG);
@@ -193,6 +193,10 @@ class LoadingState extends MusicBeatState
 		// Drain background decoding results and fire callbacks on main thread
 		backend.AsyncGfxLoader.drain();
 		#end
+		#if ONLINE_ALLOWED
+		if (online.client.OnlineSession.active && online.client.GameClient.instance != null)
+			online.client.GameClient.instance.update(elapsed);
+		#end
 		#if LUA_ALLOWED
 		callOnLuas('onUpdate', [elapsed]);
 		#end
@@ -282,7 +286,7 @@ class LoadingState extends MusicBeatState
 
 		// When async image loading is enabled, display loading state to pre-decode character sheets
 		#if sys
-		if (ClientPrefs.data.asyncImageLoading && Std.isOfType(target, PlayState) && PlayState.SONG != null)
+		if (backend.AsyncGfxLoader.available() && Std.isOfType(target, PlayState) && PlayState.SONG != null)
 		{
 			return new LoadingState(target, stopMusic, directory);
 		}

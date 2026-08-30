@@ -177,15 +177,22 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 		while (host != null && host.subState != null) host = host.subState;
 		if (host == null) return;
 
-		var cam:FlxCamera = camera;
-		var screenPos:FlxPoint = _panel.getScreenPosition(null, cam);
-		var worldX:Float = screenPos.x + cam.scroll.x;
-		var worldY:Float = screenPos.y + cam.scroll.y;
+		// Preserve the panel's exact render position across re-parenting:
+		// the world position and scrollFactor it had as a child of this group
+		// produce the same camera-view position after re-adding, whatever the
+		// camera scroll/zoom state. (The old "screenPos + scroll" reconstruction
+		// assumed scrollFactor == 1 and shifted the panel by the camera scroll
+		// for scrollFactor-0 UI on a scrolled/zoomed camera.)
+		final worldX:Float = _panel.x;
+		final worldY:Float = _panel.y;
+		final sfX:Float = _panel.scrollFactor.x;
+		final sfY:Float = _panel.scrollFactor.y;
 
 		remove(_panel); // FlxSpriteGroup.remove undoes preAdd (shifts pos, clears cameras)
 		_panelHost = host;
 		_panelHost.add(_panel);
 		_panel.setPosition(worldX, worldY);
+		_panel.scrollFactor.set(sfX, sfY);
 		_panel.cameras = cameras;
 	}
 
@@ -319,6 +326,15 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 	{
 		super.update(elapsed);
 
+		// While the open panel is hosted by the state, keep it glued to this
+		// trigger: re-sync world position + scrollFactor every frame so camera
+		// pan/zoom (e.g. the background editor's movable camera) can't detach it.
+		if (_panelHost != null)
+		{
+			_panel.setPosition(x, y);
+			_panel.scrollFactor.copyFrom(scrollFactor);
+		}
+
 		var over = PsychUIEventHandler.overlaps(_bgOuter, camera);
 		_bgOuter.color = over ? hoverStyle.bgColor : normalStyle.bgColor;
 		_bgOuter.alpha = over ? hoverStyle.bgAlpha : normalStyle.bgAlpha;
@@ -337,10 +353,12 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 		}
 
 		// ── Mouse-wheel scrolling (only when panel is open, pooled — no GC) ──
-		if (_isOpen && FlxG.mouse.wheel != 0)
+		// maxItems == 0 means "show all": there is nothing to scroll, so the
+		// wheel must be ignored entirely — scrolling used to hide top items and
+		// shrink/mangle the expanded panel.
+		if (_isOpen && maxItems > 0 && FlxG.mouse.wheel != 0)
 		{
-			var maxScroll:Int = Std.int(Math.max(0, list.length - 1));
-			if (maxItems > 0) maxScroll = Std.int(Math.max(0, list.length - Std.int(Math.min(maxItems, list.length))));
+			var maxScroll:Int = Std.int(Math.max(0, list.length - Std.int(Math.min(maxItems, list.length))));
 			var newScroll = Std.int(FlxMath.bound(_curScroll - Std.int(FlxG.mouse.wheel), 0, maxScroll));
 			if (newScroll != _curScroll)
 			{
@@ -398,7 +416,7 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 				_hasDragged = true;
 
 			var itemHeight:Float = (_items.length > 0) ? _items[0].height : 20;
-			if (Math.abs(_dragAccumulated) >= itemHeight * 0.5)
+			if (maxItems > 0 && Math.abs(_dragAccumulated) >= itemHeight * 0.5)
 			{
 				var scrollDelta = Std.int(_dragAccumulated / (itemHeight * 0.5));
 				_dragAccumulated -= scrollDelta * (itemHeight * 0.5);
@@ -477,6 +495,10 @@ class PsychUIDropDownMenu extends FlxSpriteGroup
 			_itemPool = null;
 		}
 		// If the panel is still attached to FlxG.state, that state owns it now.
+		// Hide it so an open dropdown being destroyed doesn't leave an orphaned
+		// visible panel behind.
+		if (_panelHost != null && _panel != null)
+			_panel.visible = false;
 		_panelHost = null;
 		super.destroy();
 	}

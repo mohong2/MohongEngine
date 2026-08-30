@@ -4,6 +4,7 @@ import FlxTextMenuItem.FlxTextAttached;
 
 
 import Controls;
+import Language;
 
 using StringTools;
 
@@ -100,6 +101,19 @@ class Option
 		if(onChange != null) {
 			onChange();
 		}
+	}
+
+	/**
+	 * 字符串选项的显示值: 优先查语言键 `option.<variable>.<value>` (如 option.noteRGBMode.On),
+	 * 没有对应翻译时原样返回存储值, 因此未本地化取值的选项 (如 timeBarType) 显示不受影响。
+	 */
+	public function localizedValueText(value:Dynamic):String
+	{
+		var v:String = Std.string(value);
+		if (type != 'string' || options == null || options.indexOf(v) < 0)
+			return v;
+		var key:String = 'option.' + variable + '.' + v;
+		return Language.has(key) ? Language.get(key) : v;
 	}
 
 	dynamic public function getValue():Dynamic

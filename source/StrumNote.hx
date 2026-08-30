@@ -100,7 +100,10 @@ class StrumNote extends FlxSprite
 		rgbShader = new RGBShaderReference(this, Note.initializeGlobalRGBShader(leData));
 		rgbShader.fallbackShader = colorSwap.shader;
 		rgbShader.enabled = false;
-		if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
+		// 编辑器/测试环境 (PlayState.instance == null) 始终跟随谱面 disableNoteRGB,
+		// 玩家 noteRGBMode 只在真实游玩时生效。
+		var chartDisabled:Bool = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+		if (PlayState.instance == null ? chartDisabled : ClientPrefs.noteRGBDisabled(chartDisabled))
 		{
 			rgbShader.forceDisabled = true;
 			useRGBShader = false;

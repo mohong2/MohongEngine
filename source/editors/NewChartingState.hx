@@ -645,6 +645,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			return 0;
 		});
 		gameOverCharDropDown.list = gameOverCharacters;
+		gameOverCharDropDown.maxItems = 12;
 
 		stageDropDown.list = loadFileList('stages/', 'data/stageList.txt');
 		onChartLoaded();
@@ -4761,6 +4762,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 
 			var lastSelected:String = eventDropDown.selectedLabel;
 			eventDropDown.list = displayEventsList;
+			eventDropDown.maxItems = 12;
 			eventDropDown.selectedLabel = lastSelected;
 		}
 
@@ -4801,6 +4803,7 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 			
 			var lastSelected:String = noteTypeDropDown.selectedLabel;
 			noteTypeDropDown.list = displayNoteTypes;
+			noteTypeDropDown.maxItems = 12;
 			noteTypeDropDown.selectedLabel = lastSelected;
 		}
 	}
@@ -5062,6 +5065,10 @@ class NewChartingState extends MusicBeatState implements PsychUIEventHandler.Psy
 		opponentDropDown.selectedLabel = PlayState.SONG.player2;
 		girlfriendDropDown.selectedLabel = PlayState.SONG.gfVersion;
 		stageDropDown.selectedLabel = PlayState.SONG.stage;
+		playerDropDown.maxItems = 12; // 角色/舞台列表可能很长, 窗口化展开避免面板超出屏幕
+		opponentDropDown.maxItems = 12;
+		girlfriendDropDown.maxItems = 12;
+		stageDropDown.maxItems = 12;
 
 		tab_group.add(new EditorsText(bpmStepper.x, bpmStepper.y - 15, 50, Language.get('newchartEditor_bpm', 'BPM:')));
 		tab_group.add(new EditorsText(scrollSpeedStepper.x, scrollSpeedStepper.y - 15, 80, Language.get('newchartEditor_scroll_speed', 'Scroll Speed:')));

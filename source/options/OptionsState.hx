@@ -1049,6 +1049,7 @@ class OptionsState extends MusicBeatState
 		var text:String = option.displayFormat;
 		var val:Dynamic = option.getValue();
 		if (option.type == 'percent') val *= 100;
+		else if (option.type == 'string') val = option.localizedValueText(val);
 		var def:Dynamic = option.defaultValue;
 		option.text = text.replace('%v', val).replace('%d', def);
 		if (option.child != null)

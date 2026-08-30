@@ -528,6 +528,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		for(s in['stage','spooky','philly','limo','mall','mallEvil','school','schoolEvil','tank'])stages.push(s);
 		#end
 		stageDropDown.list=stages;
+		stageDropDown.maxItems=12;
 	}
 	function loadStageByName(name:String) {
 		currentStageName = name;
@@ -638,7 +639,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		if(idx>=0&&spriteDropDown!=null)spriteDropDown.selectedIndex=idx;
 		rebuildObjectList();
 	}
-	function rebuildSpriteDropdown(){if(spriteDropDown==null)return;var list:Array<String>=[];for(i in 0...sprites.length)list.push('['+(sprites[i].front?'F':'B')+'] '+i+': '+sprites[i].tag);if(list.length==0)list.push(T('no_sprites','(no sprites)'));spriteDropDown.list=list;if(selectedSprite>=0&&selectedSprite<list.length)spriteDropDown.selectedIndex=selectedSprite;rebuildObjectList();}
+	function rebuildSpriteDropdown(){if(spriteDropDown==null)return;var list:Array<String>=[];for(i in 0...sprites.length)list.push('['+(sprites[i].front?'F':'B')+'] '+i+': '+sprites[i].tag);if(list.length==0)list.push(T('no_sprites','(no sprites)'));spriteDropDown.list=list;spriteDropDown.maxItems=12;if(selectedSprite>=0&&selectedSprite<list.length)spriteDropDown.selectedIndex=selectedSprite;rebuildObjectList();}
 	function clearSpritePreviews(){for(p in spritePreviews){canvasGroup.remove(p);p.destroy();}spritePreviews=[];}
 
 	function createSpritePreview(idx:Int){var d=sprites[idx];var spr=new FlxSprite(d.x,d.y);spr.origin.set(0,0);loadSpriteImg(spr,d);spr.scale.set(d.scaleX,d.scaleY);spr.alpha=d.alpha;spr.antialiasing=d.antialiasing;spr.flipX=d.flipX;spr.flipY=d.flipY;spritePreviews[idx]=spr;canvasGroup.add(spr);}
@@ -1003,7 +1004,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		else { FlxG.sound.muteKeys = TitleState.muteKeys; FlxG.sound.volumeDownKeys = TitleState.volumeDownKeys; FlxG.sound.volumeUpKeys = TitleState.volumeUpKeys; }
 		if(outputTimer > 0) { outputTimer -= elapsed; if(outputTimer <= 0) outputMsg.visible = false; }
 		if(!blocked && FlxG.mouse.justPressed) handleObjectListClick();
-		if(!blocked && FlxG.mouse.wheel != 0 && FlxG.mouse.screenX >= objectListX && FlxG.mouse.screenX <= objectListX + objectListW && FlxG.mouse.screenY >= objectListY && FlxG.mouse.screenY <= objectListY + objectListH)
+		if(!blocked && !PsychUIDropDownMenu.anyDropdownOpen && FlxG.mouse.wheel != 0 && FlxG.mouse.screenX >= objectListX && FlxG.mouse.screenX <= objectListX + objectListW && FlxG.mouse.screenY >= objectListY && FlxG.mouse.screenY <= objectListY + objectListH)
 		{
 			objectListScroll -= Std.int(FlxG.mouse.wheel);
 			layoutObjectList();
@@ -1031,7 +1032,7 @@ class BackgroundEditorState extends MusicBeatState implements PsychUIEventHandle
 		if(FlxG.keys.pressed.E && FlxG.camera.zoom < 3) { FlxG.camera.zoom += elapsed * FlxG.camera.zoom; if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3; }
 		if(FlxG.keys.pressed.Q && FlxG.camera.zoom > 0.1) { FlxG.camera.zoom -= elapsed * FlxG.camera.zoom; if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1; }
 		if(FlxG.keys.justPressed.R) FlxG.camera.zoom = 1;
-		if(FlxG.mouse.wheel != 0 && FlxG.mouse.screenX > 290 && FlxG.mouse.screenX < FlxG.width - 370 && FlxG.mouse.screenY > 54 && FlxG.mouse.screenY < FlxG.height - 32)
+		if(!blocked && !PsychUIDropDownMenu.anyDropdownOpen && FlxG.mouse.wheel != 0 && FlxG.mouse.screenX > 290 && FlxG.mouse.screenX < FlxG.width - 370 && FlxG.mouse.screenY > 54 && FlxG.mouse.screenY < FlxG.height - 32)
 			FlxG.camera.zoom += FlxG.mouse.wheel * 0.05 * FlxG.camera.zoom;
 		if(FlxG.camera.zoom > 3) FlxG.camera.zoom = 3; else if(FlxG.camera.zoom < 0.1) FlxG.camera.zoom = 0.1;
 		if(FlxG.mouse.pressedMiddle) { camFollow.x -= FlxG.mouse.deltaScreenX / FlxG.camera.zoom; camFollow.y -= FlxG.mouse.deltaScreenY / FlxG.camera.zoom; }

@@ -59,23 +59,18 @@ class GfxLru
 		if (!isEnabled()) return false;
 		if (g == null || g.key == null) return false;
 
-		var key:String = fileKey != null && fileKey.length > 0 ? fileKey : g.key;
+		// Use the graphic's own creation key as the canonical LRU key. The
+		// optional fileKey is only an alias (e.g. shared:... vs assets/...);
+		// revive() re-registers both forms so cache/eviction stay in sync.
+		var key:String = g.key;
 		if (key == null || key.length == 0) return false;
 
 		var bmp = g.bitmap;
 		if (bmp == null) return false;
 
-		if (!allowSmall && bmp.width < GfxPolicy.minDimension && bmp.height < GfxPolicy.minDimension)
+		var packed:Bool = allowSmall || backend.GfxRepack.isPacked(g.key);
+		if (!packed && bmp.width < GfxPolicy.minDimension && bmp.height < GfxPolicy.minDimension)
 			return false;
-
-		if (bmp.readable)
-		{
-			if (!GfxPolicy.tryRelease(key, g)) return false;
-		}
-		else if (!GfxPolicy.hasLiveTexture(bmp))
-		{
-			return false;
-		}
 
 		var bytes:Float = bmp.width * bmp.height * 4;
 		if (bytes > budgetBytes) return false;
@@ -84,17 +79,34 @@ class GfxLru
 		var existing = entries.get(norm);
 		var prevHits:Int = 0;
 		var prevPin:Bool = false;
+		if (existing != null && existing.graphic == g)
+		{
+			tick++;
+			existing.lastUse = tick;
+			return true;
+		}
+
+		if (bmp.readable)
+		{
+			if (!GfxPolicy.hasLiveTexture(bmp)) return false;
+		}
+		else if (!GfxPolicy.hasLiveTexture(bmp))
+		{
+			return false;
+		}
+
 		if (existing != null)
 		{
-			if (existing.graphic == g)
-			{
-				tick++;
-				existing.lastUse = tick;
-				return true;
-			}
 			prevHits = existing.hits;
 			prevPin = existing.pinned;
+			// Evict first so any CPU-release registry owned by the old graphic
+			// is dropped; otherwise tryRelease below would reject the new one.
 			evictEntry(existing, 'replace'); 
+		}
+
+		if (bmp.readable)
+		{
+			if (!GfxPolicy.tryRelease(key, g)) return false;
 		}
 
 		tick++;
@@ -136,7 +148,7 @@ class GfxLru
 		hitTotal++;
 		savedMsTotal += estimateSavedMs();
 
-		revive(e.graphic, requestedKey);
+		revive(e, requestedKey);
 		TraceManager.info('trace.gfx.lruHit',
 			'GfxLru hit #{}: {} (~{} MB vram, zero decode)', [hitTotal, requestedKey, mb(e.bytes)]);
 		return e.graphic;
@@ -249,16 +261,35 @@ class GfxLru
 	}
 
 	
-	static function revive(g:FlxGraphic, requestedKey:String):Void
+	static function revive(entry:GfxLruEntry, requestedKey:String):Void
 	{
-		Paths.currentTrackedAssets.set(requestedKey, g);
+		registerAlias(requestedKey, entry.graphic);
+		// Keep the canonical key registered too. Without this, a hit through an
+		// alias (shared:... vs assets/...) could leave the entry untracked and
+		// the budget evictor could destroy a graphic a live sprite still uses.
+		if (entry.key != null && entry.key != requestedKey)
+			registerAlias(entry.key, entry.graphic);
+	}
+
+	static function registerAlias(key:String, g:FlxGraphic):Void
+	{
+		if (key == null || key.length == 0 || g == null) return;
+
+		var existing:FlxGraphic = Paths.currentTrackedAssets.get(key);
+		var flxExisting:FlxGraphic = null;
 		@:privateAccess
 		{
-			var existing = FlxG.bitmap._cache.get(requestedKey);
-			if (existing == null || existing == g)
-				FlxG.bitmap._cache.set(requestedKey, g);
+			flxExisting = FlxG.bitmap._cache.get(key);
 		}
-		Paths.trackLocalAsset(requestedKey);
+		if ((existing != null && existing != g) || (flxExisting != null && flxExisting != g))
+			return; // never replace different live graphics in either cache
+
+		Paths.currentTrackedAssets.set(key, g);
+		@:privateAccess
+		{
+			FlxG.bitmap._cache.set(key, g);
+		}
+		Paths.trackLocalAsset(key);
 	}
 
 	static function enforceBudget():Void
@@ -280,6 +311,7 @@ class GfxLru
 		{
 			if (e.pinned) continue;
 			if (!includeHot && e.hits >= HOT_HITS) continue;
+			if (e.graphic != null && e.graphic.useCount > 0) continue;
 			if (Paths.currentTrackedAssets.exists(e.key)) continue;
 			if (best == null || e.lastUse < best.lastUse) best = e;
 		}
@@ -295,7 +327,35 @@ class GfxLru
 		evictTotal++;
 		if (e.key != null) backend.GfxRepack.forgetPair(e.key);
 		if (e.graphic != null)
+		{
+			if (e.key != null) GfxPolicy.forgetReleased(e.key);
+			if (e.graphic.key != null) GfxPolicy.forgetReleased(e.graphic.key);
+			removeFromCaches(e.graphic);
 			e.graphic.destroy();
+		}
+	}
+
+	static function removeFromCaches(g:FlxGraphic):Void
+	{
+		if (g == null) return;
+		var keys:Array<String> = [];
+		for (key => value in Paths.currentTrackedAssets)
+			if (value == g) keys.push(key);
+		for (key in keys)
+		{
+			Paths.currentTrackedAssets.remove(key);
+			try openfl.Assets.cache.removeBitmapData(key) catch (e:Dynamic) {}
+		}
+		keys.resize(0);
+		@:privateAccess
+		for (key in FlxG.bitmap._cache.keys())
+			if (FlxG.bitmap._cache.get(key) == g) keys.push(key);
+		@:privateAccess
+		for (key in keys)
+		{
+			FlxG.bitmap._cache.remove(key);
+			try openfl.Assets.cache.removeBitmapData(key) catch (e:Dynamic) {}
+		}
 	}
 
 	static function normalizeKey(key:String):String

@@ -123,7 +123,37 @@ class Song
 	public static var chartPath:String;
 	public static var loadedSongName:String;
 
-	public static function loadFromJson(jsonInput:String, ?folder:String):SwagSong
+	// ── Turbo 模式谱面 DOM 释放守卫 ──
+	// 记录最近一次"真实谱面"(非 events) loadFromJson 的重载参数与身份序号。
+	// PlayState 在 Turbo 下释放 SONG 逐 note 数据前校验 token 匹配, 保证重开时
+	// 一定能用同样的参数从磁盘无损重载; 编辑器/脚本直接赋值的 SONG 无 token, 自动跳过释放。
+	public static var lastChartReloadJson:String;
+	public static var lastChartReloadFolder:String;
+	public static var lastChartToken:Int = 0;
+
+	/** 与 StringTools.trim 完全等价的裁剪, 但两端无空白可裁时零复制返回原串。
+	 *  百万 note 级谱面 JSON 有数百 MB, trim() 的无条件整串复制会把加载峰值内存翻倍。 */
+	static function trimChartJson(s:String):String
+	{
+		if (s == null) return null;
+		var len:Int = s.length;
+		var start:Int = 0;
+		while (start < len && isJsonSpace(s, start)) start++;
+		var end:Int = len;
+		while (end > start && isJsonSpace(s, end - 1)) end--;
+		if (start == 0 && end == len) return s;
+		if (start >= end) return '';
+		return s.substr(start, end - start);
+	}
+
+	/** 与 StringTools.isSpace 相同的空白判定 (tab/LF/VT/FF/CR/space)。 */
+	inline static function isJsonSpace(s:String, pos:Int):Bool
+	{
+		var c:Int = s.charCodeAt(pos);
+		return (c > 8 && c < 14) || c == 32;
+	}
+
+	public static function loadFromJson(jsonInput:String, ?folder:String, ?convertTo:String = 'psych_v1'):SwagSong
 	{
 		var rawJson = null;
 		
@@ -132,15 +162,15 @@ class Song
 		#if MODS_ALLOWED
 		var moddyFile:String = Paths.modsJson(formattedFolder + '/' + formattedSong);
 		if(FileSystem.exists(moddyFile)) {
-			rawJson = File.getContent(moddyFile).trim();
+			rawJson = trimChartJson(File.getContent(moddyFile));
 		}
 		#end
 
 		if(rawJson == null) {
 			#if sys
-			rawJson = File.getContent(Paths.json(formattedFolder + '/' + formattedSong)).trim();
+			rawJson = trimChartJson(File.getContent(Paths.json(formattedFolder + '/' + formattedSong)));
 			#else
-			rawJson = Assets.getText(Paths.json(formattedFolder + '/' + formattedSong)).trim();
+			rawJson = trimChartJson(Assets.getText(Paths.json(formattedFolder + '/' + formattedSong)));
 			#end
 		}
 
@@ -166,9 +196,20 @@ class Song
 				daSong = songData.song;
 				daBpm = songData.bpm; */
 
-		var songJson:Dynamic = parseJSON(rawJson);
+		// convertTo 默认 'psych_v1' (老谱自动升级); 传空串 '' 可跳过归一化,
+		// 保留磁盘上的原始 format 字段 (联机用区分"导入转换谱"与"原版谱")。
+		var songJson:Dynamic = parseJSON(rawJson, jsonInput, convertTo);
 		if(jsonInput != 'events') StageData.loadDirectory(songJson);
 		onLoadJson(songJson);
+
+		// 记录重载参数与身份 token (events.json 不覆盖, 供 Turbo 模式 DOM 释放守卫/重开重载使用)
+		if (jsonInput != 'events')
+		{
+			lastChartReloadJson = jsonInput;
+			lastChartReloadFolder = folder;
+			++lastChartToken;
+			Reflect.setField(songJson, '__seiunToken', lastChartToken);
+		}
 		return songJson;
 	}
 

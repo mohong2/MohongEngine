@@ -129,7 +129,7 @@ class OptionPopupSubState extends MusicBeatSubstate
 		var lineH:Float = 40;
 		for (i in 0...option.options.length)
 		{
-			var t = new FlxTextMenuItem(panelX + 48, startY + i * lineH, option.options[i], 22);
+			var t = new FlxTextMenuItem(panelX + 48, startY + i * lineH, option.localizedValueText(option.options[i]), 22);
 			t.isMenuItem = false; // popup list should stay static
 			t.snapToPosition();
 			t.ID = i;
@@ -160,7 +160,7 @@ class OptionPopupSubState extends MusicBeatSubstate
 			var sel = optionTexts.members[curIndex];
 			dropdownSelector.y = sel.y;
 		}
-		valueText.text = option.options[curIndex];
+		valueText.text = option.localizedValueText(option.options[curIndex]);
 	}
 
 	function buildSlider(panelX:Float, panelY:Float, panelW:Int, panelH:Int):Void

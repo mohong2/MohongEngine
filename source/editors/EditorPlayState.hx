@@ -374,7 +374,6 @@ class EditorPlayState extends MusicBeatState
 		
 		if (generatedMusic)
 		{
-			var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
 			notes.forEachAlive(function(daNote:Note)
 			{
 				/*if (daNote.y > FlxG.height)
@@ -416,23 +415,40 @@ class EditorPlayState extends MusicBeatState
 					if (ClientPrefs.data.downScroll) {
 						daNote.y = (strumY + 0.45 * (Conductor.songPosition - daNote.strumTime) * PlayState.SONG.speed * Note.getManiaScale(daNote.mania));
 						if (daNote.isSustainNote) {
-							// 0.6.3 原版定位：各段按自身 strumTime 摆放 + 原版常量修正。
-							// 多k: 常量按 getManiaScale 缩放。
 							var maniaScale:Float = Note.getManiaScale(daNote.mania);
-							var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
-							var isEnd:Bool = (daNote.animation.curAnim != null
-								&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
-							if (isEnd) {
-								daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * PlayState.SONG.speed + (46 * (PlayState.SONG.speed - 1))) * maniaScale;
-								daNote.y -= (46 * (1 - (fakeCrochet / 600)) * PlayState.SONG.speed) * maniaScale;
-								if (PlayState.isPixelStage)
+							if (PlayState.isPixelStage)
+							{
+								// 像素阶段：保留 0.6.3 原修正，避免像素回归。
+								var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
+								var isEnd:Bool = (daNote.animation.curAnim != null
+									&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend')));
+								if (isEnd) {
+									daNote.y += (10.5 * (fakeCrochet / 400) * 1.5 * PlayState.SONG.speed + (46 * (PlayState.SONG.speed - 1))) * maniaScale;
+									daNote.y -= (46 * (1 - (fakeCrochet / 600)) * PlayState.SONG.speed) * maniaScale;
 									daNote.y += (8 + (6 - daNote.originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
-								else
-									daNote.y -= 19 * maniaScale;
+								}
+								daNote.y += ((Note.swagWidth / 2) - (60.5 * (PlayState.SONG.speed - 1))) * maniaScale;
+								daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (PlayState.SONG.speed - 1)) * maniaScale;
 							}
-							daNote.y += ((Note.swagWidth / 2) - (60.5 * (PlayState.SONG.speed - 1))) * maniaScale;
-							daNote.y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (PlayState.SONG.speed - 1)) * maniaScale;
-
+							else
+							{
+								// 非像素：0.6.3 固定 56px 在高 BPM 下等效 4+ 个 step；
+								// 锚点随实际步距线性衰减：BPM 100 附近仍保留 56px，522 BPM 附近衰减为 0。
+								var stepCrochet:Float = (daNote.genStepCrochet > 0) ? daNote.genStepCrochet : Conductor.stepCrochet;
+								var isEnd:Bool = (daNote.isSustainEnd
+									|| (daNote.animation.curAnim != null
+										&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend'))));
+								var stepPx:Float = 0.45 * stepCrochet * PlayState.SONG.speed * daNote.multSpeed * maniaScale;
+								// 锚点衰减只看步时（BPM），不随 scrollSpeed 放大：高 BPM 收敛到“首段底边= tap 顶边”。
+								var anchorScale:Float = (stepCrochet - 28.7356) / (150.0 - 28.7356);
+								anchorScale = Math.min(1.0, Math.max(0.0, anchorScale));
+								var bodyH:Float = 44.0 * (stepCrochet / 100.0) * 1.05 * PlayState.SONG.speed * daNote.multSpeed * maniaScale + 2.0;
+								var noOverlapAnchor:Float = stepPx - bodyH;
+								var anchor:Float = (Note.swagWidth / 2) * anchorScale * maniaScale + (1.0 - anchorScale) * noOverlapAnchor;
+								if (isEnd)
+									anchor += stepPx - daNote.height;
+								daNote.y += anchor;
+							}
 							if(daNote.mustPress || !daNote.ignoreNote)
 							{
 								var drawnTop:Float = daNote.y - daNote.offset.y + daNote.origin.y * (1 - daNote.scale.y)
@@ -554,7 +570,8 @@ class EditorPlayState extends MusicBeatState
 
 		if (generatedMusic)
 		{
-			notes.sort(FlxSort.byY, ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
+			// 分层比较器: TAP 永远画在长条段之上 (同 PlayState, 防 downscroll 下长条盖住 tap)
+			notes.sort(PlayState.noteDrawOrder, ClientPrefs.data.downScroll ? FlxSort.ASCENDING : FlxSort.DESCENDING);
 		}
 	}
 

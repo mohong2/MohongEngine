@@ -194,9 +194,11 @@ class GfxRepack
 			if (trimEligible)
 			{
 				// Decoded buffers are premultiplied BGRA on sys; alpha is byte 3.
-				var imgData = src.image.buffer.data;
-				if (imgData == null)
+				if (src.image == null || src.image.buffer == null)
 					abort('pixel-buffer-unavailable');
+				var imgData = src.image.buffer.data;
+				if (imgData == null || imgData.length < src.width * src.height * 4)
+					abort('pixel-buffer-too-small');
 				for (f in parsed.frames)
 				{
 					scanBBox(f, imgData, src.width, src.height);

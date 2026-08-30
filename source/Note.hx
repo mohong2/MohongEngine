@@ -25,46 +25,59 @@ typedef EventNote = {
     value2:String
 }
 
+// 字段按类型分组排布 (Float → Null<Float> → String → Int → Bool):
+// hxcpp 按声明顺序生成 C++ 结构体并自然对齐, 混排时 Bool/Int 与 String/Float 之间
+// 会产生对齐空洞; 同宽度字段连排后单条可省 ~40-60 字节, 百万级 Note 谱面下
+// 节省数百 MB 常驻内存。纯布局调整: @:structInit 字面量按字段名初始化, 不受顺序影响。
 @:structInit class PreloadedChartNote {
+    // ── Float (12 × 8B 连排) ──
     public var strumTime:Float = 0;
-    public var noteData:Int = 0;
-    public var mustPress:Bool = false;
-    public var oppNote:Bool = false;
-    public var noteType:String = '';
-    public var animSuffix:String = '';
-    public var gfNote:Bool = false;
-    public var noAnimation:Bool = false;
-    public var noMissAnimation:Bool = false;
-    public var isSustainNote:Bool = false;
-    public var isSustainEnd:Bool = false;
     public var sustainLength:Float = 0;
     public var parentST:Float = 0;
     public var parentSL:Float = 0;
     /** stepCrochet of the section this note was generated in (BPM-change charts need it for sustain height). */
     public var stepCrochet:Float = 0;
-    /** 多k: 该 Note 所属键数快照 (0 基, -1 = 跟随 PlayState.mania)。 */
-    public var mania:Int = -1;
     public var hitHealth:Float = 0.023;
     public var missHealth:Float = 0.0475;
-    public var hitCausesMiss:Bool = false;
-    public var ignoreNote:Bool = false;
-    public var blockHit:Bool = false;
     public var multSpeed:Float = 1;
     public var multAlpha:Float = 1;
     public var noteDensity:Float = 1;
-    public var lowPriority:Bool = false;
-    public var noteskin:String = '';
-    public var texture:String = '';
-    public var wasHit:Bool = false;
     public var offsetX:Float = 0;
     public var offsetY:Float = 0;
-    public var noteSplashDisabled:Bool = false;
-    /** 0.6.3 自定义 Note 兼容: 溅射皮肤/颜色在 PreloadedChartNote 上也可由 Lua 设置。
-     * 注意：只有 Lua 显式写过才覆盖（null 表示未设置），避免把普通 Note 的轨道色溅射覆盖成全零。 */
-    public var noteSplashTexture:String = null;
+
+    // ── Null<Float> ──
     public var noteSplashHue:Null<Float> = null;
     public var noteSplashSat:Null<Float> = null;
     public var noteSplashBrt:Null<Float> = null;
+
+    // ── String ──
+    public var noteType:String = '';
+    public var animSuffix:String = '';
+    public var noteskin:String = '';
+    public var texture:String = '';
+    /** 0.6.3 自定义 Note 兼容: 溅射皮肤/颜色在 PreloadedChartNote 上也可由 Lua 设置。
+     * 注意：只有 Lua 显式写过才覆盖（null 表示未设置），避免把普通 Note 的轨道色溅射覆盖成全零。 */
+    public var noteSplashTexture:String = null;
+
+    // ── Int ──
+    public var noteData:Int = 0;
+    /** 多k: 该 Note 所属键数快照 (0 基, -1 = 跟随 PlayState.mania)。 */
+    public var mania:Int = -1;
+
+    // ── Bool ──
+    public var mustPress:Bool = false;
+    public var oppNote:Bool = false;
+    public var gfNote:Bool = false;
+    public var noAnimation:Bool = false;
+    public var noMissAnimation:Bool = false;
+    public var isSustainNote:Bool = false;
+    public var isSustainEnd:Bool = false;
+    public var hitCausesMiss:Bool = false;
+    public var ignoreNote:Bool = false;
+    public var blockHit:Bool = false;
+    public var lowPriority:Bool = false;
+    public var wasHit:Bool = false;
+    public var noteSplashDisabled:Bool = false;
     public var hitsoundDisabled:Bool = false;
 }
 
@@ -614,7 +627,10 @@ class Note extends FlxSprite {
             // 脚本修改 rgbShader.r/g/b/mult 时才克隆并接管精灵着色器。
             rgbShader = new RGBShaderReference(this, initializeGlobalRGBShader(noteData));
             rgbShader.fallbackColorSwap = colorSwap;
-            if (PlayState.SONG != null && PlayState.SONG.disableNoteRGB)
+            // 编辑器/预览环境 (PlayState.instance == null) 始终跟随谱面 disableNoteRGB,
+            // 玩家 noteRGBMode 只在真实游玩时生效。
+            if (PlayState.SONG != null && (PlayState.instance == null ? PlayState.SONG.disableNoteRGB
+                    : ClientPrefs.noteRGBDisabled(PlayState.SONG.disableNoteRGB)))
                 rgbShader.forceDisabled = true;
             if(!skipTexture) texture = '';
             x += swagWidth * noteData;
@@ -1133,7 +1149,7 @@ class Note extends FlxSprite {
         else
             rgbShader.rebind(initializeGlobalRGBShader(chartNoteData.noteData, mania));
         rgbShader.fallbackColorSwap = colorSwap;
-        rgbShader.forceDisabled = (PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
+        rgbShader.forceDisabled = ClientPrefs.noteRGBDisabled(PlayState.SONG != null && PlayState.SONG.disableNoteRGB);
         noteColorOverride = null;
         customCharAnim = null;
 
@@ -1247,31 +1263,18 @@ class Note extends FlxSprite {
 			y = strum.y + offsetY + Math.sin(strum.direction * Math.PI / 180) * distance;
 
 			if(isSustainNote) {
-				// 0.6.3 原版定位：各段按自身 strumTime 摆放 + 原版常量修正，
-				// 不依赖 prevNote.exists（TAP 命中销毁后长条不会跳位）。
-				// 多k: 常量按 getManiaScale 缩放，高 k 下箭头变小后修正量保持一致比例。
-				var maniaScale:Float = Note.getManiaScale(mania);
-				var fakeCrochet:Float = (60 / PlayState.SONG.bpm) * 1000;
-				var isEnd:Bool = (animation.curAnim != null && (animation.curAnim.name.endsWith('end') || animation.curAnim.name.endsWith('holdend')));
-
-				if(strum.downScroll) {
-					if(isEnd) {
-						y += (10.5 * (fakeCrochet / 400) * 1.5 * songSpeed + (46 * (songSpeed - 1))) * maniaScale;
-						y -= (46 * (1 - (fakeCrochet / 600)) * songSpeed) * maniaScale;
-						if(PlayState.isPixelStage) {
-							y += (8 + (6 - originalHeightForCalcs) * PlayState.daPixelZoom) * maniaScale;
-						} else {
-							y -= 19 * maniaScale;
-						}
-					}
-					y += ((Note.swagWidth / 2) - (60.5 * (songSpeed - 1))) * maniaScale;
-					y += (27.5 * ((PlayState.SONG.bpm / 100) - 1) * (songSpeed - 1)) * maniaScale;
-				} else {
-					if(PlayState.isPixelStage)
-						y += (PlayState.daPixelZoom * 9.5) * maniaScale;
-					else
-						y += 55 * maniaScale;
-				}
+				// upscroll / downscroll 统一: 各段按自身 strumTime 摆放, 无任何常量修正
+				// (与 0.6.3 原版 upscroll 行为一致, 两个方向镜像对称)。
+				// 历史教训:
+				// 1. upscroll 曾误加 y += 55 —— 固定像素偏移在高 BPM (step 间距小) 时
+				//    等于数个 step, 整条长条被推向判定线一侧;
+				// 2. downscroll 曾用 1.0.4 的 y -= frameHeight*scale.y - swagWidth/2 锚点 ——
+				//    同样是固定 56px: 低 BPM 时间距大看不出来, BPM 越高间距越小
+				//    (522 BPM 时间距仅 ~13px, 56px ≈ 4.3 step), 链条起始段被推到
+				//    tap 的判定线一侧 —— "BPM 越高 tap 越靠后 / 长条越往前突出"。
+				// 无锚点时链条起始段超出 tap 的量 = 段间重叠量 (恒定 ~2px), 与 BPM 无关;
+				// 段间衔接条件 "段高 >= step 间距" 由段高公式 (自带 2px 重叠) 在任意
+				// BPM/流速/键数下保证。
 			}
 		}
     }

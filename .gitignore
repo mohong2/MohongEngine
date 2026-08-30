@@ -31,3 +31,4 @@ server/build/
 temp/
 server_data/
 seiun_online_profile.json
+turbo_cache/

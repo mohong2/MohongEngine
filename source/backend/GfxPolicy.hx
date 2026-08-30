@@ -251,6 +251,18 @@ class GfxPolicy
 			[Lambda.count(cpuReleased)]);
 	}
 
+	public static function forgetReleased(key:String):Void
+	{
+		if (key == null) return;
+		var entry = cpuReleased.get(key);
+		if (entry != null)
+		{
+			releasedBytesLive -= entry.bytes;
+			cpuReleased.remove(key);
+			if (releasedBytesLive < 0) releasedBytesLive = 0;
+		}
+	}
+
 	public static function pruneRegistry():Void
 	{
 		if (Lambda.count(cpuReleased) == 0) return;
@@ -293,8 +305,11 @@ class GfxPolicy
 	public static function tryRelease(key:String, g:FlxGraphic):Bool
 	{
 		if (key == null || key.length == 0 || g == null) return false;
-		if (excludedKeys.exists(key)) return false;
-		if (cpuReleased.exists(key)) return false;
+		// Prefer the graphic's canonical key so alias spellings (shared:... vs
+		// assets/...) do not create duplicate/unfindable CPU-release records.
+		var regKey:String = g.key != null && g.key.length > 0 ? g.key : key;
+		if (excludedKeys.exists(key) || excludedKeys.exists(regKey)) return false;
+		if (cpuReleased.exists(regKey)) return false;
 
 		var bmp = g.bitmap;
 		if (bmp == null || !bmp.readable) return false; 
@@ -303,13 +318,13 @@ class GfxPolicy
 
 		if (!hasLiveTexture(bmp)) return false;
 
-		var resolved = resolveSource(key);
+		var resolved = resolveSource(regKey);
 		if (resolved == null) return false;
 
 		var bytes:Float = bmp.width * bmp.height * 4;
 		bmp.disposeImage();
 
-		cpuReleased.set(key, {assetId: key, realPath: resolved, bytes: bytes});
+		cpuReleased.set(regKey, {assetId: regKey, realPath: resolved, bytes: bytes});
 		releasedCountTotal++;
 		releasedBytesTotal += bytes;
 		releasedBytesLive += bytes;
@@ -347,7 +362,17 @@ class GfxPolicy
 	{
 		var g = Paths.currentTrackedAssets.get(key);
 		if (g != null) return g;
-		return @:privateAccess FlxG.bitmap._cache.get(key);
+		g = @:privateAccess FlxG.bitmap._cache.get(key);
+		if (g != null) return g;
+
+		// Alias fallback: the registry may use the graphic's canonical key while
+		// the live cache is currently keyed by the other spelling.
+		for (candidate in Paths.currentTrackedAssets)
+			if (candidate != null && candidate.key == key) return candidate;
+		@:privateAccess
+		for (candidate in FlxG.bitmap._cache)
+			if (candidate != null && candidate.key == key) return candidate;
+		return null;
 	}
 
 

@@ -5,6 +5,7 @@ import flixel.graphics.FlxGraphic;
 import openfl.display.BitmapData;
 import openfl.utils.Assets as OpenFlAssets;
 import openfl.utils.AssetType;
+import openfl.utils.ByteArray;
 import mohong.TraceManager;
 
 #if sys
@@ -19,19 +20,22 @@ typedef GfxJob =
 {
 	cacheKey:String,   
 	filePath:String,  
-	enqueuedAt:Float   
+	enqueuedAt:Float,
+	gen:Int           
 }
 
 typedef GfxWorkerResult =
 {
-	bmp:BitmapData,            
-	packedXml:Null<String>,    
-	filePath:String            
+	bytes:Null<haxe.io.Bytes>, 
+	filePath:String,
+	gen:Int              
 }
 
 class AsyncGfxLoader
 {
 	public static inline var WORKERS:Int = 2;
+
+	public static inline var MAX_PER_DRAIN:Int = 1;
 
 	public static inline var ASYNC_TIMEOUT_MS:Float = 45000;
 
@@ -49,6 +53,7 @@ class AsyncGfxLoader
 	static var ready:Map<String, BitmapData> = [];    
 	static var callbacks:Map<String, Void->Void> = [];
 	static var workersStarted:Bool = false;
+	static var generation:Int = 0;
 	#end
 
 	public static function available():Bool
@@ -82,7 +87,7 @@ class AsyncGfxLoader
 			return;
 		}
 
-		queue.push({cacheKey: cacheKey, filePath: filePath, enqueuedAt: haxe.Timer.stamp()});
+		queue.push({cacheKey: cacheKey, filePath: filePath, enqueuedAt: haxe.Timer.stamp(), gen: generation});
 		inflight.set(cacheKey, true);
 		callbacks.set(cacheKey, onDone);
 		lastBatchEnqueued++;
@@ -93,6 +98,8 @@ class AsyncGfxLoader
 	public static function drain():Void
 	{
 		var fired:Array<Void->Void> = [];
+		var doneKeys:Array<String> = [];
+		var doneRes:Array<GfxWorkerResult> = [];
 
 		mutex.acquire();
 
@@ -114,28 +121,83 @@ class AsyncGfxLoader
 		}
 		queue = keep;
 
-		var doneKeys:Array<String> = [];
-		var doneRes:Array<GfxWorkerResult> = [];
-		for (k => v in pendingResults)
+		// Workers only read raw bytes. Decoding + repacking must happen on the
+		// main thread (OpenFL/Lime BitmapData is not safe to create off-thread).
+		// Process a small batch each frame so the loading screen stays responsive.
+		var allKeys:Array<String> = [];
+		for (k in pendingResults.keys())
+			allKeys.push(k);
+		var taken:Int = 0;
+		for (k in allKeys)
 		{
+			var res = pendingResults.get(k);
+			// Drop results from a previous loading session (reset() bumped gen).
+			if (res == null || res.gen != generation)
+			{
+				pendingResults.remove(k);
+				continue;
+			}
+			if (taken >= MAX_PER_DRAIN) break;
 			doneKeys.push(k);
-			doneRes.push(v);
+			doneRes.push(res);
+			pendingResults.remove(k);
+			taken++;
 		}
-		pendingResults.clear();
+
+		mutex.release();
 
 		for (i in 0...doneKeys.length)
 		{
 			var key = doneKeys[i];
 			var res = doneRes[i];
-			var bmp = res != null ? res.bmp : null;
+			var bmp:BitmapData = null;
 
-			if (res != null && res.packedXml != null && bmp != null)
-				GfxRepack.registerPackedXml(key, res.packedXml, res.filePath, bmp.width, bmp.height);
+			if (res != null && res.bytes != null && res.bytes.length > 0)
+			{
+				var t0 = haxe.Timer.stamp();
+				try
+				{
+					bmp = BitmapData.fromBytes(ByteArray.fromBytes(res.bytes));
+				}
+				catch (e:Dynamic)
+				{
+					TraceManager.warn('trace.asyncGfx.decodeFail',
+						'AsyncGfxLoader decode failed for {}: {}', [res.filePath, e]);
+					bmp = null;
+				}
+				decodeMsTotal += (haxe.Timer.stamp() - t0) * 1000;
+			}
+
+			var packedXml:Null<String> = null;
+			if (bmp != null)
+			{
+				var rep = GfxRepack.process(key, res.filePath, bmp);
+				if (rep != null)
+				{
+					if (bmp != rep.bmp) bmp.dispose();
+					bmp = rep.bmp;
+					packedXml = rep.xml;
+					TraceManager.info('trace.gfx.repack',
+						'GfxRepack {} : {} -> {} MB (-{}%) in {} ms',
+						[key,
+						 Std.string(Math.round(rep.oldBytes / 1048576 * 10) / 10),
+						 Std.string(Math.round(rep.newBytes / 1048576 * 10) / 10),
+						 Std.string(Math.round((1 - rep.newBytes / rep.oldBytes) * 1000) / 10),
+						 Std.string(Math.round(rep.ms))]);
+				}
+			}
+
+			if (res != null && packedXml != null && bmp != null)
+				GfxRepack.registerPackedXml(key, packedXml, res.filePath, bmp.width, bmp.height);
 
 			if (bmp != null && !isCached(key))
 			{
 				if (!materialize(key, bmp))
-					ready.set(key, bmp); 
+				{
+					mutex.acquire();
+					ready.set(key, bmp);
+					mutex.release();
+				}
 				decodedOffThreadTotal++;
 				lastBatchOffThread++;
 			}
@@ -143,13 +205,14 @@ class AsyncGfxLoader
 			{
 				failedOffThreadTotal++;
 			}
+
+			mutex.acquire();
 			inflight.remove(key);
 			var cb = callbacks.get(key);
 			callbacks.remove(key);
+			mutex.release();
 			if (cb != null) fired.push(cb);
 		}
-
-		mutex.release();
 
 		for (cb in fired) cb();
 	}
@@ -179,8 +242,10 @@ class AsyncGfxLoader
 	{
 		#if sys
 		mutex.acquire();
+		generation++;
 		queue.resize(0);
 		pendingResults.clear();
+		ready.clear();
 		inflight.clear();
 		callbacks.clear();
 		mutex.release();
@@ -210,42 +275,21 @@ class AsyncGfxLoader
 						continue;
 					}
 
-					var t0 = haxe.Timer.stamp();
-					var bmp:BitmapData = null;
+					var bytes:haxe.io.Bytes = null;
 					try
 					{
-						bmp = BitmapData.fromFile(job.filePath);
+						bytes = File.getBytes(job.filePath);
 					}
 					catch (e:Dynamic)
 					{
-						TraceManager.warn('trace.asyncGfx.decodeFail',
-							'AsyncGfxLoader decode failed for {}: {}', [job.filePath, e]);
-						bmp = null;
-					}
-					decodeMsTotal += (haxe.Timer.stamp() - t0) * 1000;
-
-					var packedXml:String = null;
-					if (bmp != null)
-					{
-						var rep = GfxRepack.process(job.cacheKey, job.filePath, bmp);
-						if (rep != null)
-						{
-							// Repack owns the pixels; free the original decode immediately.
-							if (bmp != rep.bmp) bmp.dispose();
-							bmp = rep.bmp;
-							packedXml = rep.xml;
-							TraceManager.info('trace.gfx.repack',
-								'GfxRepack {} : {} -> {} MB (-{}%) in {} ms',
-								[job.cacheKey,
-								 Std.string(Math.round(rep.oldBytes / 1048576 * 10) / 10),
-								 Std.string(Math.round(rep.newBytes / 1048576 * 10) / 10),
-								 Std.string(Math.round((1 - rep.newBytes / rep.oldBytes) * 1000) / 10),
-								 Std.string(Math.round(rep.ms))]);
-						}
+						TraceManager.warn('trace.asyncGfx.readFail',
+							'AsyncGfxLoader read failed for {}: {}', [job.filePath, e]);
+						bytes = null;
 					}
 
 					mutex.acquire();
-					pendingResults.set(job.cacheKey, {bmp: bmp, packedXml: packedXml, filePath: job.filePath});
+					if (job.gen == generation)
+						pendingResults.set(job.cacheKey, {bytes: bytes, filePath: job.filePath, gen: job.gen});
 					mutex.release();
 				}
 			});
@@ -266,6 +310,7 @@ class AsyncGfxLoader
 			var graphic:FlxGraphic = FlxGraphic.fromBitmapData(bmp, false, cacheKey);
 			graphic.persist = true;
 			Paths.currentTrackedAssets.set(cacheKey, graphic);
+			Paths.trackLocalAsset(cacheKey);
 
 			#if sys
 			if (ClientPrefs.data.gfxCpuRelease)

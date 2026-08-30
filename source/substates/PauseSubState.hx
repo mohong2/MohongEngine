@@ -109,7 +109,7 @@ class PauseSubState extends MusicBeatSubstate
 			menuItemsOG.insert(5 + num, 'Toggle Botplay');
 		}
 		
-		#if (TOUCH_CONTROLS || desktop) 
+		#if (TOUCH_CONTROLS || desktop)
 		if(!PlayState.seiunOnline)
 			menuItemsOG.insert(2, 'Chart Editor');
 		#end
@@ -118,7 +118,15 @@ class PauseSubState extends MusicBeatSubstate
 		{
 			menuItemsOG.remove('Restart Song');
 			menuItemsOG.remove('Change Difficulty');
+			menuItemsOG.remove('Options');
+			if (menuItemsOG.contains('Toggle Botplay'))
+				menuItemsOG.remove('Toggle Botplay');
+			if (menuItemsOG.contains('Toggle Practice Mode'))
+				menuItemsOG.remove('Toggle Practice Mode');
 			menuItemsOG.insert(1, 'Resume Online');
+			if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
+				&& !PlayState.onlineCanPauseLocally())
+				menuItemsOG.remove('Resume Online');
 			menuItemsOG.remove('Resume');
 		}
 		#end
@@ -557,17 +565,25 @@ class PauseSubState extends MusicBeatSubstate
 				if (PlayState.seiunOnline)
 				{
 					OnlineSession.pauseNickname = "";
-					// 暂停策略: 仅房主/禁止暂停时, 非房主不能恢复 (防止本地恢复造成两端解同步)。
-					if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME
-						&& GameClient.instance != null && PlayState.onlineCanPauseLocally())
-						GameClient.instance.send(SeiunProtocol.MSG_GAME_RESUME, SeiunProtocol.CHANNEL_GAME, {at: Date.now().getTime()});
-					else
+					if (OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
 					{
-						FlxG.sound.play(Paths.sound('cancelMenu'));
-						if (onlineNoticeText != null)
-							onlineNoticeText.text = Language.get('online.pauseHostOnlyWait', '仅房主可以暂停/恢复，等待房主操作');
-						return;
+						// 暂停策略: 仅房主/禁止暂停时, 非房主不能恢复 (防止本地恢复造成两端解同步)。
+						if (GameClient.instance != null && PlayState.onlineCanPauseLocally())
+							GameClient.instance.send(SeiunProtocol.MSG_GAME_RESUME, SeiunProtocol.CHANNEL_GAME, {at: Date.now().getTime()});
+						else
+						{
+							FlxG.sound.play(Paths.sound('cancelMenu'));
+							if (onlineNoticeText != null)
+							{
+								// 按策略给准确文案: 禁止暂停 = 谁都不能恢复; 仅房主 = 等房主。
+								onlineNoticeText.text = PlayState.onlinePausePolicy() == online.shared.OnlineTypes.OnlineConst.PAUSE_DISABLED
+									? Language.get('online.pauseDisabledWait', '本房间已禁止暂停，请退出对局')
+									: Language.get('online.pauseHostOnlyWait', '仅房主可以暂停/恢复，等待房主操作');
+							}
+							return;
+						}
 					}
+					// 异步排名模式: 暂停纯属本地画面, 直接恢复, 不发网络消息、不受暂停策略限制。
 				}
 				#end
 
@@ -581,6 +597,9 @@ class PauseSubState extends MusicBeatSubstate
 				menuItems = difficultyChoices;
 				regenMenu(true);
 			case 'Toggle Practice Mode':
+				#if ONLINE_ALLOWED
+				if (PlayState.seiunOnline) { FlxG.sound.play(Paths.sound('cancelMenu')); return; } // 联机禁止练习模式
+				#end
 				PlayState.instance.practiceMode = !PlayState.instance.practiceMode;
 				PlayState.changedDifficulty = true;
 				practiceText.visible = PlayState.instance.practiceMode;
@@ -612,6 +631,9 @@ class PauseSubState extends MusicBeatSubstate
 				closeWithSlideAnimation();
 				PlayState.instance.finishSong(true);
 			case 'Toggle Botplay':
+				#if ONLINE_ALLOWED
+				if (PlayState.seiunOnline) { FlxG.sound.play(Paths.sound('cancelMenu')); return; } // 联机禁止 Botplay
+				#end
 				PlayState.instance.cpuControlled = !PlayState.instance.cpuControlled;
 				PlayState.changedDifficulty = true;
 				PlayState.instance.botplayTxt.visible = PlayState.instance.cpuControlled;

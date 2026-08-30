@@ -184,7 +184,7 @@ class NoteSplash extends FlxSprite
 		if (isModernSplash)
 		{
 			var tempShader:RGBPalette = null;
-			if (PlayState.SONG == null || !PlayState.SONG.disableNoteRGB)
+			if (!ClientPrefs.noteRGBDisabled(PlayState.SONG != null && PlayState.SONG.disableNoteRGB))
 			{
 				if (noteObj != null)
 					tempShader = (noteObj.rgbShader != null) ? noteObj.rgbShader.parent : null;

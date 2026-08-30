@@ -30,6 +30,16 @@
 		"options": ["Old", "New"]
 	},
 	{
+		"nameKey": "option.noteRGBMode",
+		"defaultName": "Note RGB Shader",
+		"descKey": "option.noteRGBMode.desc",
+		"defaultDesc": "Controls the RGB coloring shader used by white-based Note textures (0.7.3+ noteSkins).\nFollow Chart: the chart's \"No Note RGB\" setting decides (default).\nOn: always color Notes with the shader.\nOff: never color Notes, they keep the raw texture colors.",
+		"variable": "noteRGBMode",
+		"type": "string",
+		"defaultValue": "Chart",
+		"options": ["Chart", "On", "Off"]
+	},
+	{
 		"nameKey": "option.splashSkin",
 		"defaultName": "Splash Skin",
 		"descKey": "option.splashSkin.desc",

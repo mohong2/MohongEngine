@@ -1142,6 +1142,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		});
 		player1DropDown.textObj.font = 'assets/fonts/editors.ttf';
 			player1DropDown.selectedLabel = _song.player1;
+		player1DropDown.maxItems = 12; // 角色列表可能很长, 窗口化展开避免面板超出屏幕
 		blockPressWhileScrolling.push(player1DropDown);
 
 		var gfVersionDropDown = new PsychUIDropDownMenu(player1DropDown.x, player1DropDown.y + 40, characters, function(index:Int, label:String)
@@ -1152,6 +1153,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		});
 		gfVersionDropDown.textObj.font = 'assets/fonts/editors.ttf';
 			gfVersionDropDown.selectedLabel = _song.gfVersion;
+		gfVersionDropDown.maxItems = 12;
 		blockPressWhileScrolling.push(gfVersionDropDown);
 
 		var player2DropDown = new PsychUIDropDownMenu(player1DropDown.x, gfVersionDropDown.y + 40, characters, function(index:Int, label:String)
@@ -1162,6 +1164,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		});
 		player2DropDown.textObj.font = 'assets/fonts/editors.ttf';
 			player2DropDown.selectedLabel = _song.player2;
+		player2DropDown.maxItems = 12;
 		blockPressWhileScrolling.push(player2DropDown);
 
 		#if MODS_ALLOWED
@@ -1213,6 +1216,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 		});
 		stageDropDown.textObj.font = 'assets/fonts/editors.ttf';
 			stageDropDown.selectedLabel = _song.stage;
+		stageDropDown.maxItems = 12;
 		blockPressWhileScrolling.push(stageDropDown);
 
 		var skin = PlayState.SONG.arrowSkin;
@@ -1638,7 +1642,8 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 			}
 		});
 		noteTypeDropDown.textObj.font = 'assets/fonts/editors.ttf';
-			blockPressWhileScrolling.push(noteTypeDropDown);
+			noteTypeDropDown.maxItems = 12;
+		blockPressWhileScrolling.push(noteTypeDropDown);
 
 		tab_group_note.add(new EditorsText(10, 10, 0, Language.get("newchartEditor_sustain_length", "Sustain length:")));
 		tab_group_note.add(new EditorsText(10, 50, 0, Language.get("newchartEditor_note_hit_time", "Strum time (in miliseconds):")));
@@ -1710,6 +1715,7 @@ openSubState(new Prompt('This action will clear current progress.\n\nProceed?', 
 				reloadGridLayer();
 			}
 		});
+		eventDropDown.maxItems = 12;
 		blockPressWhileScrolling.push(eventDropDown);
 
 		var text:EditorsText = new EditorsText(20, 90, 0, Language.get("newchartEditor_value_1", "Value 1:"));

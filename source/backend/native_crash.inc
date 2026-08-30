@@ -95,12 +95,20 @@ static LONG WINAPI seiun_seh_handler(EXCEPTION_POINTERS* info)
 		(void*)er->ExceptionAddress);
 	HMODULE mod = NULL;
 	char modName[300] = "?";
+	ULONG_PTR moduleBase = 0;
 	if (GetModuleHandleExA(GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
 		(LPCSTR)er->ExceptionAddress, &mod))
 	{
+		moduleBase = (ULONG_PTR)mod;
 		GetModuleFileNameA(mod, modName, sizeof(modName));
 	}
 	len += snprintf(body + len, sizeof(body) - len, "Faulting module: %s\n", modName);
+	if (moduleBase != 0)
+	{
+		len += snprintf(body + len, sizeof(body) - len, "Module base: 0x%p\n", (void*)moduleBase);
+		len += snprintf(body + len, sizeof(body) - len, "Fault offset: 0x%016llX\n",
+			(unsigned long long)((ULONG_PTR)er->ExceptionAddress - moduleBase));
+	}
 	len += snprintf(body + len, sizeof(body) - len, "Exception parameters: %lu\n", (unsigned long)er->NumberParameters);
 	for (DWORD i = 0; i < er->NumberParameters && i < 2; i++)
 	{

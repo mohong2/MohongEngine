@@ -134,6 +134,15 @@
 		"platform": "desktop"
 	},
 	{
+		"nameKey": "option.turboMode",
+		"defaultName": "Turbo Mode",
+		"descKey": "option.turboMode.desc",
+		"defaultDesc": "Ultimate extreme-chart switch. When ON, botplay is forced and locked, high-density note sections use precomputed aggregation plus data-level bulk settlement instead of materializing tens of thousands of sprites. When OFF, everything is exactly the stock behavior.",
+		"variable": "turboMode",
+		"type": "bool",
+		"defaultValue": false
+	},
+	{
 		"nameKey": "option.perfMode",
 		"defaultName": "Performance Mode",
 		"descKey": "option.perfMode.desc",

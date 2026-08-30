@@ -38,6 +38,8 @@ import sys.io.Process;
 	public var splashSkin:String = 'Psych';
 	/** Note 风格: Old = 0.6.3 flat NOTE_assets, New = 0.7.3 noteSkins/NOTE_assets。独立于兼容模式。 */
 	public var noteStyle:String = 'Old';
+	/** Note RGB 染色着色器: Chart = 跟随谱面 disableNoteRGB (默认), On = 强制开启, Off = 强制关闭。 */
+	public var noteRGBMode:String = 'Chart';
 
 	public var modSettings:Map<String, Map<String, Dynamic>> = new Map();
 
@@ -116,6 +118,8 @@ import sys.io.Process;
 	public var preloadAssets:Bool = false;
 	/** H-Slice 性能总开关: 关闭时全部批量推进/合并重建/预算节流回到原版逐击行为。 */
 	public var perfMode:Bool = false;
+	/** Turbo 终极总开关: 开启后强制锁定 botplay, 并启用高密度聚合/侧车缓存/数据级批量结算。 */
+	public var turboMode:Bool = false;
 	/** H-Slice 性能项: 批量跳过已过期谱面 Note。 */
 	public var bulkSkip:Bool = false;
 	/** H-Slice 性能项: 只对可见存活 Note 做排序。 */
@@ -124,13 +128,13 @@ import sys.io.Process;
 	public var limitNotes:Int = 0;
 	/** H-Slice 性能项: 游玩期禁用 hxcpp GC, 用内存换帧时间 (默认关, 防泄漏)。 */
 	public var disableGC:Bool = false;
-	/** Release CPU-side copies of large textures (>=2048px) during gameplay to save RAM while keeping identical rendering. */
+	/** Release CPU-side copies of large textures (>=2048px) only after confirming no live sprite/atlas/script references. */
 	public var gfxCpuRelease:Bool = true;
-	/** Decode character sheets in background threads during loading and display progress. */
+	/** Decode character sheets on the controlled main-thread loading queue (no background BitmapData threads). */
 	public var asyncImageLoading:Bool = true;
-	/** Store uploaded graphics in LRU cache upon song exit to skip decoding and GPU uploading on replay. */
+	/** Store uploaded graphics in LRU cache upon song exit, with strict cache/atlas synchronization and reference-safe eviction. */
 	public var gfxLruCache:Bool = true;
-	/** Trim transparent borders and pack frames tightly in memory for large sheets (>=2048px) with XML to reduce VRAM and load time. */
+	/** Trim transparent borders and repack large sheets at runtime on the main thread, with XML/dimension validation. */
 	public var gfxRuntimeRepack:Bool = true;
 	public var splashAlpha:Float = 0.6;
 	public var autoPause:Bool = true;
@@ -209,6 +213,7 @@ class ClientPrefs {
 	public static var noteSkin(get, never):String;
 	public static var splashSkin(get, never):String;
 	public static var noteStyle(get, never):String;
+	public static var noteRGBMode(get, never):String;
 	public static var modSettings(get, never):Map<String, Map<String, Dynamic>>;
 	public static var keyboardAlpha(get, never):Float;
 	public static var keyboardTimeDisplay(get, never):Bool;
@@ -302,6 +307,7 @@ class ClientPrefs {
 	static inline function get_noteSkin() return data.noteSkin;
 	static inline function get_splashSkin() return data.splashSkin;
 	static inline function get_noteStyle() return data.noteStyle;
+	static inline function get_noteRGBMode() return data.noteRGBMode;
 	static inline function get_modSettings() return data.modSettings;
 	static inline function get_keyboardAlpha() return data.keyboardAlpha;
 	static inline function get_keyboardTimeDisplay() return data.keyboardTimeDisplay;
@@ -788,9 +794,14 @@ class ClientPrefs {
 		FlxG.autoPause = ClientPrefs.data.runInBackground ? false : ClientPrefs.data.autoPause;
 
 		if (FlxG.save.data.framerate == null) {
+			#if mobile
+			data.framerate = 60;
+			data.drawFramerate = 60;
+			#else
 			final refreshRate:Int = FlxG.stage.application.window.displayMode.refreshRate;
 			data.framerate = Std.int(FlxMath.bound(refreshRate, 60, 240));
 			data.drawFramerate = data.framerate;
+			#end
 		}
 		#end
 
@@ -883,9 +894,31 @@ class ClientPrefs {
 		prefsLoaded = true;
 	}
 
+	#if ONLINE_ALLOWED
+	public static var onlineMaskCheats:Bool = false;
+	#end
+
+	/**
+	 * Note RGB 染色着色器最终是否禁用: 合并玩家 noteRGBMode 与谱面 disableNoteRGB。
+	 * Chart (默认) = 跟随谱面; On = 强制启用 (忽略谱面关闭); Off = 强制关闭 (白底材质保持原色)。
+	 */
+	public static function noteRGBDisabled(chartDisabled:Bool):Bool
+	{
+		return switch (data.noteRGBMode)
+		{
+			case 'On': false;
+			case 'Off': true;
+			default: chartDisabled;
+		}
+	}
+
 	inline public static function getGameplaySetting(name:String, defaultValue:Dynamic = null, ?customDefaultValue:Bool = false):Dynamic {
 		if (!customDefaultValue)
 			defaultValue = defaultData.gameplaySettings.get(name);
+		#if ONLINE_ALLOWED
+		if (onlineMaskCheats && (name == 'botplay' || name == 'practice' || name == 'instakill'))
+			return false;
+		#end
 		return (data.gameplaySettings.exists(name) ? data.gameplaySettings.get(name) : defaultValue);
 	}
 
