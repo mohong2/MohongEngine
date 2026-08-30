@@ -1,15 +1,16 @@
 package states;
 
-import flixel.FlxSubState;
-import flixel.effects.FlxFlicker;
-import lime.app.Application;
-import flixel.addons.transition.FlxTransitionableState;
+import flixel.FlxSprite;
+import flixel.text.FlxText;
+import flixel.util.FlxColor;
+import flixel.tweens.FlxTween;
 
 class OutdatedState extends MusicBeatState
 {
 	public static var leftState:Bool = false;
 
 	var warnText:FlxText;
+
 	override function create()
 	{
 		super.create();
@@ -24,17 +25,19 @@ class OutdatedState extends MusicBeatState
 		var bg:FlxSprite = new FlxSprite().makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
 		add(bg);
 
-		warnText = new FlxText(0, 0, FlxG.width,
-			"Sup bro, looks like you're running an   \n
-			outdated version of Seiun Engine (" + MainMenuState.seiunengineVersion + "),\n
-			please update to " + TitleState.updateVersion + "!\n
-			Press ESCAPE to proceed anyway.\n
-			\n
-			Thank you for using the Engine!",
-			32);
-		warnText.setFormat("VCR OSD Mono", 32, FlxColor.WHITE, CENTER);
+		var current:String = MainMenuState.seiunengineVersion;
+		var latest:String = TitleState.updateVersion;
+		var text:String = Language.get('OutdatedState.text',
+			"You are running an outdated version of Seiun Engine ({current}).\nLatest version: {latest}\n\nPress ENTER / A to open the download page.\nPress ESCAPE / B to continue anyway.\n\nThank you for using the Engine!");
+		text = StringTools.replace(text, "{current}", current);
+		text = StringTools.replace(text, "{latest}", latest);
+
+		warnText = new FlxText(0, 0, FlxG.width, text, 28);
+		warnText.setFormat(Paths.languageFont(), 28, FlxColor.WHITE, CENTER);
 		warnText.screenCenter(Y);
 		add(warnText);
+
+		addVirtualPad(LEFT_FULL, A_B);
 	}
 
 	override function update(elapsed:Float)

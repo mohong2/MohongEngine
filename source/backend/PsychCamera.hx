@@ -98,15 +98,12 @@ class PsychCamera extends FlxCamera
 			}
 		}
 
-		if (followLerp >= 60 / FlxG.updateFramerate)
-		{
-			scroll.copyFrom(_scrollTarget); // no easing
-		}
-		else
-		{
-			scroll.x += (_scrollTarget.x - scroll.x) * followLerp * FlxG.updateFramerate / 60;
-			scroll.y += (_scrollTarget.y - scroll.y) * followLerp * FlxG.updateFramerate / 60;
-		}
+		// Frame-rate independent exponential smoothing
+		// followLerp is intentionally not clamped so high-refresh/fluctuating
+		// frame times do not change the camera movement speed.
+		var mult:Float = 1 - Math.exp(-elapsed * followLerp);
+		scroll.x += (_scrollTarget.x - scroll.x) * mult;
+		scroll.y += (_scrollTarget.y - scroll.y) * mult;
 	}
 
 	override function set_followLerp(value:Float)

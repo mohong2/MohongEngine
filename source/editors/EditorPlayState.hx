@@ -439,15 +439,20 @@ class EditorPlayState extends MusicBeatState
 									|| (daNote.animation.curAnim != null
 										&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend'))));
 								var stepPx:Float = 0.45 * stepCrochet * PlayState.SONG.speed * daNote.multSpeed * maniaScale;
-								// 锚点衰减只看步时（BPM），不随 scrollSpeed 放大：高 BPM 收敛到“首段底边= tap 顶边”。
-								var anchorScale:Float = (stepCrochet - 28.7356) / (150.0 - 28.7356);
-								anchorScale = Math.min(1.0, Math.max(0.0, anchorScale));
+								// 参考 Psych 1.0.4 / H-Slice 的下落定位，并用 noOverlap 作高 BPM 上限；
+								// BPM <= 100 保持原 56px。
 								var bodyH:Float = 44.0 * (stepCrochet / 100.0) * 1.05 * PlayState.SONG.speed * daNote.multSpeed * maniaScale + 2.0;
 								var noOverlapAnchor:Float = stepPx - bodyH;
-								var anchor:Float = (Note.swagWidth / 2) * anchorScale * maniaScale + (1.0 - anchorScale) * noOverlapAnchor;
+								var anchor:Float;
+								if (stepCrochet >= 150.0)
+									anchor = (Note.swagWidth / 2) * maniaScale;
+								else
+									anchor = Math.min((Note.swagWidth / 2) * maniaScale - bodyH, noOverlapAnchor);
 								if (isEnd)
 									anchor += stepPx - daNote.height;
-								daNote.y += anchor;
+								// 自定义材质（trimmed atlas frame）内容偏移归一化。
+								var contentOffsetY:Float = (daNote.frame != null) ? daNote.frame.offset.y * daNote.scale.y : 0.0;
+								daNote.y += anchor - contentOffsetY;
 							}
 							if(daNote.mustPress || !daNote.ignoreNote)
 							{

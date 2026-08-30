@@ -14,6 +14,7 @@ using StringTools;
 #end
 
 import mohong.TraceManager;
+import backend.GitHubAPI;
 #if VIDEOS_ALLOWED
 import backend.VideoPreloader;
 #end
@@ -125,6 +126,7 @@ class TitleState extends MusicBeatState
 	var titleJSON:TitleData;
 
 	public static var updateVersion:String = '';
+	public static var updateAvailable:Bool = false;
 
 	override public function create():Void
 	{
@@ -196,26 +198,11 @@ class TitleState extends MusicBeatState
 		callOnLuas('onCreatePost', []);
 		#end
 
-		#if (CHECK_FOR_UPDATES && ONLINE_ALLOWED)
+		#if CHECK_FOR_UPDATES
+		updateAvailable = false;
 		if(ClientPrefs.data.checkForUpdates && !closedState) {
 			TraceManager.info('trace.title.checkUpdate', 'checking for update');
-			var http = new haxe.Http("https://raw.githubusercontent.com/mohong2/FNF-SeiunEngine/main/gitVersion.txt");
-			http.onData = function (data:String)
-			{
-				updateVersion = data.split('\n')[0].trim();
-				var curVersion:String = MainMenuState.psychEngineVersion.trim();
-				TraceManager.info('trace.title.versionCheck', 'version online: {}, your version: {}', [updateVersion, curVersion]);
-				if(updateVersion != curVersion) {
-					TraceManager.warn('trace.title.versionMismatch', 'versions arent matching!');
-					mustUpdate = true;
-				}
-			}
-
-			http.onError = function (error) {
-				TraceManager.error('trace.title.updateCheckError', 'error: {}', [error]);
-			}
-
-			http.request();
+			checkForUpdate();
 		}
 		#end
 
@@ -298,6 +285,62 @@ class TitleState extends MusicBeatState
 		continueNormalFlow();
 		#end
 	}
+
+	#if CHECK_FOR_UPDATES
+	function checkForUpdate():Void
+	{
+		var owner:String = "mohong2";
+		var repo:String = "FNF-SeiunEngine";
+
+		var onError = function(error:String)
+		{
+			TraceManager.error('trace.title.updateCheckError', 'error: {}', [error]);
+		}
+
+		var onData = function(data:Dynamic)
+		{
+			if (data == null) return;
+
+			var releases:Array<Dynamic> = cast data;
+			var best:Dynamic = null;
+			var bestVersion:String = "";
+
+			for (release in releases)
+			{
+				if (release == null) continue;
+				if (Reflect.field(release, "draft") == true) continue;
+				if (!ClientPrefs.data.checkForPrereleases && Reflect.field(release, "prerelease") == true) continue;
+
+				var rawTag:Dynamic = Reflect.field(release, "tag_name");
+				if (rawTag == null) continue;
+				var tag:String = Std.string(rawTag);
+				if (tag.length == 0) continue;
+
+				var cleaned:String = GitHubAPI.normalizeVersion(tag);
+				if (best == null || GitHubAPI.compareVersions(cleaned, bestVersion) > 0)
+				{
+					best = release;
+					bestVersion = cleaned;
+				}
+			}
+
+			if (best == null) return;
+
+			var current:String = GitHubAPI.normalizeVersion(MainMenuState.seiunengineVersion);
+			TraceManager.info('trace.title.versionCheck', 'version online: {}, your version: {}', [bestVersion, current]);
+
+			if (GitHubAPI.compareVersions(bestVersion, current) > 0)
+			{
+				TraceManager.warn('trace.title.versionMismatch', 'versions arent matching!');
+				updateVersion = Std.string(Reflect.field(best, "tag_name"));
+				updateAvailable = true;
+				mustUpdate = true;
+			}
+		}
+
+		GitHubAPI.getReleases(owner, repo, 100, 1, onData, onError);
+	}
+	#end
 
 		#if mobile
 	/** @param showNotice Android 快速校验路径不弹"缺文件"对话框, 避免每次启动骚扰。 */

@@ -44,6 +44,7 @@
     "option.showFPS.desc": "If unchecked, hides FPS Counter.",
     "option.pauseMusic.desc": "What song do you prefer for the Pause Screen?",
     "option.checkForUpdates.desc": "On Release builds, turn this on to check for updates when you start the game.",
+    "option.checkForPrereleases.desc": "Also check for prerelease or preview versions when looking for updates.",
     "option.comboStacking.desc": "If unchecked, Ratings and Combo won't stack, saving on System Memory and making them easier to read.",
     "option.lowQuality.desc": "If checked, disables some background details, decreases loading times and improves performance.",
     "option.globalAntialiasing.desc": "If unchecked, disables anti-aliasing, increases performance at the cost of sharper visuals.",
@@ -199,6 +200,7 @@
     "option.showFPS": "FPS Counter",
     "option.pauseMusic": "Pause Screen Song",
     "option.checkForUpdates": "Check for Updates",
+    "option.checkForPrereleases": "Check for Prereleases",
     "option.comboStacking": "Combo Stacking",
 
     "option.separateUpdateDraw": "Separate Update/Draw",

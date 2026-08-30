@@ -40,7 +40,8 @@ start_server.bat
 ## 离线构建
 
 - `ONLINE_ALLOWED` 只在 desktop 构建默认定义。
-- 不传该 define 时：无联机入口、无任何网络请求（包括 GitHub 更新检查）。
+- 不传该 define 时：无联机入口；GitHub 更新检查仍会默认启用（可在 设置 → 视觉 中关闭）。
+- Android / iOS 构建默认也启用更新检查，使用异步网络请求，不阻塞启动流程。
 - Android 如需实验性联机：`lime build android -D ONLINE_ALLOWED`。
 
 ## 服务端脚本

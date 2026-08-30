@@ -141,6 +141,16 @@
 		"define": "CHECK_FOR_UPDATES"
 	},
 	{
+		"nameKey": "option.checkForPrereleases",
+		"defaultName": "Check for Prereleases",
+		"descKey": "option.checkForPrereleases.desc",
+		"defaultDesc": "Also check for prerelease or preview versions when looking for updates.",
+		"variable": "checkForPrereleases",
+		"type": "bool",
+		"defaultValue": false,
+		"define": "CHECK_FOR_UPDATES"
+	},
+	{
 		"nameKey": "option.comboStacking",
 		"defaultName": "Combo Stacking",
 		"descKey": "option.comboStacking.desc",

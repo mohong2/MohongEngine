@@ -2,6 +2,7 @@
     "ttf" : "vcr",
     "FlxSoundTray.volume.text": "VOLUME",
     "FlashingState.warning": "Hey, watch out!\nThis Mod contains some flashing lights!\nPress ENTER to disable them now or go to Options Menu.\nPress ESCAPE to ignore this message.\nYou've been warned!",
+    "OutdatedState.text": "You are running an outdated version of Seiun Engine ({current}).\nLatest version: {latest}\n\nPress ENTER / A to open the download page.\nPress ESCAPE / B to continue anyway.\n\nThank you for using the Engine!",
 
     "ChartingState.text": "W/S or Mouse Wheel - Adjust Conductor's strum time\n\nA/D - Jump to Previous/Next Section\n\nLeft Arrow/Right Arrow - Change Snap\n\nUp Arrow/Down Arrow - Adjust Conductor's Strum Time with Snap\n\n[ / ] - Change Playback Rate (Hold Shift for faster adjustment)\n\nALT + [ / ] - Reset Playback Rate\n\nHold Shift for 4x Speed Movement\n\nHold Control and click a note arrow to select it\n\nZ/X - Zoom In/Out\n\nEsc - Test Chart in Editor\n\nEnter - Play Chart\n\nQ/E - Decrease/Increase Note Sustain Length\n\nSpacebar - Stop/Resume Song",
     "FreeplayState.leText" : "Press SPACE to listen to the Song / Press CTRL to open the Gameplay Changers Menu / Press RESET to Reset your Score and Accuracy.",
@@ -32,6 +33,7 @@
     "Mod.downloadHint" : "Download: ",
     "Mod.incompatible" : "⚠ INCOMPATIBLE: ",
     "MainMenu.activeMod" : "Active Mod: ",
+    "MainMenu.updateAvailable": "Update available: ",
     "Mod.selectHint.android" : "← →  Switch Mod    A  Confirm    B  Cancel",
     "WeekData.vanilla" : "Vanilla",
 

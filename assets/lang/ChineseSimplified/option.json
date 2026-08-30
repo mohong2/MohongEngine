@@ -44,6 +44,7 @@
     "option.showFPS.desc": "如果不选中,将隐藏FPS计数器.",
     "option.pauseMusic.desc": "您更喜欢哪个歌曲用于暂停屏幕?",
     "option.checkForUpdates.desc": "在正式版中,打开这个选项可以在你启动游戏时检查更新.",
+    "option.checkForPrereleases.desc": "检查更新时也包含预发布/预览版本.",
     "option.comboStacking.desc": "如果不勾选,评分和连击不会叠加,这样可以节省系统内存,而且更容易阅读.",
     "option.lowQuality.desc": "如果选中,则禁用一些背景细节,减少加载时间并提高性能.",
     "option.globalAntialiasing.desc": "如果不勾选,就会禁用抗锯齿,虽然性能会提高,但画面会显得不那么清晰.",
@@ -198,6 +199,7 @@
     "option.showFPS" : "显示FPS",
     "option.pauseMusic" : "暂停音乐",
     "option.checkForUpdates" : "检查更新",
+    "option.checkForPrereleases" : "检查预发布版本",
     "option.comboStacking" : "评分图标堆叠",
 
     "option.separateUpdateDraw": "渲染与更新分离",

@@ -92,7 +92,7 @@ class MainMenuState extends SeiunMenuState
 				if (v != null && Std.string(v).length > 0) return Std.string(v);
 			}
 		} catch (e:Dynamic) {}
-		return '0.2.1';
+		return '0.2.1hotfix';
 	}
 
 	override function create()
@@ -236,25 +236,27 @@ class MainMenuState extends SeiunMenuState
 			[FlxG.height - 44,  "Psych Engine v0.6.3+0.7.3+1.0.4 (Active: " + CompatEngine.current() + ")"],
 			[FlxG.height - 24,  "Friday Night Funkin' v" + fnfGameVersion]
 		];
+		if (TitleState.updateAvailable)
+			versionLabels.unshift([FlxG.height - 124, Language.get('MainMenu.updateAvailable', 'Update available: ') + TitleState.updateVersion]);
 		for (label in versionLabels)
 		{
 			var versionShit:FlxText = new FlxText(0, Std.int(label[0]), versionRightEdge, Std.string(label[1]), 12);
 			versionShit.scrollFactor.set();
-			versionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			versionShit.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 			add(versionShit);
 		}
 
 		#if HSCRIPT_ALLOWED
 		var hscriptversionShit:FlxText = new FlxText(0, FlxG.height - 704, versionRightEdge, "Hscript version: " + HScript.hscriptVersion, 12);
 		hscriptversionShit.scrollFactor.set();
-		hscriptversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		hscriptversionShit.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(hscriptversionShit);
 		#end
 
 		#if LUA_ALLOWED
 		var luaversionShit:FlxText = new FlxText(0, FlxG.height - 684, versionRightEdge, "Lua version: " + FunkinLua.luaversion, 12);
 		luaversionShit.scrollFactor.set();
-		luaversionShit.setFormat("VCR OSD Mono", 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		luaversionShit.setFormat(Paths.languageFont(), 16, FlxColor.WHITE, RIGHT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
 		add(luaversionShit);
 		#end
 

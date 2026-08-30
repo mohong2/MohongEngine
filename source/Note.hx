@@ -501,6 +501,11 @@ class Note extends FlxSprite {
     function refreshSwapShader():Void
     {
         if (colorSwap == null) return;
+        // 0.7.3 白底材质 (noteSkins/*) 由 rgbShader 负责染色。applyLaneColor 刷新
+        // colorSwap 本身会走进这里, 不能让它把已经挂载的 RGB 着色器覆盖成 ColorSwap——
+        // 否则 Note 会退回白底未着色状态。
+        if (rgbShader != null && rgbShader.enabled && !rgbShader.forceDisabled && ClientPrefs.data.shaders)
+            return;
         // perfMode 关闭时保持提交前行为：始终挂 colorSwap.shader，
         // 不因“中性色”而省略着色器，脚本/渲染路径与旧逻辑一致。
         var target:FlxShader = (ClientPrefs.data.perfMode && colorSwap.isNeutral()) ? null : colorSwap.shader;
@@ -1263,18 +1268,7 @@ class Note extends FlxSprite {
 			y = strum.y + offsetY + Math.sin(strum.direction * Math.PI / 180) * distance;
 
 			if(isSustainNote) {
-				// upscroll / downscroll 统一: 各段按自身 strumTime 摆放, 无任何常量修正
-				// (与 0.6.3 原版 upscroll 行为一致, 两个方向镜像对称)。
-				// 历史教训:
-				// 1. upscroll 曾误加 y += 55 —— 固定像素偏移在高 BPM (step 间距小) 时
-				//    等于数个 step, 整条长条被推向判定线一侧;
-				// 2. downscroll 曾用 1.0.4 的 y -= frameHeight*scale.y - swagWidth/2 锚点 ——
-				//    同样是固定 56px: 低 BPM 时间距大看不出来, BPM 越高间距越小
-				//    (522 BPM 时间距仅 ~13px, 56px ≈ 4.3 step), 链条起始段被推到
-				//    tap 的判定线一侧 —— "BPM 越高 tap 越靠后 / 长条越往前突出"。
-				// 无锚点时链条起始段超出 tap 的量 = 段间重叠量 (恒定 ~2px), 与 BPM 无关;
-				// 段间衔接条件 "段高 >= step 间距" 由段高公式 (自带 2px 重叠) 在任意
-				// BPM/流速/键数下保证。
+                //傻逼吧
 			}
 		}
     }

@@ -94,6 +94,7 @@ import sys.io.Process;
 	public var trackAlpha:Float = 0;
 	public var pauseMusic:String = 'Tea Time';
 	public var checkForUpdates:Bool = true;
+	public var checkForPrereleases:Bool = false;
 	public var comboStacking = false;
 	public var language:String = "English";
 	public var oldmodsmenu:Bool = false;
@@ -258,6 +259,7 @@ class ClientPrefs {
 	public static var trackAlpha(get, never):Float;
 	public static var pauseMusic(get, never):String;
 	public static var checkForUpdates(get, never):Bool;
+	public static var checkForPrereleases(get, never):Bool;
 	public static var comboStacking(get, never):Bool;
 	public static var language(get, never):String;
 	public static var oldmodsmenu(get, never):Bool;
@@ -363,6 +365,7 @@ class ClientPrefs {
 	static inline function get_trackAlpha() return data.trackAlpha;
 	static inline function get_pauseMusic() return data.pauseMusic;
 	static inline function get_checkForUpdates() return data.checkForUpdates;
+	static inline function get_checkForPrereleases() return data.checkForPrereleases;
 	static inline function get_comboStacking() return data.comboStacking;
 	static inline function get_language() return data.language;
 	static inline function get_oldmodsmenu() return data.oldmodsmenu;

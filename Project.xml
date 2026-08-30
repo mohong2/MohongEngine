@@ -2,7 +2,7 @@
 <project>
 	<!-- _________________________ Application Settings _________________________ -->
 
-	<app title="SeiunEngine" file="SeiunEngine" packageName="com.mohong.Seiunengine" package="com.mohong.Seiunengine" main="Main" version="0.2.1" company="Mohong"/>
+	<app title="SeiunEngine" file="SeiunEngine" packageName="com.mohong.Seiunengine" package="com.mohong.Seiunengine" main="Main" version="0.2.1hotfix" company="Mohong"/>
 
 	<!--Switch Export with Unique ApplicationID and Icon-->
 	<set name="APP_ID" value="0x0100f6c013bbc000" />
@@ -53,7 +53,7 @@
 	<define name="LUA_ALLOWED" if="desktop || mobile" />
 	<define name="HSCRIPT_ALLOWED" if="desktop || mobile" />
 	<define name="ACHIEVEMENTS_ALLOWED" />
-	<define name="CHECK_FOR_UPDATES" if="ONLINE_ALLOWED"/>
+	<define name="CHECK_FOR_UPDATES" if="desktop || mobile" />
 
 	<define name="VIDEOS_ALLOWED" if="web || windows || linux || mac || android || ios" unless="32bits"/>
 	<define name="PSYCH_WATERMARKS"/>
