@@ -38,6 +38,16 @@
 		"defaultValue": false
 	},
 	{
+		"nameKey": "option.clearImageCache",
+		"defaultName": "Clear Image Cache",
+		"descKey": "option.clearImageCache.desc",
+		"defaultDesc": "Press ENTER to release all unused cached images from memory, including the LRU pool.",
+		"variable": "clearImageCache",
+		"type": "button",
+		"defaultValue": false,
+		"onChange": "onClearImageCache"
+	},
+	{
 		"nameKey": "option.separateUpdateDraw",
 		"defaultName": "Separate Update/Draw",
 		"descKey": "option.separateUpdateDraw.desc",

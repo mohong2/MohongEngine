@@ -158,7 +158,9 @@ class Option
 		var newValue:String = 'bool';
 		switch(type.toLowerCase().trim())
 		{
-			case 'int' | 'float' | 'percent' | 'string': newValue = type;
+			// 'button' must survive normalization — OptionsState renders it as a
+			// "[Press ENTER]" action row, not a checkbox.
+			case 'bool' | 'button' | 'int' | 'float' | 'percent' | 'string': newValue = type.toLowerCase().trim();
 			case 'integer': newValue = 'int';
 			case 'str': newValue = 'string';
 			case 'fl': newValue = 'float';

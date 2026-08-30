@@ -40,4 +40,24 @@ class NativeCrash
 		catch (e:Dynamic) {}
 		#end
 	}
+
+	/**
+	 * Install a LuaJIT panic handler on a lua_State (llua.State).
+	 *
+	 * Unprotected errors inside the Lua VM (no pcall boundary) make LuaJIT print
+	 * "PANIC: unprotected error..." and kill the process without leaving any
+	 * engine-side log. With this hook the panic writes crash/native_crash_*.txt
+	 * (Lua error message + backtrace) before the process aborts.
+	 */
+	public static function installLuaPanic(luaState:llua.State):Void
+	{
+		#if cpp
+		if (luaState == null) return;
+		try
+		{
+			untyped __cpp__('{ extern void seiun_install_lua_panic(void* L); seiun_install_lua_panic((void*){0}); }', luaState);
+		}
+		catch (e:Dynamic) {}
+		#end
+	}
 }

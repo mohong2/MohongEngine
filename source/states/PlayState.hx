@@ -366,9 +366,9 @@ class PlayState extends MusicBeatState
 	private var strumLine:FlxSprite;
 
 	//Handles the new epic mega sexy cam code that i've done
-	public var camFollow:FlxObject;
+	public var camFollow:FlxPoint;
 	public var camFollowPos:FlxObject;
-	private static var prevCamFollow:FlxObject;
+	private static var prevCamFollow:FlxPoint;
 	private static var prevCamFollowPos:FlxObject;
 
 	public var strumLineNotes:FlxTypedGroup<StrumNote>;
@@ -645,7 +645,6 @@ class PlayState extends MusicBeatState
 	}
 
 	public var inCutscene:Bool = false;
-	public var freezeCamera:Bool = false;
 	public var skipCountdown:Bool = false;
 	public var songLength:Float = 0;
 
@@ -877,7 +876,7 @@ class PlayState extends MusicBeatState
 
 
 		// var gameCam:FlxCamera = FlxG.camera;
-		camGame = new backend.PsychCamera();
+		camGame = new FlxCamera();
 		camHUD = new FlxCamera();
 		camOther = new FlxCamera();
 		camHUD.bgColor.alpha = 0;
@@ -1337,32 +1336,29 @@ class PlayState extends MusicBeatState
 		// After all characters being loaded, it makes then invisible 0.01s later so that the player won't freeze when you change characters
 		// add(strumLine);
 
-		camFollow = new FlxObject(0, 0, 1, 1);
-		// Keep camFollowPos as a public alias of camFollow so legacy mods that
-		// read/write camFollowPos still affect (or observe) the real follow target.
-		camFollowPos = camFollow;
+		camFollow = new FlxPoint();
+		camFollowPos = new FlxObject(0, 0, 1, 1);
 
 		snapCamFollowToPos(camPos.x, camPos.y);
 		if (prevCamFollow != null)
 		{
 			camFollow = prevCamFollow;
-			camFollowPos = camFollow;
 			prevCamFollow = null;
 		}
 		if (prevCamFollowPos != null)
 		{
 			camFollowPos = prevCamFollowPos;
-			camFollow = camFollowPos;
 			prevCamFollowPos = null;
 		}
-		add(camFollow);
+		add(camFollowPos);
 
-		FlxG.camera.follow(camFollow, LOCKON, 0);
+		FlxG.camera.follow(camFollowPos, LOCKON, 1);
 		// FlxG.camera.setScrollBounds(0, FlxG.width, 0, FlxG.height);
 		FlxG.camera.zoom = defaultCamZoom;
 		// Reset any camera scroll left over from menu transitions so the
 		// gameplay camera always starts from the correct position.
-		FlxG.camera.snapToTarget();
+		FlxG.camera.scroll.set(0, 0);
+		FlxG.camera.focusOn(camFollow);
 
 		FlxG.worldBounds.set(0, 0, FlxG.width, FlxG.height);
 
@@ -1775,6 +1771,7 @@ class PlayState extends MusicBeatState
 					});
 					FlxG.sound.play(Paths.sound('Lights_Turn_On'));
 					snapCamFollowToPos(400, -2050);
+					FlxG.camera.focusOn(camFollow);
 					FlxG.camera.zoom = 1.5;
 
 					new FlxTimer().start(0.8, function(tmr:FlxTimer)
@@ -2337,9 +2334,6 @@ class PlayState extends MusicBeatState
 		#if VIDEOS_ALLOWED
 		videoPlaying = false;
 		#end
-		// Video cutscenes may reposition the camera target; snap before gameplay resumes.
-		if (FlxG.camera.target != null)
-			FlxG.camera.snapToTarget();
 		if(endingSong)
 			endSong();
 		else
@@ -2519,7 +2513,7 @@ class PlayState extends MusicBeatState
 			gf.dance();
 		};
 
-		camFollow.setPosition(dad.x + 280, dad.y + 170);
+		camFollow.set(dad.x + 280, dad.y + 170);
 		switch(songName)
 		{
 			case 'ugh':
@@ -2606,7 +2600,7 @@ class PlayState extends MusicBeatState
 				tankman.y -= 14;
 				gfGroup.alpha = 0.00001;
 				boyfriendGroup.alpha = 0.00001;
-				camFollow.setPosition(dad.x + 400, dad.y + 170);
+				camFollow.set(dad.x + 400, dad.y + 170);
 				FlxTween.tween(FlxG.camera, {zoom: 0.9 * 1.2}, 1, {ease: FlxEase.quadInOut});
 				foregroundSprites.forEach(function(spr:BGSprite)
 				{
@@ -2658,7 +2652,7 @@ class PlayState extends MusicBeatState
 				{
 					var camPosX:Float = 630;
 					var camPosY:Float = 425;
-					camFollow.setPosition(camPosX, camPosY);
+					camFollow.set(camPosX, camPosY);
 					camFollowPos.setPosition(camPosX, camPosY);
 					FlxG.camera.zoom = 0.8;
 					cameraSpeed = 1;
@@ -2737,7 +2731,7 @@ class PlayState extends MusicBeatState
 
 				cutsceneHandler.timer(20, function()
 				{
-					camFollow.setPosition(dad.x + 500, dad.y + 170);
+					camFollow.set(dad.x + 500, dad.y + 170);
 				});
 
 				cutsceneHandler.timer(31.2, function()
@@ -2752,7 +2746,7 @@ class PlayState extends MusicBeatState
 						}
 					};
 
-					camFollow.setPosition(boyfriend.x + 280, boyfriend.y + 200);
+					camFollow.set(boyfriend.x + 280, boyfriend.y + 200);
 					cameraSpeed = 12;
 					FlxTween.tween(FlxG.camera, {zoom: 0.9 * 1.2 * 1.2}, 0.25, {ease: FlxEase.elasticOut});
 				});
@@ -3682,9 +3676,28 @@ class PlayState extends MusicBeatState
 		}
 
 		// Sort preloaded notes by time
-		preloadedNotes.sort(function(a, b) return FlxSort.byValues(FlxSort.ASCENDING, a.strumTime, b.strumTime));
+		// 防护: 数组若在生成阶段被异常破坏出现 null 槽位, sort 闭包解引用会直接原生
+		// 崩溃 (AV@0x8, hxcpp 对 null this 无检查, 曾在重开关卡时概率性触发)。
+		// 正常路径只有一次 O(n) 指针扫描; 检出 null 时重建数组剔除毒槽, 闭包内再兜底。
+		//果然hxcpp就是一坨屎
+		var hasNullSlot:Bool = false;
+		for (n in preloadedNotes)
+		{
+			if (n == null)
+			{
+				hasNullSlot = true;
+				break;
+			}
+		}
+		if (hasNullSlot)
+			preloadedNotes = preloadedNotes.filter(function(n) return n != null);
+		preloadedNotes.sort(function(a, b) {
+			if (a == null || b == null)
+				return 0;
+			return FlxSort.byValues(FlxSort.ASCENDING, a.strumTime, b.strumTime);
+		});
 		lastChartNoteTime = 0;
-		if (preloadedNotes.length > 0)
+		if (preloadedNotes.length > 0 && preloadedNotes[preloadedNotes.length - 1] != null)
 			lastChartNoteTime = preloadedNotes[preloadedNotes.length - 1].strumTime;
 		if (turboModeActive)
 			preloadedNotes = TurboDensity.collapseGhostNotes(preloadedNotes, Note.ammo[mania], 1.0);
@@ -4335,12 +4348,6 @@ class PlayState extends MusicBeatState
 		{
 			iconP1.swapOldIcon();
 		}*/
-		// NF-style direct camera follow: frame-rate independent lerp once per frame.
-		// camFollowPos is an alias of camFollow, so no separate mirror update is needed.
-		if (!inCutscene && !paused && !freezeCamera)
-			FlxG.camera.followLerp = 2.4 * cameraSpeed * playbackRate;
-		else
-			FlxG.camera.followLerp = 0;
 		callOnScripts('onUpdate', [elapsed]);
 		#if ONLINE_ALLOWED
 		updateOnline(elapsed);
@@ -4360,6 +4367,8 @@ class PlayState extends MusicBeatState
 			stageBackdrop.update(elapsed);
 
 		if(!inCutscene) {
+			var lerpVal:Float = CoolUtil.boundTo(elapsed * 2.4 * cameraSpeed * playbackRate, 0, 1);
+			camFollowPos.setPosition(FlxMath.lerp(camFollowPos.x, camFollow.x, lerpVal), FlxMath.lerp(camFollowPos.y, camFollow.y, lerpVal));
 			if(!startingSong && !endingSong && !boyfriend.isAnimationNull() && boyfriend.getAnimationName().startsWith('idle')) {
 				boyfriendIdleTime += elapsed;
 				if(boyfriendIdleTime >= 0.15) { // Kind of a mercy thing for making the achievement easier to get as it's apparently frustrating to some playerss
@@ -4849,8 +4858,8 @@ class PlayState extends MusicBeatState
 		_phaseT = haxe.Timer.stamp();
 		flushHitPresentation();
 
-		setOnScripts('cameraX', camFollow.x);
-		setOnScripts('cameraY', camFollow.y);
+		setOnScripts('cameraX', camFollowPos.x);
+		setOnScripts('cameraY', camFollowPos.y);
 		setOnScripts('botPlay', cpuControlled);
 		callOnScripts('onUpdatePost', [elapsed]);
 	}
@@ -5333,7 +5342,7 @@ class PlayState extends MusicBeatState
 
 		if (gf != null && SONG.notes[curSection].gfSection)
 		{
-			camFollow.setPosition(gf.getMidpoint().x, gf.getMidpoint().y);
+			camFollow.set(gf.getMidpoint().x, gf.getMidpoint().y);
 			camFollow.x += gf.cameraPosition[0] + girlfriendCameraOffset[0];
 			camFollow.y += gf.cameraPosition[1] + girlfriendCameraOffset[1];
 			tweenCamIn();
@@ -5358,14 +5367,14 @@ class PlayState extends MusicBeatState
 	{
 		if(isDad)
 		{
-			camFollow.setPosition(dad.getMidpoint().x + 150, dad.getMidpoint().y - 100);
+			camFollow.set(dad.getMidpoint().x + 150, dad.getMidpoint().y - 100);
 			camFollow.x += dad.cameraPosition[0] + opponentCameraOffset[0];
 			camFollow.y += dad.cameraPosition[1] + opponentCameraOffset[1];
 			tweenCamIn();
 		}
 		else
 		{
-			camFollow.setPosition(boyfriend.getMidpoint().x - 100, boyfriend.getMidpoint().y - 100);
+			camFollow.set(boyfriend.getMidpoint().x - 100, boyfriend.getMidpoint().y - 100);
 			camFollow.x -= boyfriend.cameraPosition[0] - boyfriendCameraOffset[0];
 			camFollow.y += boyfriend.cameraPosition[1] + boyfriendCameraOffset[1];
 
@@ -5392,11 +5401,8 @@ class PlayState extends MusicBeatState
 	}
 
 	function snapCamFollowToPos(x:Float, y:Float) {
-		camFollow.setPosition(x, y);
-		if (camFollowPos != null)
-			camFollowPos.setPosition(x, y);
-		if (FlxG.camera.target != null)
-			FlxG.camera.snapToTarget();
+		camFollow.set(x, y);
+		camFollowPos.setPosition(x, y);
 	}
 
 	/**

@@ -248,6 +248,19 @@ class Paths
 		return purged;
 	}
 
+	/**
+	 * User-facing "clear image cache": release every cached graphic no live
+	 * sprite is using. purgeUnusedGraphics() drops unused graphics from the
+	 * main caches (they get parked into the LRU pool), then flushUnused()
+	 * destroys the pool contents. Live graphics (useCount>0) are never touched.
+	 * @return how many graphics were destroyed and how many bytes released.
+	 */
+	public static function clearImageCache():backend.GfxLru.GfxLruFlushResult
+	{
+		purgeUnusedGraphics();
+		return backend.GfxLru.flushUnused('user-clear');
+	}
+
 	// define the locally tracked assets
 	public static var localTrackedAssets:Array<String> = [];
 	static var localTrackedAssetSet:Map<String, Bool> = new Map<String, Bool>();

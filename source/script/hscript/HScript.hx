@@ -862,6 +862,7 @@ class HScript
 				var l = LuaL.newstate();
 				LuaL.openlibs(l);
 				Lua.init_callbacks(l);
+				backend.NativeCrash.installLuaPanic(l);
 				LuaL.dostring(l, code);
 				var result = Lua.tostring(l, -1);
 				Lua.close(l);

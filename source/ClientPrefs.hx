@@ -6,6 +6,7 @@ import flixel.input.keyboard.FlxKey;
 import flixel.graphics.FlxGraphic;
 import Controls;
 import flixel.input.gamepad.FlxGamepadInputID;
+import mohong.TraceManager;
 #if sys
 import sys.io.Process;
 #end
@@ -135,6 +136,8 @@ import sys.io.Process;
 	public var asyncImageLoading:Bool = true;
 	/** Store uploaded graphics in LRU cache upon song exit, with strict cache/atlas synchronization and reference-safe eviction. */
 	public var gfxLruCache:Bool = true;
+	/** 「清除图片缓存」动作按钮的状态占位: button 型选项必须绑定一个字段, 但此动作从不读取该值。 */
+	public var clearImageCache:Bool = false;
 	/** Trim transparent borders and repack large sheets at runtime on the main thread, with XML/dimension validation. */
 	public var gfxRuntimeRepack:Bool = true;
 	public var splashAlpha:Float = 0.6;
@@ -953,6 +956,12 @@ class ClientPrefs {
 
 	
 	public static function copyKey(arrayToCopy:Array<FlxKey>):Array<FlxKey> {
+
+		//你猜我为什么要写这一段？
+		if (arrayToCopy == null) {
+			TraceManager.warn('trace.clientPrefs.copyKeyNull', 'copyKey called with null array (missing keybind?)');
+			return [];
+		}
 		var copiedArray:Array<FlxKey> = arrayToCopy.copy();
 		var i:Int = 0;
 		var len:Int = copiedArray.length;

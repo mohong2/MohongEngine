@@ -190,6 +190,7 @@ class OptionsState extends MusicBeatState
 			'onChangeTraceConsole'         => onChangeTraceConsole,
 			'onChangeTraceConsoleLevel'    => onChangeTraceConsoleLevel,
 			'onChangeTouchSwipe'           => onChangeTouchSwipe,
+			'onClearImageCache'            => onClearImageCache,
 		];
 		OptionLoader.setCallbacks(callbacks);
 	}
@@ -897,6 +898,13 @@ class OptionsState extends MusicBeatState
 						{
 							openOptionPopup(option);
 						}
+						else if (option.type == 'button')
+						{
+							// 触摸/鼠标点击动作行 = 按下 ACCEPT: 触发 onChange 执行动作。
+							FlxG.sound.play(Paths.sound('scrollMenu'));
+							option.setValue((option.getValue() == true) ? false : true);
+							option.change();
+						}
 						break;
 					}
 				}
@@ -1024,6 +1032,9 @@ class OptionsState extends MusicBeatState
 				for (i in 0...setOptionsArray.length)
 				{
 					var leOption = setOptionsArray[i];
+					// button 是动作行, 没有默认值可恢复; RESET 不能触发它的 onChange (会执行动作)。
+					if (leOption.type == 'button')
+						continue;
 					leOption.setValue(leOption.defaultValue);
 					if (leOption.type != 'bool')
 					{
@@ -1051,7 +1062,9 @@ class OptionsState extends MusicBeatState
 		if (option.type == 'percent') val *= 100;
 		else if (option.type == 'string') val = option.localizedValueText(val);
 		var def:Dynamic = option.defaultValue;
-		option.text = text.replace('%v', val).replace('%d', def);
+		// button 行的 child 是 "[Press ENTER]" 标签, 没有 %v 值可显示, 不能覆盖。
+		if (option.type != 'button')
+			option.text = text.replace('%v', val).replace('%d', def);
 		if (option.child != null)
 		{
 			var parentText = setGrpOptions.members[setOptionsArray.indexOf(option)];
@@ -1641,6 +1654,25 @@ class OptionsState extends MusicBeatState
 	function onChangeTouchSwipe()
 	{
 		syncDragToWheel();
+	}
+
+	/** 「清除图片缓存」动作按钮: 释放所有未被引用的缓存图片并弹窗反馈。 */
+	function onClearImageCache()
+	{
+		var result = Paths.clearImageCache();
+		var msg:String;
+		if (result.count <= 0)
+		{
+			msg = Language.get('option.clearImageCache.none', 'No unused cached images to release.');
+		}
+		else
+		{
+			var mbStr:String = Std.string(Math.round(result.bytes / 1048576 * 10) / 10);
+			msg = Language.get('option.clearImageCache.released', 'Released {n} graphics (~{mb} MB).')
+				.replace('{n}', Std.string(result.count))
+				.replace('{mb}', mbStr);
+		}
+		backend.Dialog.show(Language.get('option.clearImageCache.doneTitle', 'Image Cache'), msg, 'Info');
 	}
 
 	function syncDragToWheel()

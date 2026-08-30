@@ -14,6 +14,13 @@ typedef GfxLruLedgerDelta =
 }
 
 
+typedef GfxLruFlushResult =
+{
+	var count:Int;
+	var bytes:Float;
+}
+
+
 typedef GfxLruEntry =
 {
 	var key:String;        
@@ -235,6 +242,29 @@ class GfxLru
 		var all:Array<GfxLruEntry> = [];
 		for (e in entries) all.push(e);
 		for (e in all) evictEntry(e, reason);
+	}
+
+	/**
+	 * Evict only entries no live sprite references (useCount<=0, never pinned).
+	 * flushAll() would also destroy revived graphics that sprites are actively
+	 * using, so user-facing "clear cache" actions must go through this instead.
+	 * @return how many graphics were destroyed and how many bytes released.
+	 */
+	public static function flushUnused(reason:String):GfxLruFlushResult
+	{
+		var result:GfxLruFlushResult = {count: 0, bytes: 0.0};
+		var doomed:Array<GfxLruEntry> = [];
+		for (e in entries)
+			if (!e.pinned && (e.graphic == null || e.graphic.useCount <= 0))
+				doomed.push(e);
+		for (e in doomed)
+		{
+			var bytes:Float = e.bytes;
+			evictEntry(e, reason);
+			result.count++;
+			result.bytes += bytes;
+		}
+		return result;
 	}
 
 	static function checkEnabledFlush():Void

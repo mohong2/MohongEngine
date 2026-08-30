@@ -331,18 +331,18 @@
 
 ---
 
-### 2026年8月30日（肝了三连发：fix bugs → fix too → android）
+### 2026年8月30日（0.2.1hotfix）
 
 #### 大杂烩（fix bugs）
 
 - 新增 **Turbo 模式**（默认关）：粪谱终极方案——开启后强制 botplay，高密度段落走预计算聚合 + ghost note 合并 + 数据级批量结算，不再真的物化几万个 sprite。顺带做了字符串驻留和 Note 字段重排（按类型连排省对齐空洞），百万级谱面能省几百 MB 内存。
 - 图形缓存重做：AsyncGfxLoader / GfxLru / GfxPolicy 这一轮把解码和打包挪回主线程、按帧小批量处理，加载界面不再一顿一顿；缓存 key 和别名注册也理顺了，淘汰不再误杀还在用的图。
+- 相机改动回退：camGame 用回 FlxCamera、camFollow 用回 FlxPoint，PsychCamera 的指数平滑和 freezeCamera 都撤了，回到 0.6.3 原版的相机行为。
 - 联机侧：server.zip（15KB → 33MB）和 online.zip 更新；PlayState 联机逻辑加了一堆——spectate（观战）、角色 skin 替换 + 头顶 nameplate、start gate、房主暂停权限文案。
 - ⚠ 先声明一下：目前的联机我压根就没想编译进游戏（ONLINE_ALLOWED 还是注释掉的），因为它真的太一坨了，你们别抱期待，也别问什么时候上。代码先放着占个坑而已。
 - PlayState 按键检测改为预分配缓冲 + 防重入保护，安卓上不再每帧新建一堆数组。
 - 修了 PsychUIDropDownMenu 在滚轮 / 重新挂载下的定位问题，顺带修了编辑器、暂停菜单、LoadingState 的一堆小问题。
 - 新设置项：Turbo Mode、Note RGB Shader。
-- 崩溃报告顺带补了模块基址和偏移（native_crash.inc）。
 
 #### GitHub 更新检查重做（fix too）
 
@@ -355,6 +355,12 @@
 - 安卓 All files access、悬浮窗（overlay）权限弹窗不再硬编码中英文，改为等语言加载完再用引擎自己的多语言对话框弹。
 - Dialog 加 cancelable 支持，设置备份对话框改用新弹窗（"备份 / 稍后"按钮走本地化文案）。
 - 新增 Android.json（简 / 繁 / 英）语言文件，SeiunOverlay.java 也精简了一圈。
+
+#### 晚上加修（又修了几个 bug）
+
+- 新增「清除图片缓存」按钮（图形设置里）：按 Enter 释放所有未被引用的缓存图片（包括 LRU 停靠池），弹窗报告释放了几张、多少 MB。
+- 修复 copyKey 传 null 崩溃：键位缺失时返回空数组并记一条警告，不再直接炸。
+- LuaJIT panic 钩子：Lua 脚本未受保护错误（无 pcall 边界）不再无声杀进程，会先写 crash 日志（Lua 错误信息 + 调用栈）再退出；Windows 上 CRT 的 abort / 纯虚调用也走 native crash 记录，SEH 路径补了 dbghelp 栈回溯（exe 旁放 PDB 就能解析出函数名和行号）。
 
 （今天的活就这些……日志老规矩，还是 AI 代笔。）
 
@@ -695,18 +701,18 @@ Bundled regression harness (temp/touch-fix-test/TouchFixTest.hx): replicates the
 
 ---
 
-### August 30, 2026 (three commits: fix bugs → fix too → android)
+### August 30, 2026 (0.2.1hotfix)
 
 #### The Big One (fix bugs)
 
 - New **Turbo Mode** (off by default): the ultimate extreme-chart switch — forces botplay and turns high-density sections into precomputed aggregation + ghost-note collapsing + data-level bulk settlement instead of materializing tens of thousands of sprites. Also added string interning and Note field reordering (grouped by type to kill alignment holes), saving hundreds of MB on million-note charts.
 - Graphics cache overhaul: AsyncGfxLoader / GfxLru / GfxPolicy now decode/repack on the main thread in small per-frame batches (no more stuttery loading screen), with stable canonical keys + alias registration so eviction can't kill textures still in use.
+- Camera changes reverted: camGame back to FlxCamera, camFollow back to FlxPoint — PsychCamera's exponential smoothing and freezeCamera are gone, back to stock 0.6.3 camera behavior.
 - Online: server.zip (15KB → 33MB) and online.zip refreshed; PlayState gained spectate mode, per-player skin replacement + nameplates, start gate, and host-only pause messaging.
 - ⚠ Heads up: the current online code is NOT compiled into the game at all (ONLINE_ALLOWED is still commented out) — it's honestly a mess, so don't get your hopes up or ask when it ships. The code is just sitting there for now.
 - PlayState key-check now uses pre-allocated buffers with reentrancy guards — no more per-frame array allocations on Android.
 - Fixed PsychUIDropDownMenu positioning under wheel / re-parenting, plus a pile of small editor, pause-menu and LoadingState fixes.
 - New settings: Turbo Mode, Note RGB Shader.
-- Crash reports now include module base / fault offset (native_crash.inc).
 
 #### GitHub Update Check Rework (fix too)
 
@@ -719,6 +725,12 @@ Bundled regression harness (temp/touch-fix-test/TouchFixTest.hx): replicates the
 - "All files access" and "overlay" permission prompts no longer hardcode Chinese/English — they wait for language load and use the engine's own localized dialogs.
 - Dialog gained cancelable support; the settings backup prompt now uses the new dialog API ("Backup Now / Later" with localized strings).
 - New Android.json language files (SC / TC / EN); SeiunOverlay.java slimmed down.
+
+#### Evening Fixes (a few more bugs)
+
+- New "Clear Image Cache" button (in Graphics settings): press ENTER to release every uncached image (incl. the LRU pool), with a popup reporting how many graphics / MB were freed.
+- Fixed copyKey crash on null: missing keybinds now return an empty array with a warning log instead of crashing.
+- LuaJIT panic hook: unprotected Lua errors (no pcall boundary) no longer kill the process silently — a crash log is written first (Lua error + backtrace). On Windows, CRT abort / pure-virtual calls also go through the native crash recorder, and the SEH path now uses dbghelp stack walking (drop a PDB next to the exe to resolve function names & lines).
 
 (That's today's work... changelog written by AI as usual.)
 

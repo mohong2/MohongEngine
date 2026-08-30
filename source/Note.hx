@@ -25,12 +25,8 @@ typedef EventNote = {
     value2:String
 }
 
-// 字段按类型分组排布 (Float → Null<Float> → String → Int → Bool):
-// hxcpp 按声明顺序生成 C++ 结构体并自然对齐, 混排时 Bool/Int 与 String/Float 之间
-// 会产生对齐空洞; 同宽度字段连排后单条可省 ~40-60 字节, 百万级 Note 谱面下
-// 节省数百 MB 常驻内存。纯布局调整: @:structInit 字面量按字段名初始化, 不受顺序影响。
+
 @:structInit class PreloadedChartNote {
-    // ── Float (12 × 8B 连排) ──
     public var strumTime:Float = 0;
     public var sustainLength:Float = 0;
     public var parentST:Float = 0;
@@ -664,16 +660,12 @@ class Note extends FlxSprite {
                 isSustainEnd = false;
                 prevNote.animation.play(colArray[prevNote.baseTex()] + 'hold');
                 prevNote.scale.y *= Conductor.stepCrochet / 100 * 1.05;
-                // 皮肤自适应: 非默认帧高 (默认 hold piece 44px, 如 chip 114x77) 时
-                // 按 (44/frameHeight) 归一化, 让每段高度与 step 间距的衔接比例不变
                 if(!PlayState.isPixelStage) prevNote.scale.y *= (44.0 / prevNote.frameHeight);
                 if(PlayState.instance != null) prevNote.scale.y *= PlayState.instance.songSpeed;
                 if(PlayState.isPixelStage) {
                     prevNote.scale.y *= 1.19;
                     prevNote.scale.y *= (6 / prevNote.frameHeight);
                 } else {
-                    // Android 亚像素缝隙防护: 非像素长条每段额外加 ~2px 长度, 使相邻段(含 TAP↔长条起始)
-                    // 必然重叠, 消除 scale.y 为分数 + 非AA 时 GLES 上出现的细分缝。帧无关, 无逐帧开销。
                     prevNote.scale.y += (2.0 / prevNote.frameHeight);
                 }
                 prevNote.updateHitbox();
@@ -687,14 +679,6 @@ class Note extends FlxSprite {
         }
         x += offsetX;
     }
-
-    // ── Note pool (mohong.ObjectPool) ──
-    // 当前 PlayState 已改为懒物化：spawn 时直接 new Note，destroy 时清空池。
-    // 保留 fromPool/releaseToPool 作为底层复用能力（mod/编辑器/未来优化可选用）。
-    // borrow: Note.fromPool (same as new Note)
-    // return: note.releaseToPool
-    // Reuse only happens between songs (scripts already stopped), so
-    // in-song object identity is unchanged for mods.
 
     /** Note pool singleton; 16384 covers basically any chart. */
     public static var pool:ObjectPool<Note> = null;

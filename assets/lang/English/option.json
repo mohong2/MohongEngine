@@ -245,6 +245,11 @@
     "trace.consoleEnabled": "Trace console output enabled.",
     "trace.consoleDisabled": "Trace console output disabled.",
     "option.traceConsole.pressEnter": "[Press ENTER]",
+    "option.clearImageCache": "Clear Image Cache",
+    "option.clearImageCache.desc": "Press ENTER to release all unused cached images from memory, including the LRU pool.",
+    "option.clearImageCache.doneTitle": "Image Cache",
+    "option.clearImageCache.released": "Released {n} graphics (~{mb} MB).",
+    "option.clearImageCache.none": "No unused cached images to release.",
 
     "option.touchSwipe": "Touch/Swipe Gestures",
     "option.touchSwipe.desc": "If enabled, you can swipe/scroll by dragging with the mouse or touching the screen.\nDisable if you prefer standard click-only navigation.",

@@ -2591,7 +2591,7 @@ class FunkinLua {
 		Lua_helper.add_callback(lua, "setCameraScroll", function(x:Float, y:Float) FlxG.camera.scroll.set(x - FlxG.width / 2, y - FlxG.height / 2));
 		Lua_helper.add_callback(lua, "setCameraFollowPoint", function(x:Float, y:Float) {
 			if (PlayState.instance != null && PlayState.instance.camFollow != null)
-				PlayState.instance.camFollow.setPosition(x, y);
+				PlayState.instance.camFollow.set(x, y);
 		});
 		Lua_helper.add_callback(lua, "addCameraScroll", function(?x:Float = 0, ?y:Float = 0) FlxG.camera.scroll.add(x, y));
 		Lua_helper.add_callback(lua, "addCameraFollowPoint", function(?x:Float = 0, ?y:Float = 0) {

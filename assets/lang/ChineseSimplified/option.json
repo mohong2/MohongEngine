@@ -244,6 +244,11 @@
     "trace.consoleEnabled": "Trace 控制台输出已启用。",
     "trace.consoleDisabled": "Trace 控制台输出已禁用。",
     "option.traceConsole.pressEnter": "[按 Enter]",
+    "option.clearImageCache": "清除图片缓存",
+    "option.clearImageCache.desc": "按 Enter 释放内存中所有未使用的缓存图片（包括 LRU 停靠池）。",
+    "option.clearImageCache.doneTitle": "图片缓存",
+    "option.clearImageCache.released": "已释放 {n} 张图片（约 {mb} MB）。",
+    "option.clearImageCache.none": "没有可释放的缓存图片。",
 
     "option.touchSwipe": "触控/滑动手势",
     "option.touchSwipe.desc": "启用后，您可以通过拖拽鼠标或触摸屏幕来滑动/滚动。\n如果您更喜欢纯点击操作，可以关闭此选项。",

@@ -197,6 +197,11 @@
 	
 	<!--Make's-the-Game-use-less-ram-->
 	<haxedef name="HXCPP_GC_BIG_BLOCKS" />
+
+	<!--Emit full debug info (PDB next to the exe) even in release builds, so the
+	native crash handler in backend/native_crash.inc can symbolize stack frames.
+	Removable if binary size matters; cost is build time and a large .pdb file.
+	<haxedef name="HXCPP_DEBUG_LINK" />-->
 	<haxedef name="HXCPP_CPP11" if="cpp" />
 	<haxedef name="HXCPP_GC_GENERATIONAL" if="cpp" />
 	<haxedef name="HXCPP_ALIGN_ALLOC" if="cpp" /> 
