@@ -1,0 +1,19 @@
+{
+    "Dialog.ok": "确定",
+    "Dialog.yes": "是",
+    "Dialog.no": "否",
+    "SUtil.save.success.title": "成功！",
+    "SUtil.save.success.message": "{file} 文件已保存。",
+    "SUtil.allFiles.title": "需要“所有文件访问”权限",
+    "SUtil.allFiles.message": "为了让所有安卓用户都能把模组/存档放进公开目录（无需 root，文件管理器可直接访问），请授予“所有文件访问”权限。\n\n如果拒绝，游戏会改用应用专属目录，模组安装会变得麻烦。",
+    "SUtil.allFiles.open": "打开设置",
+    "SUtil.allFiles.notNow": "暂时不要",
+    "SUtil.overlay.title": "悬浮键盘",
+    "SUtil.overlay.message": "SeiunEngine 想要在其他应用上方显示悬浮键盘按钮。\n\n请允许“显示在其他应用上层”，然后在下一个页面中授权。",
+    "SUtil.overlay.open": "打开设置",
+    "SUtil.overlay.notNow": "暂时不要",
+    "SUtil.error.createFolderTitle": "错误！",
+    "SUtil.error.createFolderMessage": "请手动创建文件夹：\n{path}\n按确定关闭游戏",
+    "SUtil.error.permissionTitle": "错误",
+    "SUtil.error.permissionMessage": "发生权限错误，请手动授予存储权限。"
+}

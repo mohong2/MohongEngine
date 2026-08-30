@@ -1,0 +1,19 @@
+{
+    "Dialog.ok": "確定",
+    "Dialog.yes": "是",
+    "Dialog.no": "否",
+    "SUtil.save.success.title": "成功！",
+    "SUtil.save.success.message": "{file} 檔案已儲存。",
+    "SUtil.allFiles.title": "需要「所有檔案存取」權限",
+    "SUtil.allFiles.message": "為了讓所有 Android 使用者都能把模組/存檔放進公開目錄（無需 root，檔案管理器可直接存取），請授予「所有檔案存取」權限。\n\n如果拒絕，遊戲會改用應用程式專屬目錄，模組安裝會變得麻煩。",
+    "SUtil.allFiles.open": "開啟設定",
+    "SUtil.allFiles.notNow": "暫時不要",
+    "SUtil.overlay.title": "懸浮鍵盤",
+    "SUtil.overlay.message": "SeiunEngine 想要在其他應用程式上方顯示懸浮鍵盤按鈕。\n\n請允許「顯示在其他應用程式上層」，然後在下一個頁面中授權。",
+    "SUtil.overlay.open": "開啟設定",
+    "SUtil.overlay.notNow": "暫時不要",
+    "SUtil.error.createFolderTitle": "錯誤！",
+    "SUtil.error.createFolderMessage": "請手動建立資料夾：\n{path}\n按確定關閉遊戲",
+    "SUtil.error.permissionTitle": "錯誤",
+    "SUtil.error.permissionMessage": "發生權限錯誤，請手動授予儲存權限。"
+}

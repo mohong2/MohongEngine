@@ -19,10 +19,6 @@ import flixel.tweens.FlxEase;
 import flixel.util.FlxSpriteUtil;
 import flash.net.FileFilter;
 
-#if android
-import android.Tools as AndroidTools;
-#end
-
 class BackupSettingsSubState extends MusicBeatSubstate
 {
 	// ── UI ──
@@ -292,15 +288,9 @@ class BackupSettingsSubState extends MusicBeatSubstate
 			"Game data has been successfully backed up!\n\nFile saved to:\n{path}")
 			.replace("{path}", savePath);
 
-		#if android
-		AndroidTools.showAlertDialog(
-			Language.get("DataBackup.success.title", "Success"),
-			msg, {name: "OK", func: null}, null);
-		#else
 		backend.Dialog.show(
 			Language.get("DataBackup.success.title", "Success"),
 			msg, 'Info');
-		#end
 
 		setStatus(Language.get("DataBackup.success.title", "✅ Backup saved!"), 0xFF00CC00);
 		isProcessing = false;
@@ -394,21 +384,12 @@ class BackupSettingsSubState extends MusicBeatSubstate
 			"This will overwrite ALL current game data.\n\nBackup date: {date}\n\nThis cannot be undone! Continue?")
 			.replace("{date}", backupDate);
 
-		#if android
-		AndroidTools.showAlertDialog(confirmTitle, confirmMsg,
-			{name: Language.get("DataBackup.yes", "Yes"), func: function() { doRestore(data); }},
-			{name: Language.get("DataBackup.no", "No"), func: function() {
-				setStatus(Language.get("DataBackup.cancelled", "Cancelled."), TEXT_SECONDARY);
-				isProcessing = false;
-			}});
-		#else
 		backend.Dialog.showYesNo(confirmTitle, confirmMsg,
 			function() { doRestore(data); },
 			function() {
 				setStatus(Language.get("DataBackup.cancelled", "Cancelled."), TEXT_SECONDARY);
 				isProcessing = false;
 			});
-		#end
 	}
 
 	// ═══════════════════════════════════════════════════════════════
@@ -499,11 +480,13 @@ class BackupSettingsSubState extends MusicBeatSubstate
 			+ "If you uninstall the game, ALL data will be lost!\n"
 			+ "Please create a backup now to save your progress.");
 
-		AndroidTools.showAlertDialog(t, m,
-			{name: Language.get("DataBackup.backupNow", "Backup Now"), func: function() {
-				new FlxTimer().start(0.3, function(_) doExport());
-			}},
-			{name: Language.get("DataBackup.later", "Later"), func: null});
+		backend.Dialog.showCustom(t, m,
+			[
+				{name: Language.get("DataBackup.backupNow", "Backup Now"), callback: function() {
+					new FlxTimer().start(0.3, function(_) doExport());
+				}},
+				{name: Language.get("DataBackup.later", "Later"), callback: function() {}}
+			], false);
 	}
 	#end
 

@@ -117,9 +117,10 @@ class Main extends Sprite
 	{
 		#if android
 		SUtil.doPermissionsShit();
-		// Floating keyboard button: show automatically once the storage
-		// permission flow is done (prompts for SYSTEM_ALERT_WINDOW once if
-		// the user hasn't granted it yet).
+		// Floating keyboard button: show automatically if overlay permission is
+		// already granted. The user-facing permission explanation dialog is
+		// handled later from TitleState (after Language.load) by
+		// SUtil.maybeRequestOverlayPermission() so it is localized and modern.
 		backend.SeiunOverlay.maybeAutoShow();
 		#end
 		#if sys

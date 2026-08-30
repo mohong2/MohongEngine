@@ -125,6 +125,29 @@ public class SeiunOverlay extends Extension
 		}
 	}
 
+	/** Whether the localized permission explanation has already been shown. */
+	public static boolean hasPromptedOverlayPermission()
+	{
+		if (mainContext == null)
+			return false;
+		return getPrefs().getBoolean("prompted_v2", false);
+	}
+
+	/** Mark the localized permission explanation as shown (or clear it). */
+	public static void setOverlayPermissionPrompted(boolean value)
+	{
+		if (mainContext == null)
+			return;
+		try
+		{
+			getPrefs().edit().putBoolean("prompted_v2", value).apply();
+		}
+		catch (Exception e)
+		{
+			Log.e(LOG_TAG, "setOverlayPermissionPrompted: " + e.toString());
+		}
+	}
+
 	public static void show()
 	{
 		showAt(-1, -1);
@@ -462,33 +485,8 @@ public class SeiunOverlay extends Extension
 			if (!visible)
 				show();
 		}
-		else if (!getPrefs().getBoolean("prompted", false))
-		{
-			getPrefs().edit().putBoolean("prompted", true).apply();
-			mainActivity.runOnUiThread(new Runnable()
-			{
-				@Override
-				public void run()
-				{
-					try
-					{
-						mainActivity.getWindow().getDecorView().postDelayed(new Runnable()
-						{
-							@Override
-							public void run()
-							{
-								if (!isOverlayPermissionGranted())
-									promptOverlayPermission();
-							}
-						}, 500);
-					}
-					catch (Exception e)
-					{
-						Log.e(LOG_TAG, "onResume prompt: " + e.toString());
-					}
-				}
-			});
-		}
+		// The permission explanation is now handled from Haxe (SUtil.maybeRequestOverlayPermission)
+		// so it uses the engine's localization and modern Material dialog.
 	}
 
 	@Override
@@ -640,43 +638,6 @@ public class SeiunOverlay extends Extension
 			canvas.drawRoundRect(key, 0.6f * u, 0.6f * u, p);
 		}
 		return bmp;
-	}
-
-	/** System dialog asking the user to grant "Display over other apps". */
-	private static void promptOverlayPermission()
-	{
-		if (mainActivity == null)
-			return;
-		try
-		{
-			android.app.AlertDialog.Builder builder = new android.app.AlertDialog.Builder(mainActivity);
-			builder.setTitle("Floating keyboard");
-			builder.setMessage("SeiunEngine wants to show a floating keyboard button over other apps.\n\nPlease allow \"Display over other apps\" in the next screen.");
-			builder.setCancelable(false);
-			builder.setPositiveButton("Open Settings", new android.content.DialogInterface.OnClickListener()
-			{
-				@Override
-				public void onClick(android.content.DialogInterface dialog, int which)
-				{
-					dialog.dismiss();
-					requestOverlayPermission();
-				}
-			});
-			builder.setNegativeButton("Not Now", new android.content.DialogInterface.OnClickListener()
-			{
-				@Override
-				public void onClick(android.content.DialogInterface dialog, int which)
-				{
-					dialog.dismiss();
-				}
-			});
-			builder.show();
-		}
-		catch (Exception e)
-		{
-			Log.e(LOG_TAG, "promptOverlayPermission: " + e.toString());
-			requestOverlayPermission();
-		}
 	}
 
 	private static void removeKeyboardProbe()

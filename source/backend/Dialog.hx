@@ -2,6 +2,7 @@ package backend;
 
 import haxe.CallStack;
 import haxe.Exception;
+import Language;
 
 #if (cpp && windows)
 import mohong.Windows;
@@ -56,7 +57,7 @@ class Dialog
 		}
 		Windows.showDialog(title, message, dialogType);
 		#elseif android
-		AndroidTools.showNativeAlertDialog(title, message, {name: "OK", func: function() {}}, null, null, false);
+		AndroidTools.showNativeAlertDialog(title, message, {name: Language.get('Dialog.ok', 'OK'), func: function() {}}, null, null, false);
 		#elseif linux
 		showLinux(title, message, type);
 		#elseif mac
@@ -64,7 +65,7 @@ class Dialog
 		#elseif js
 		lime.app.Application.current.window.alert(message, title);
 		#else
-		showInGame(title, message, ['OK'], [null]);
+		showInGame(title, message, [Language.get('Dialog.ok', 'OK')], [null]);
 		#end
 	}
 
@@ -78,8 +79,8 @@ class Dialog
 		showYesNoWindows(title, message, onYes, onNo);
 		#elseif android
 		AndroidTools.showNativeAlertDialog(title, message,
-			{name: "Yes", func: onYes},
-			{name: "No", func: onNo}, null, false);
+			{name: Language.get('Dialog.yes', 'Yes'), func: onYes},
+			{name: Language.get('Dialog.no', 'No'), func: onNo}, null, false);
 		#elseif linux
 		showYesNoLinux(title, message, onYes, onNo);
 		#elseif mac
@@ -87,7 +88,7 @@ class Dialog
 		#elseif js
 		if (js.Browser.window.confirm('$title\n\n$message')) onYes() else onNo();
 		#else
-		showInGame(title, message, ['Yes', 'No'], [onYes, onNo]);
+		showInGame(title, message, [Language.get('Dialog.yes', 'Yes'), Language.get('Dialog.no', 'No')], [onYes, onNo]);
 		#end
 	}
 
@@ -95,7 +96,7 @@ class Dialog
 	 * Show a dialog with custom buttons.
 	 * 显示带自定义按钮的弹窗。
 	 */
-	public static function showCustom(title:String, message:String, buttons:Array<{name:String, callback:Void->Void}>):Void
+	public static function showCustom(title:String, message:String, buttons:Array<{name:String, callback:Void->Void}>, ?cancelable:Bool = true):Void
 	{
 		#if android
 		var pos:{name:String, func:Void->Void} = null;
@@ -108,7 +109,7 @@ class Dialog
 			else if (neu == null) neu = {name: b.name, func: b.callback};
 			else break;
 		}
-		AndroidTools.showNativeAlertDialog(title, message, pos, neg, neu, true);
+		AndroidTools.showNativeAlertDialog(title, message, pos, neg, neu, cancelable);
 		#elseif (cpp && windows)
 		showCustomWindows(title, message, buttons);
 		#elseif linux
@@ -138,14 +139,16 @@ class Dialog
 		else if (commandExists('xmessage'))
 			runProcess(['xmessage', '-center', title + '\n\n' + message]);
 		else
-			showInGame(title, message, ['OK'], [null]);
+			showInGame(title, message, [Language.get('Dialog.ok', 'OK')], [null]);
 	}
 
 	static function showYesNoLinux(title:String, message:String, onYes:Void->Void, onNo:Void->Void):Void
 	{
+		var yesLabel = Language.get('Dialog.yes', 'Yes');
+		var noLabel = Language.get('Dialog.no', 'No');
 		if (commandExists('zenity'))
 		{
-			var p = new Process('zenity', ['--question', '--title=' + title, '--text=' + message, '--ok-label=Yes', '--cancel-label=No']);
+			var p = new Process('zenity', ['--question', '--title=' + title, '--text=' + message, '--ok-label=' + yesLabel, '--cancel-label=' + noLabel]);
 			var yes = p.exitCode() == 0;
 			p.close();
 			if (yes) onYes() else onNo();
@@ -159,19 +162,19 @@ class Dialog
 		}
 		else if (commandExists('xmessage'))
 		{
-			var p = new Process('xmessage', ['-center', '-buttons', 'Yes:0,No:1', title + '\n\n' + message]);
+			var p = new Process('xmessage', ['-center', '-buttons', yesLabel + ':0,' + noLabel + ':1', title + '\n\n' + message]);
 			var yes = p.exitCode() == 0;
 			p.close();
 			if (yes) onYes() else onNo();
 		}
 		else
-			showInGame(title, message, ['Yes', 'No'], [onYes, onNo]);
+			showInGame(title, message, [yesLabel, noLabel], [onYes, onNo]);
 	}
 
 	static function showCustomLinux(title:String, message:String, buttons:Array<{name:String, callback:Void->Void}>):Void
 	{
 		var labels = [for (b in buttons) b.name];
-		if (labels.length == 0) labels = ['OK'];
+		if (labels.length == 0) labels = [Language.get('Dialog.ok', 'OK')];
 
 		if (labels.length <= 2 && commandExists('zenity'))
 		{
@@ -213,15 +216,19 @@ class Dialog
 	static function showMac(title:String, message:String, type:String):Void
 	{
 		var icon = switch(type) { case 'Warning': 'caution'; case 'Error': 'stop'; default: 'note'; };
+		var okLabel = shellQuote(Language.get('Dialog.ok', 'OK'));
 		var script = 'display dialog ' + shellQuote(message) + ' with title ' + shellQuote(title)
-			+ ' buttons {"OK"} default button "OK" with icon ' + icon;
+			+ ' buttons {' + okLabel + '} default button ' + okLabel + ' with icon ' + icon;
 		runProcess(['osascript', '-e', script]);
 	}
 
 	static function showYesNoMac(title:String, message:String, onYes:Void->Void, onNo:Void->Void):Void
 	{
+		var yesLabel = shellQuote(Language.get('Dialog.yes', 'Yes'));
+		var noLabel = shellQuote(Language.get('Dialog.no', 'No'));
 		var script = 'display dialog ' + shellQuote(message) + ' with title ' + shellQuote(title)
-			+ ' buttons {"No", "Yes"} default button "Yes" cancel button "No" with icon caution';
+			+ ' buttons {' + noLabel + ', ' + yesLabel + '} default button ' + yesLabel
+			+ ' cancel button ' + noLabel + ' with icon caution';
 		var p = new Process('osascript', ['-e', script]);
 		var yes = p.exitCode() == 0;
 		p.close();
@@ -231,7 +238,7 @@ class Dialog
 	static function showCustomMac(title:String, message:String, buttons:Array<{name:String, callback:Void->Void}>):Void
 	{
 		var labels = [for (b in buttons) b.name];
-		if (labels.length == 0) labels = ['OK'];
+		if (labels.length == 0) labels = [Language.get('Dialog.ok', 'OK')];
 		var script = 'display dialog ' + shellQuote(message) + ' with title ' + shellQuote(title)
 			+ ' buttons {' + labels.map(shellQuote).join(', ') + '} default button ' + shellQuote(labels[0]);
 		runProcess(['osascript', '-e', script]);

@@ -1,0 +1,19 @@
+{
+    "Dialog.ok": "OK",
+    "Dialog.yes": "Yes",
+    "Dialog.no": "No",
+    "SUtil.save.success.title": "Success!",
+    "SUtil.save.success.message": "{file} file has been saved.",
+    "SUtil.allFiles.title": "All files access required",
+    "SUtil.allFiles.message": "To let every Android user put mods/saves in the public folder (no root, file manager can access directly), please grant \"All files access\".\n\nIf you decline, the game will use the app-specific directory instead, and mod installation will be more troublesome.",
+    "SUtil.allFiles.open": "Open Settings",
+    "SUtil.allFiles.notNow": "Not Now",
+    "SUtil.overlay.title": "Floating keyboard",
+    "SUtil.overlay.message": "SeiunEngine wants to show a floating keyboard button over other apps.\n\nPlease allow \"Display over other apps\" in the next screen.",
+    "SUtil.overlay.open": "Open Settings",
+    "SUtil.overlay.notNow": "Not Now",
+    "SUtil.error.createFolderTitle": "Error!",
+    "SUtil.error.createFolderMessage": "Please create folder to\n{path}\nPress OK to close the game",
+    "SUtil.error.permissionTitle": "Error",
+    "SUtil.error.permissionMessage": "Permission error occurred. Please grant storage permissions manually."
+}

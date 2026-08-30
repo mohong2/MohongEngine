@@ -25,6 +25,32 @@ class SUtil
 	#if android
 	static var cachedStorageType:String = null;
 	static var cachedStoragePath:String = '';
+	static var allFilesDialogShown:Bool = false;
+	static var overlayDialogShown:Bool = false;
+	static var languageLoadTried:Bool = false;
+
+	/** Try to load the user's saved language before early Android popups. */
+	static function ensureAndroidLanguageLoaded():Void
+	{
+		if (languageLoadTried) return;
+		languageLoadTried = true;
+
+		try
+		{
+			flixel.FlxG.save.bind('funkin', 'ninjamuffin99');
+			var savedLang:String = 'English';
+			if (flixel.FlxG.save.data != null && Reflect.hasField(flixel.FlxG.save.data, 'language'))
+			{
+				var langVal:Dynamic = Reflect.field(flixel.FlxG.save.data, 'language');
+				if (langVal != null)
+					savedLang = Std.string(langVal);
+			}
+			if (savedLang == null || savedLang.length == 0)
+				savedLang = 'English';
+			Language.load(savedLang);
+		}
+		catch (e:Dynamic) {}
+	}
 
 	/**
 	 * Version-aware default storage type:
@@ -173,7 +199,9 @@ class SUtil
 				FileSystem.createDirectory('saves');
 
 			File.saveContent('saves/' + fileName + fileExtension, fileData);
-			showPopUp(fileName + " file has been saved.", "Success!");
+			showPopUp(
+				Language.get('SUtil.save.success.message', '{file} file has been saved.').replace('{file}', fileName),
+				Language.get('SUtil.save.success.title', 'Success!'));
 		}
 		catch (e:haxe.Exception)
 			CoolUtil.traceMsg('trace.fileSaveError', 'File couldn\'t be saved. ({})', [e.message]);
@@ -182,6 +210,7 @@ class SUtil
 	#if android
 	public static function doPermissionsShit():Void
 	{
+		ensureAndroidLanguageLoaded();
 		try {
 			var sdkInt = android.os.Build.VERSION.SDK_INT;
 
@@ -199,34 +228,9 @@ class SUtil
 			}
 			// Android 11+ (API 30+): MANAGE_EXTERNAL_STORAGE (All files access)
 			// is a special permission - the normal request dialog cannot grant
-			// it, so explain first, then open the system settings page. This
-			// also runs on API 33+ so every user can keep the public root
-			// (/storage/emulated/0/.SeiunEngine) without root. If the user
-			// declines, storage falls back to the app-specific directory
-			// automatically (game still works, mods just need another path).
-			else if (sdkInt >= android.os.Build.VERSION_CODES.R)
-			{
-				if (!AndroidEnvironment.isExternalStorageManager())
-				{
-					try
-					{
-						backend.Dialog.showYesNo(
-							'需要"所有文件访问"权限',
-							'为了让所有安卓用户都能把模组/存档放进公开目录'
-							+ '（无需 root，文件管理器可直接访问），'
-							+ '请授予"所有文件访问"权限。\n\n'
-							+ '如果拒绝，游戏会改用应用专属目录，'
-							+ '模组安装会变得麻烦。',
-							function() AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION'),
-							function() {}
-						);
-					}
-					catch (e:Dynamic)
-					{
-						AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION');
-					}
-				}
-			}
+			// it, so it is prompted later (after Language.load) by
+			// maybeRequestAllFilesAccess(), which uses the engine's localized
+			// dialogs instead of hardcoded Chinese/English strings.
 
 			// Android 13+ notification permission
 			if (sdkInt >= android.os.Build.VERSION_CODES.TIRAMISU && !granted.contains('android.permission.POST_NOTIFICATIONS'))
@@ -242,14 +246,92 @@ class SUtil
 					if (!FileSystem.exists(fallbackPath))
 						FileSystem.createDirectory(fallbackPath);
 				} catch (e2:Dynamic) {
-					showPopUp('Please create folder to\n' + SUtil.getStorageDirectory(true) + '\nPress OK to close the game', 'Error!');
+					var folderMsg:String = Language.get('SUtil.error.createFolderMessage',
+						'Please create folder to\n{path}\nPress OK to close the game')
+						.replace('{path}', SUtil.getStorageDirectory(true));
+					showPopUp(folderMsg, Language.get('SUtil.error.createFolderTitle', 'Error!'));
 					LimeSystem.exit(1);
 				}
 			}
 		} catch (e:Dynamic) {
-			// 捕获所有异常，避免崩溃
 			CoolUtil.traceMsg('trace.permissionsError', 'Permissions error: {}', [Std.string(e)]);
-			showPopUp('Permission error occurred. Please grant storage permissions manually.', 'Error');
+			showPopUp(
+				Language.get('SUtil.error.permissionMessage', 'Permission error occurred. Please grant storage permissions manually.'),
+				Language.get('SUtil.error.permissionTitle', 'Error'));
+		}
+	}
+
+	/**
+	 * Android 11+ "All files access" prompt.
+	 * Called after Language.load so the dialog is properly localized, and uses
+	 * backend.Dialog (Material-styled native dialog) instead of hardcoded text.
+	 */
+	public static function maybeRequestAllFilesAccess():Void
+	{
+		try
+		{
+			if (allFilesDialogShown) return;
+			if (android.os.Build.VERSION.SDK_INT < android.os.Build.VERSION_CODES.R) return;
+			if (AndroidEnvironment.isExternalStorageManager()) return;
+
+			allFilesDialogShown = true;
+			backend.Dialog.showCustom(
+				Language.get('SUtil.allFiles.title', 'All files access required'),
+				Language.get('SUtil.allFiles.message',
+					'To let every Android user put mods/saves in the public folder '
+					+ '(no root, file manager can access directly), please grant '
+					+ '"All files access".\n\nIf you decline, the game will use the '
+					+ 'app-specific directory instead, and mod installation will be '
+					+ 'more troublesome.'),
+				[
+					{name: Language.get('SUtil.allFiles.open', 'Open Settings'), callback: function() AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION')},
+					{name: Language.get('SUtil.allFiles.notNow', 'Not Now'), callback: function() {}}
+				],
+				false);
+		}
+		catch (e:Dynamic)
+		{
+			try { AndroidSettings.requestSetting('MANAGE_APP_ALL_FILES_ACCESS_PERMISSION'); }
+			catch (_:Dynamic) {}
+		}
+	}
+
+	/**
+	 * Android "Display over other apps" (floating keyboard) prompt.
+	 * Called after Language.load so the dialog follows the engine language, and
+	 * uses the modern Material dialog via backend.Dialog instead of the old
+	 * hardcoded Java AlertDialog.
+	 */
+	public static function maybeRequestOverlayPermission():Void
+	{
+		try
+		{
+			if (overlayDialogShown) return;
+			if (!backend.SeiunOverlay.getEnabled() || !backend.SeiunOverlay.getAutoShow()) return;
+			if (backend.SeiunOverlay.isOverlayPermissionGranted()) return;
+			if (flixel.FlxG.save.data != null && flixel.FlxG.save.data.overlayPermissionPromptedV2 == true) return;
+
+			overlayDialogShown = true;
+			if (flixel.FlxG.save.data != null)
+			{
+				flixel.FlxG.save.data.overlayPermissionPromptedV2 = true;
+				try { flixel.FlxG.save.flush(); } catch (_:Dynamic) {}
+			}
+			backend.Dialog.showCustom(
+				Language.get('SUtil.overlay.title', 'Floating keyboard'),
+				Language.get('SUtil.overlay.message',
+					'SeiunEngine wants to show a floating keyboard button over other apps.\n\n'
+					+ 'Please allow "Display over other apps" in the next screen.'),
+				[
+					{name: Language.get('SUtil.overlay.open', 'Open Settings'), callback: function() backend.SeiunOverlay.requestOverlayPermission()},
+					{name: Language.get('SUtil.overlay.notNow', 'Not Now'), callback: function() {}}
+				],
+				false);
+		}
+		catch (e:Dynamic)
+		{
+			try { backend.SeiunOverlay.requestOverlayPermission(); }
+			catch (_:Dynamic) {}
 		}
 	}
 

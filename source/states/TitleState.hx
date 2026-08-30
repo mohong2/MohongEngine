@@ -650,6 +650,12 @@ class TitleState extends MusicBeatState
 
 	function continueNormalFlow():Void
 	{
+		#if android
+		Language.load();
+		SUtil.maybeRequestAllFilesAccess();
+		SUtil.maybeRequestOverlayPermission();
+		#end
+
 		#if FREEPLAY
 		MusicBeatState.switchState(new FreeplayState());
 		#elseif CHARTING

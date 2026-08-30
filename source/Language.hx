@@ -43,7 +43,7 @@ class Language
         if(files.length == 0)
         {
             var known:Array<String> = [
-                'English.json', 'option.json', 'playstate.json', 'pause.json',
+                'English.json', 'Android.json', 'option.json', 'playstate.json', 'pause.json',
                 'ResultsScreen.json', 'ScoreHistorySubstate.json',
                 'characterEditor.json', 'creditsEditor.json',
                 'dialogueCharacterEditor.json', 'dialogueEditor.json',
