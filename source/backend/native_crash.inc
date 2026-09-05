@@ -1,7 +1,8 @@
 // SeiunEngine native crash hooks - included via @:cppInclude from NativeCrash.hx
 // Windows: SetUnhandledExceptionFilter (SEH) + SIGABRT + LuaJIT panic hooks;
 // POSIX: sigaction for the fatal signals.
-// All observers only: they write a log and then let the process die as before.
+// All observers only: they write a log (+ one-shot pending marker), show a
+// best-effort OS popup, and then let the process die as before.
 //
 // Why more than SetUnhandledExceptionFilter is needed on Windows:
 //  - fast-fail/abort() terminations (CRT asserts, pure virtual calls, LuaJIT's
@@ -35,6 +36,9 @@
 #  include <sys/types.h>
 #  include <fcntl.h>
 #  include <unistd.h>
+#  if defined(__APPLE__)
+#    include <TargetConditionals.h>
+#  endif
 #  if !defined(__ANDROID__)
 #    include <execinfo.h>
 #  endif
@@ -127,6 +131,8 @@ static void seiun_append(char* buf, size_t cap, int* len, const char* fmt, ...)
 	*len += l;
 }
 
+static void seiun_mark_crash_pending(void);
+
 static void seiun_write_crash_file(const char* body)
 {
 	FILE* f = fopen(seiun_crash_file(), "w");
@@ -136,6 +142,65 @@ static void seiun_write_crash_file(const char* body)
 		fputs(body, f);
 		fclose(f);
 	}
+	seiun_mark_crash_pending();
+}
+
+// A one-shot marker for the Haxe layer: the native handler cannot safely run
+// FlxG / CrashCatcherState itself, so the next launch consumes this file and
+// shows the existing crash-catcher recovery screen (a graceful "rollback").
+static void seiun_mark_crash_pending(void)
+{
+	FILE* f = fopen("crash/native_crash.pending", "w");
+	if (f != NULL)
+	{
+		if (seiun_path[0] != 0)
+			fputs(seiun_path, f);
+		fputc('\n', f);
+		fclose(f);
+	}
+}
+
+// Best-effort OS popup. The process is already fatally broken, so failure is
+// intentionally silent; after the popup the original crash path continues.
+static void seiun_native_crash_popup(const char* path)
+{
+#if defined(_WIN32)
+	char msg[1024];
+	snprintf(msg, sizeof(msg),
+		"A native crash has been recorded by SeiunEngine.\r\n\r\nLog: %s\r\n\r\nThe game will now exit.", path);
+	MessageBoxA(NULL, msg, "SeiunEngine native crash", MB_OK | MB_ICONERROR | MB_TOPMOST);
+#elif defined(__APPLE__) && defined(TARGET_OS_IPHONE) && !TARGET_OS_IPHONE
+	char text[1024];
+	snprintf(text, sizeof(text),
+		"A native crash has been recorded by SeiunEngine.\n\nLog: %s\n\nThe game will now exit.", path);
+	char script[2048];
+	snprintf(script, sizeof(script),
+		"display alert \"SeiunEngine native crash\" message \"%s\" as critical", text);
+	pid_t pid = fork();
+	if (pid == 0)
+	{
+		execl("/usr/bin/osascript", "osascript", "-e", script, (char*)NULL);
+		_exit(127);
+	}
+#elif defined(__linux__) && !defined(__ANDROID__)
+	char text[1024];
+	snprintf(text, sizeof(text),
+		"A native crash has been recorded by SeiunEngine.\n\nLog: %s\n\nThe game will now exit.", path);
+	char zenityText[1024];
+	snprintf(zenityText, sizeof(zenityText), "--text=%s", text);
+	char xmessageText[1024];
+	snprintf(xmessageText, sizeof(xmessageText), "SeiunEngine native crash\n\n%s", text);
+	pid_t pid = fork();
+	if (pid == 0)
+	{
+		execlp("zenity", "zenity", "--error", "--title=SeiunEngine native crash", zenityText, (char*)NULL);
+		execlp("kdialog", "kdialog", "--error", text, (char*)NULL);
+		execlp("xmessage", "xmessage", "-center", xmessageText, (char*)NULL);
+		_exit(127);
+	}
+#else
+	(void)path;
+#endif
 }
 
 // ── dbghelp (loaded lazily at crash time, never linked) ──────────────────────
@@ -430,6 +495,9 @@ static LONG WINAPI seiun_seh_handler(EXCEPTION_POINTERS* info)
 	// Phase 1 on disk: registers/exception info land even if dbghelp itself
 	// dies inside a corrupted heap while resolving symbols below.
 	seiun_write_crash_file(body);
+	// Show the popup before the (less safe) symbol work, so the user at least
+	// sees it even if dbghelp dies while resolving addresses.
+	seiun_native_crash_popup(seiun_crash_file());
 
 	// Phase 2: backtrace + stack scan appended, file overwritten in place.
 	seiun_dbghelp_init();
@@ -459,6 +527,7 @@ static void __cdecl seiun_sigabrt_handler(int sig)
 	seiun_append(body, cap, &len, "Native crash (abort()/terminate path - SIGABRT; CRT assert, pure virtual call, etc.)\n");
 	len += seiun_write_live_backtrace(body + len, cap - (size_t)len);
 	seiun_write_crash_file(body);
+	seiun_native_crash_popup(seiun_crash_file());
 }
 #endif // _WIN32
 
@@ -482,6 +551,9 @@ static void seiun_posix_handler(int sig, siginfo_t* si, void* uctx)
 	seiun_append(body, sizeof(body), &len, "Signal: %d - %s, si_code=%d\n", sig, seiun_signal_name(sig), si ? si->si_code : 0);
 	seiun_append(body, sizeof(body), &len, "Fault address (si_addr, memory pointer): 0x%p\n", si ? si->si_addr : (void*)0);
 	seiun_write_crash_file(body);
+	// Popup before backtrace: backtrace/execinfo can itself be fragile after a
+	// memory corruption, but the marker/log is already on disk by now.
+	seiun_native_crash_popup(seiun_crash_file());
 
 #if !defined(__ANDROID__)
 	int fd = open(seiun_crash_file(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
@@ -496,6 +568,7 @@ static void seiun_posix_handler(int sig, siginfo_t* si, void* uctx)
 		close(fd);
 	}
 #endif
+
 	signal(sig, SIG_DFL);
 	raise(sig);
 }
@@ -541,24 +614,37 @@ static int seiun_lua_panic_handler(lua_State* L)
 		seiun_append(body, cap, &len, "Lua error message: %s\n", (msg != NULL) ? msg : "(non-string error object)");
 #if defined(_WIN32)
 		seiun_dbghelp_init();
+		// Phase 1: basic body + popup/marker before the (fragile) live backtrace.
+		seiun_write_crash_file(body);
+		seiun_native_crash_popup(seiun_crash_file());
+		// Phase 2: overwrite with the backtrace appended.
 		len += seiun_write_live_backtrace(body + len, cap - (size_t)len);
 		seiun_write_crash_file(body);
 #else
 		{
-			char path[512];
-			seiun_crash_path(path, sizeof(path));
+			const char* path = seiun_crash_file();
 			int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
 			if (fd >= 0)
 			{
 				const char* head = "SeiunEngine native crash recorded (LuaJIT panic)\n";
 				write(fd, head, strlen(head));
 				write(fd, body, (size_t)len);
+				close(fd);
+			}
+			seiun_mark_crash_pending();
+			seiun_native_crash_popup(path);
+
+			// Append the backtrace separately so a crash during backtrace still
+			// leaves the message + marker + popup behind.
+			int fd2 = open(path, O_WRONLY | O_APPEND, 0644);
+			if (fd2 >= 0)
+			{
 #if !defined(__ANDROID__)
 				void* bt[64];
 				int n = backtrace(bt, 64);
-				backtrace_symbols_fd(bt, n, fd);
+				backtrace_symbols_fd(bt, n, fd2);
 #endif
-				close(fd);
+				close(fd2);
 			}
 		}
 #endif

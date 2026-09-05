@@ -31,7 +31,29 @@ typedef TurboDensityData = {
 
 class TurboDensity
 {
-	public static inline final CACHE_VERSION:Int = 4;
+	public static inline final CACHE_VERSION:Int = 5;
+
+	public static function chartFingerprint(notes:Array<PreloadedChartNote>):Int
+	{
+		var h:Int = 0x811C9DC5;
+		if (notes == null)
+			return h;
+		for (pn in notes)
+		{
+			if (pn == null)
+			{
+				h = (h * 31 + 0xFFFF) & 0x7FFFFFFF;
+				continue;
+			}
+			h = (h * 31 + Std.int(pn.strumTime * 1000)) & 0x7FFFFFFF;
+			h = (h * 31 + pn.noteData + pn.mania * 7) & 0x7FFFFFFF;
+			h = (h * 31 + (pn.mustPress ? 2 : 0) + (pn.isSustainNote ? 4 : 0) + (pn.isSustainEnd ? 8 : 0) + (pn.gfNote ? 16 : 0)) & 0x7FFFFFFF;
+			h = (h * 31 + Std.int(pn.sustainLength * 1000)) & 0x7FFFFFFF;
+			h = (h * 31 + Std.int(pn.parentST * 1000)) & 0x7FFFFFFF;
+			h = (h * 31 + Std.int(pn.noteDensity * 1000)) & 0x7FFFFFFF;
+		}
+		return h;
+	}
 
 	/**
 	 * 100ms 分箱 + 滑窗聚合。
@@ -384,10 +406,14 @@ class TurboDensity
 	static function cacheMetaMatches(a:Dynamic, b:Dynamic):Bool
 	{
 		if (a == null || b == null) return false;
-		return a.song == b.song
-			&& a.mod == b.mod
-			&& a.notes == b.notes
-			&& a.lastTime == b.lastTime;
+		if (a.song != b.song
+			|| a.mod != b.mod
+			|| a.notes != b.notes
+			|| a.lastTime != b.lastTime)
+			return false;
+		if (b.fingerprint != null && a.fingerprint != b.fingerprint)
+			return false;
+		return true;
 	}
 	#end
 }

@@ -282,6 +282,12 @@ class MusicBeatState extends FlxUIState
 
 	public function rollbackSection():Void {
 		if(curStep < 0) return;
+		if (PlayState.SONG == null || PlayState.SONG.notes == null)
+		{
+			curSection = 0;
+			stepsToDo = 0;
+			return;
+		}
 		var lastSection:Int = curSection;
 		curSection = 0;
 		stepsToDo = 0;
@@ -351,7 +357,9 @@ class MusicBeatState extends FlxUIState
 
 	public function getBeatsOnSection():Float {
 		var val:Null<Float> = 4;
-		if(PlayState.SONG != null && PlayState.SONG.notes[curSection] != null)
+		if(PlayState.SONG != null && PlayState.SONG.notes != null
+			&& curSection >= 0 && curSection < PlayState.SONG.notes.length
+			&& PlayState.SONG.notes[curSection] != null)
 			val = PlayState.SONG.notes[curSection].sectionBeats;
 		return val == null ? 4 : val;
 	}

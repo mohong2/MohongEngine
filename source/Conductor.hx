@@ -32,11 +32,12 @@ class Conductor
 
 	public static function judgeNote(note:Note, diff:Float=0):Rating // die
 	{
+		if (PlayState.instance == null || PlayState.instance.ratingsData == null)
+			return new Rating('bad'); // defensive fallback outside gameplay
 
 		var data:Array<Rating> = PlayState.instance.ratingsData; //shortening cuz fuck u
 	 if (ClientPrefs.getGameplaySetting('botplay', false))
     {
-        var data:Array<Rating> = PlayState.instance.ratingsData;
         return data[0];
     }
 	
@@ -114,15 +115,21 @@ class Conductor
 	public static function mapBPMChanges(song:SwagSong)
 	{
 		bpmChangeMap = [];
+		if (song == null || song.notes == null)
+			return;
 
 		var curBPM:Float = song.bpm;
 		var totalSteps:Int = 0;
 		var totalPos:Float = 0;
 		for (i in 0...song.notes.length)
 		{
+			var section = song.notes[i];
+			if (section == null)
+				continue;
+
 			//你家bpm他妈可以等于零是吧？
-			var sectionBpm:Float = song.notes[i].bpm;
-			if (song.notes[i].changeBPM && (sectionBpm <= 0 || !Math.isFinite(sectionBpm)))
+			var sectionBpm:Float = section.bpm;
+			if (section.changeBPM && (sectionBpm <= 0 || !Math.isFinite(sectionBpm)))
 			{
 				TraceManager.warn('trace.conductor.invalidBpm',
 					'他妈的到底是谁把歌曲BPM写成0啊？！无效BPM {} 在第 {} 小节，用上一个 {} 顶着，气死我了',
@@ -130,7 +137,7 @@ class Conductor
 				sectionBpm = curBPM;
 			}
 
-			if(song.notes[i].changeBPM && sectionBpm != curBPM)
+			if(section.changeBPM && sectionBpm != curBPM)
 			{
 				curBPM = sectionBpm;
 				var event:BPMChangeEvent = {
@@ -152,7 +159,8 @@ class Conductor
 	static function getSectionBeats(song:SwagSong, section:Int)
 	{
 		var val:Null<Float> = null;
-		if(song.notes[section] != null) val = song.notes[section].sectionBeats;
+		if (song != null && song.notes != null && section >= 0 && section < song.notes.length && song.notes[section] != null)
+			val = song.notes[section].sectionBeats;
 		return val != null ? val : 4;
 	}
 
@@ -205,6 +213,7 @@ class Rating
 
 	public function increase(blah:Int = 1)
 	{
+		if (PlayState.instance == null) return;
 		Reflect.setField(PlayState.instance, counter, Reflect.field(PlayState.instance, counter) + blah);
 	}
 }

@@ -712,9 +712,24 @@ class ClientPrefs {
 
 
 	public static function loadPrefs() {
+		if (data == null) data = {};
+		if (defaultData == null) defaultData = {};
+
 		for (key in Reflect.fields(data))
 			if (key != 'gameplaySettings' && Reflect.hasField(FlxG.save.data, key))
 				Reflect.setField(data, key, Reflect.field(FlxG.save.data, key));
+
+		// Corrupted/older saves can set collections to null. Never let those
+		// propagate: every gameplay code path assumes these maps/arrays exist.
+		if (data.gameplaySettings == null)
+		{
+			data.gameplaySettings = new Map<String, Dynamic>();
+			if (defaultData != null && defaultData.gameplaySettings != null)
+				for (k => v in defaultData.gameplaySettings)
+					data.gameplaySettings.set(k, v);
+		}
+		if (data.modSettings == null)
+			data.modSettings = new Map<String, Map<String, Dynamic>>();
 
 		// 多k: 老存档 arrowHSV 只有 4 项, 补足到 9 项 (对应 A~I 9 个颜色轨道),
 		// 保证 NotesSubState 轮播/游戏内取色不会越界。
@@ -920,7 +935,12 @@ class ClientPrefs {
 
 	inline public static function getGameplaySetting(name:String, defaultValue:Dynamic = null, ?customDefaultValue:Bool = false):Dynamic {
 		if (!customDefaultValue)
-			defaultValue = defaultData.gameplaySettings.get(name);
+		{
+			if (defaultData != null && defaultData.gameplaySettings != null)
+				defaultValue = defaultData.gameplaySettings.get(name);
+		}
+		if (data == null || data.gameplaySettings == null)
+			return defaultValue;
 		#if ONLINE_ALLOWED
 		if (onlineMaskCheats && (name == 'botplay' || name == 'practice' || name == 'instakill'))
 			return false;

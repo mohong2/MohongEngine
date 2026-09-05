@@ -346,7 +346,8 @@ class Character extends FlxSprite
 		{
 			if(heyTimer > 0)
 			{
-				heyTimer -= elapsed * PlayState.instance.playbackRate;
+				var playbackRate:Float = (PlayState.instance != null) ? PlayState.instance.playbackRate : 1;
+				heyTimer -= elapsed * playbackRate;
 				if(heyTimer <= 0)
 				{
 					if(specialAnim && (getAnimationName() == 'hey' || getAnimationName() == 'cheer'))
@@ -470,10 +471,15 @@ class Character extends FlxSprite
 	
 	function loadMappedAnims():Void
 	{
-		var noteData:Array<SwagSection> = Song.loadFromJson('picospeaker', Paths.formatToSongPath(PlayState.SONG.song)).notes;
+		if (PlayState.SONG == null || PlayState.SONG.song == null) return;
+		var chart = Song.loadFromJson('picospeaker', Paths.formatToSongPath(PlayState.SONG.song));
+		if (chart == null || chart.notes == null) return;
+		var noteData:Array<SwagSection> = chart.notes;
 		for (section in noteData) {
+			if (section == null || section.sectionNotes == null) continue;
 			for (songNotes in section.sectionNotes) {
-				animationNotes.push(songNotes);
+				if (songNotes != null)
+					animationNotes.push(songNotes);
 			}
 		}
 		TankmenBG.animationNotes = animationNotes;

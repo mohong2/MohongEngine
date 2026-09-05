@@ -47,7 +47,7 @@ class VideoSpriteManager extends VideoSprite {
             try
             {
                 playVideo(path, loop, false);
-                if(onPlayState && video != null)
+                if(onPlayState && video != null && PlayState.instance != null)
                     playbackRate = PlayState.instance.playbackRate;
             }
             catch (e:Dynamic)

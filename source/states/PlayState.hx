@@ -1296,23 +1296,6 @@ class PlayState extends MusicBeatState
 
 		addAndroidControls(false, true);
 
-		// ── Turbo 专属: 上一局已释放谱面 DOM → 用记录的原始参数从磁盘重载 ──
-		// 只有 Turbo (botplay 观赏模式) 会释放 DOM, 非 Turbo 模式 SONG 始终带完整 DOM,
-		// 此分支永不进入, 重开路径与原版完全一致。重载失败时保留空谱面降级, 不崩溃。
-		if (turboModeActive && SONG != null && Reflect.hasField(SONG, '__seiunStripped')
-			&& Song.lastChartReloadJson != null)
-		{
-			try
-			{
-				var reloaded:SwagSong = Song.loadFromJson(
-					Reflect.field(SONG, '__seiunReloadJson'),
-					Reflect.field(SONG, '__seiunReloadFolder'));
-				if (reloaded != null)
-					PlayState.SONG = reloaded;
-			}
-			catch (e:Dynamic) {}
-		}
-
 		generateSong(SONG.song);
 		#if ONLINE_ALLOWED
 		if (seiunSpectate)
@@ -3481,16 +3464,7 @@ class PlayState extends MusicBeatState
 		// 新建 String 实例, 百万级谱面下内容重复的字符串常驻数百 MB。
 		var typeIntern:Map<String, String> = new Map<String, String>();
 
-		// ── Turbo 专属: 逐 note DOM 释放守卫 ──
-		// Turbo = botplay 观赏模式, generateSong 之后引擎只读小节级元数据
-		// (changeBPM/mustHitSection/altAnim/gfSection), 逐 note 数据不再被读取。
-		// 仅当 SONG 确认来自最近一次磁盘 loadFromJson (token 匹配) 时才释放,
-		// 重开时由 create 的守卫从磁盘无损重载; 编辑器/Lua 直接赋值的 SONG 无 token, 不释放。
-		// 非 Turbo 模式不释放任何数据, 行为与原版完全一致。
-		var turboStripDOM:Bool = turboModeActive
-			&& Song.lastChartReloadJson != null
-			&& Reflect.hasField(songData, '__seiunToken')
-			&& Reflect.field(songData, '__seiunToken') == Song.lastChartToken;
+		var turboStripDOM:Bool = false;
 
 		// 多k: Change Mania 事件会把事件后的谱面按新键数解释/编码: 这里按每个 Note 自身
 		// 时间点的生效键数解释轨道, 保证事件前后的 Note 各归各的键数 (无事件时与旧行为一致)。
@@ -3587,11 +3561,11 @@ class PlayState extends MusicBeatState
 				var susLen:Float = swagNote.sustainLength;
 				if (susLen < 1) continue;
 
-				var roundSus:Int = Math.round(susLen / stepCrochet);
-				if (roundSus < 1) continue;
+				var floorSus:Int = Math.floor(susLen / stepCrochet);
+				if (floorSus < 1) continue;
 
 				var susBaseOffset:Float = stepCrochet / FlxMath.roundDecimal(songSpeed, 2);
-				for (susNote in 0...roundSus + 1)
+				for (susNote in 0...floorSus + 1)
 				{
 					var sustainNote:PreloadedChartNote = {
 						strumTime: rawStrum + (stepCrochet * susNote) + susBaseOffset,
@@ -3605,7 +3579,7 @@ class PlayState extends MusicBeatState
 						noAnimation: isNoAnim,
 						noMissAnimation: isNoAnim,
 						isSustainNote: true,
-						isSustainEnd: (susNote == roundSus),
+						isSustainEnd: (susNote == floorSus),
 						sustainLength: susLen,
 						parentST: rawStrum,
 						parentSL: susLen,
@@ -3745,12 +3719,14 @@ class PlayState extends MusicBeatState
 		var meta:Dynamic = null;
 		var haveCached:Bool = false;
 		#if sys
-		cachePath = turboCachePath(songName);
+		var fingerprint:Int = TurboDensity.chartFingerprint(unspawnNotes);
+		cachePath = turboCachePath(songName, fingerprint);
 		meta = {
 			song: SONG != null ? SONG.song : songName,
 			mod: Paths.currentModDirectory != null ? Paths.currentModDirectory : '',
 			notes: unspawnNotes.length,
-			lastTime: unspawnNotes.length > 0 ? unspawnNotes[unspawnNotes.length - 1].strumTime : 0
+			lastTime: unspawnNotes.length > 0 ? unspawnNotes[unspawnNotes.length - 1].strumTime : 0,
+			fingerprint: fingerprint
 		};
 		var cached:Null<{zones:Array<TurboDensityZone>, density:TurboDensityData}> = TurboDensity.loadCache(cachePath, meta);
 		if (cached != null)
@@ -3773,10 +3749,10 @@ class PlayState extends MusicBeatState
 		// 尺寸/轨迹/消失全部与真实 Note 一致；H-Slice 风格鬼 Note 合并已在加载阶段完成。
 	}
 
-	inline function turboCachePath(songName:String):String
+	inline function turboCachePath(songName:String, fingerprint:Int):String
 	{
 		#if sys
-		var key:String = songName + '|' + (Paths.currentModDirectory != null ? Paths.currentModDirectory : '') + '|' + Std.string(unspawnNotes.length);
+		var key:String = songName + '|' + (Paths.currentModDirectory != null ? Paths.currentModDirectory : '') + '|' + Std.string(unspawnNotes.length) + '|' + Std.string(fingerprint);
 		var hash:String = haxe.crypto.Md5.encode(key).substr(0, 16);
 		return Sys.getCwd() + 'turbo_cache/' + hash + '.bin';
 		#else

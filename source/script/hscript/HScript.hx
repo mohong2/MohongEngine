@@ -750,16 +750,16 @@ class HScript
 		set('controls', Controls.instance);
 
 		set('setVar', function(name:String, value:Dynamic) {
-			if (PlayState.instance != null) PlayState.instance.variables.set(name, value);
+			if (PlayState.instance != null && PlayState.instance.variables != null) PlayState.instance.variables.set(name, value);
 			return value;
 		});
 		set('getVar', function(name:String) {
-			if (PlayState.instance != null && PlayState.instance.variables.exists(name))
+			if (PlayState.instance != null && PlayState.instance.variables != null && PlayState.instance.variables.exists(name))
 				return PlayState.instance.variables.get(name);
 			return null;
 		});
 		set('removeVar', function(name:String) {
-			if (PlayState.instance != null && PlayState.instance.variables.exists(name))
+			if (PlayState.instance != null && PlayState.instance.variables != null && PlayState.instance.variables.exists(name))
 			{
 				PlayState.instance.variables.remove(name);
 				return true;
@@ -771,7 +771,7 @@ class HScript
 		// English: custom callback registration (0.7.3+/1.0.4 createCallback / createGlobalCallback)
 		#if LUA_ALLOWED
 		set('createGlobalCallback', function(name:String, func:Dynamic) {
-			if (PlayState.instance != null)
+			if (PlayState.instance != null && PlayState.instance.luaArray != null)
 			{
 				for (script in PlayState.instance.luaArray)
 					if (script != null && script.lua != null && !script.closed)
@@ -1065,11 +1065,20 @@ class HScript
 		set('addBehindDad', PlayState.instance.addBehindDad);
 		set('addBehindBF', PlayState.instance.addBehindBF);
 
-		set('setVar', function(name:String, value:Dynamic)
-			PlayState.instance.variables.set(name, value));
-		set('getVar', function(name:String):Dynamic
-			return PlayState.instance.variables.exists(name) ? PlayState.instance.variables.get(name) : null);
+		set('setVar', function(name:String, value:Dynamic) {
+			if (PlayState.instance == null || PlayState.instance.variables == null)
+				return null;
+			PlayState.instance.variables.set(name, value);
+			return value;
+		});
+		set('getVar', function(name:String):Dynamic {
+			if (PlayState.instance == null || PlayState.instance.variables == null)
+				return null;
+			return PlayState.instance.variables.exists(name) ? PlayState.instance.variables.get(name) : null;
+		});
 		set('removeVar', function(name:String):Bool {
+			if (PlayState.instance == null || PlayState.instance.variables == null)
+				return false;
 			if (PlayState.instance.variables.exists(name)) {
 				PlayState.instance.variables.remove(name);
 				return true;
@@ -1103,6 +1112,7 @@ class HScript
 
 	public function call(func:String, args:Array<Dynamic>):Dynamic {
 		if (closed) return FunkinLua.Function_StopHScript;
+		if (args == null) args = [];
 		try {
 			var f:Dynamic = interpGet(func);
 			if (f != null && Reflect.isFunction(f)) {

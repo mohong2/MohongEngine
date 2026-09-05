@@ -249,11 +249,13 @@ class LoadingState extends MusicBeatState
 	
 	static function getSongPath()
 	{
+		if (PlayState.SONG == null || PlayState.SONG.song == null) return null;
 		return Paths.inst(PlayState.SONG.song);
 	}
 	
 	static function getVocalPath()
 	{
+		if (PlayState.SONG == null || PlayState.SONG.song == null) return null;
 		return Paths.voices(PlayState.SONG.song);
 	}
 	

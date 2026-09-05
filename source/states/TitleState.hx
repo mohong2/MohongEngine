@@ -15,6 +15,7 @@ using StringTools;
 
 import mohong.TraceManager;
 import backend.GitHubAPI;
+import backend.NativeCrash;
 #if VIDEOS_ALLOWED
 import backend.VideoPreloader;
 #end
@@ -190,6 +191,38 @@ class TitleState extends MusicBeatState
 		#end
 
 		super.create();
+
+		#if sys
+		// Previous process ended with a native crash (SEH / fatal signal / LuaJIT
+		// panic). The native layer only writes a marker because it cannot safely
+		// drive FlxG; consume it here once and roll into the crash-catcher screen.
+		var pendingNativeCrash = NativeCrash.consumePendingNativeCrash();
+		if (pendingNativeCrash != null)
+		{
+			var nativeCrashText:String = pendingNativeCrash.content;
+			if (nativeCrashText.length > 4000)
+				nativeCrashText = nativeCrashText.substr(0, 4000) + "\n... (truncated)";
+			CrashCatcherState.lastCrashMessage = "Previous native crash detected:\n\n" + nativeCrashText;
+			CrashCatcherState.lastCrashStack = "(see native crash log for the full backtrace)";
+			CrashCatcherState.lastCrashPath = pendingNativeCrash.path;
+			CrashCatcherState.crashCount++;
+
+			try
+			{
+				var dialogTitle:String = Language.get("CrashCatcher.dialog.title", "Game Crashed!");
+				var githubUrl:String = Language.get("CrashCatcher.reportURL", "https://github.com/mohong2/FNF-SeiunEngine/issues");
+				var dialogMsg:String = Language.get("CrashCatcher.dialog.message",
+					"The game has encountered an error and needs to recover.\n\nError: {error}\n\nCrash dump saved to: {path}\n\nPlease report this on GitHub:\n{url}\n\nClick OK to enter recovery screen.");
+				dialogMsg = dialogMsg.replace("{error}", "Previous native crash detected (see log)");
+				dialogMsg = dialogMsg.replace("{path}", pendingNativeCrash.path);
+				dialogMsg = dialogMsg.replace("{url}", githubUrl);
+				backend.Dialog.show(dialogTitle, dialogMsg, 'Error');
+			}
+			catch (e:Dynamic) {}
+
+			FlxG.switchState(new CrashCatcherState());
+		}
+		#end
 
 		#if LUA_ALLOWED
 		initLuaScripts();

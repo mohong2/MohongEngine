@@ -1,7 +1,10 @@
 package backend;
 
-#if cpp
+import StringTools;
+
+#if sys
 import sys.FileSystem;
+import sys.io.File;
 #end
 
 /**
@@ -9,7 +12,9 @@ import sys.FileSystem;
  *
  * Haxe's try/catch and UncaughtErrorEvent only see Haxe exceptions; driver
  * faults, access violations and LuaJIT aborts kill the process silently.
- * These hooks only observe and log, then let the process crash as before:
+ * These hooks log, show a best-effort OS popup, and then let the process crash
+ * as before; the marker left behind lets the next launch roll into the
+ * existing crash-catcher recovery screen:
  *   - Windows SEH: exception code, faulting instruction pointer, access
  *     target pointer, faulting module, registers -> crash/native_crash_*.txt
  *   - POSIX (Linux/macOS): SIGSEGV/SIGABRT/SIGBUS/SIGFPE/SIGILL -> signal,
@@ -55,9 +60,49 @@ class NativeCrash
 		if (luaState == null) return;
 		try
 		{
-			untyped __cpp__('{ extern void seiun_install_lua_panic(void* L); seiun_install_lua_panic((void*){0}); }', luaState);
+			// Haxe's generated C++ lives in `namespace backend`, so the call must
+			// be explicitly global-qualified; otherwise the linker looks for
+			// `backend::seiun_install_lua_panic` and fails on Linux/macOS/iOS.
+			untyped __cpp__('::seiun_install_lua_panic((void*){0});', luaState);
 		}
 		catch (e:Dynamic) {}
+		#end
+	}
+
+	/**
+	 * Consume a native crash marker written by native_crash.inc.
+	 *
+	 * If the previous process ended via a native crash (SEH, fatal signal or
+	 * LuaJIT panic), the C++ layer leaves crash/native_crash.pending next to
+	 * the log file. This returns the latest log path/content and removes the
+	 * marker, so the game can show the crash-catcher recovery screen exactly
+	 * once. Native log files themselves are kept for future reports.
+	 */
+	public static function consumePendingNativeCrash():Null<{path:String, content:String}>
+	{
+		#if sys
+		try
+		{
+			var markerPath:String = './crash/native_crash.pending';
+			if (!FileSystem.exists(markerPath)) return null;
+
+			var logPath:String = StringTools.trim(File.getContent(markerPath));
+			if (logPath == '' || !FileSystem.exists(logPath))
+			{
+				try { FileSystem.deleteFile(markerPath); } catch (e:Dynamic) {}
+				return null;
+			}
+
+			var content:String = File.getContent(logPath);
+			try { FileSystem.deleteFile(markerPath); } catch (e:Dynamic) {}
+			return {path: logPath, content: content};
+		}
+		catch (e:Dynamic)
+		{
+			return null;
+		}
+		#else
+		return null;
 		#end
 	}
 }
