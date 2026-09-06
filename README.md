@@ -1,5 +1,7 @@
 # SeiunEngine
 
+**你知道吗：** 如果你去催促一个开发者更新你想要的内容和优化，你可能等来的并不是你想要的更新，而是停更。我很想把这一个引擎做好，但我的实力就摆在那儿，请不要过度期待。
+
 A Friday Night Funkin' engine, forked from Psych Engine 0.6.3. Built for the Mandela Funkin Night mod.
 
 **Note:** This project uses AI-assisted tools in its development.
@@ -9,6 +11,7 @@ A Friday Night Funkin' engine, forked from Psych Engine 0.6.3. Built for the Man
 ## Supported platforms
 
 - Windows
+
 - macOS
 - Linux
 - Android
