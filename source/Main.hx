@@ -125,6 +125,9 @@ class Main extends Sprite
 		#end
 		#if sys
 		Sys.setCwd(SUtil.getStorageDirectory());
+		// Native crash logs must land in the writable storage dir; on Android the
+		// process cwd can't be relied on before this point.
+		NativeCrash.setCrashDir(SUtil.getStorageDirectory() + "crash/");
 		#end
 		
 		super();
@@ -180,6 +183,18 @@ class Main extends Sprite
 			gameHeight = Math.ceil(stageHeight / zoom);
 		}
 		ClientPrefs.loadDefaultKeys();
+
+		// Native crash reports carry the engine identity + (on Android) the
+		// precomputed address->cpp-line table for exact file:line output.
+		#if sys
+		var appVersion:String = null;
+		try { appVersion = Lib.application.meta.get('version'); } catch (e:Dynamic) {}
+		if (appVersion == null || appVersion.length == 0) appVersion = '?';
+		NativeCrash.setAppInfo('SeiunEngine ' + appVersion);
+		#end
+		#if android
+		NativeCrash.loadLinemap(SUtil.getStorageDirectory());
+		#end
 
 		// Wire ClientPrefs framerate/drawFramerate into FlxGame (was 60/60).
 		var updateFramerate:Int = ClientPrefs.data.framerate;

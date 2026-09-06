@@ -1,10 +1,11 @@
 // SeiunEngine native crash hooks - included via @:cppInclude from NativeCrash.hx
 // Windows: SetUnhandledExceptionFilter (SEH) + SIGABRT + LuaJIT panic hooks;
-// POSIX: sigaction for the fatal signals.
+// POSIX (Linux/macOS/Android): sigaction for the fatal signals.
 // All observers only: they write a log (+ one-shot pending marker), show a
-// best-effort OS popup, and then let the process die as before.
+// best-effort OS popup (desktop), mirror to logcat (Android), and then let the
+// process die as before.
 //
-// Why more than SetUnhandledExceptionFilter is needed on Windows:
+// Windows:
 //  - fast-fail/abort() terminations (CRT asserts, pure virtual calls, LuaJIT's
 //    default panic) bypass the unhandled exception filter entirely, so those
 //    crashes used to leave no log at all. signal(SIGABRT) sees them.
@@ -14,6 +15,33 @@
 //  - the SEH path records no call stack by itself. dbghelp (StackWalk64 +
 //    SymFromAddr, loaded dynamically at crash time) prints one; with the build
 //    PDB next to the exe the frames resolve to real function names/lines.
+//
+// Android (previously this platform logged only signal number + si_addr):
+//  - sigaltstack + SA_ONSTACK: stack-overflow SIGSEGVs used to kill the signal
+//    handler itself on the dead stack before anything was written.
+//  - full register dump (PC/SP/LR/gprs) extracted from the kernel signal
+//    context for arm64 / armv7 / x86_64 / x86.
+//  - _Unwind_Backtrace from <unwind.h> (present for every NDK ABI) walks the
+//    real crash chain; frames are annotated with dladdr() into the tombstone
+//    format "pc <offset> <lib> (symbol+offset)", so `adb logcat | ndk-stack`
+//    and offline llvm-symbolizer both work directly.
+//  - crash/linemap support: a precomputed address->file:line table (built from
+//    the unstripped .so by tools/gen_linemap.py, pushed to the device or
+//    embedded as an asset) is binary-searched at crash time, adding the exact
+//    "[source/File.cpp:123]" for every frame inside the game library. This is
+//    how the actual C++ line number gets into an on-device crash report.
+//  - the whole body is mirrored to logcat (tag "SeiunEngine-Crash") so the
+//    report survives even if the crash/ directory is unreachable.
+//  - /proc/self/maps snapshot written next to the log (offsets for every
+//    mapped module; needed for offline symbolication).
+//  - device properties (model / Android version / ABI) and the engine context
+//    fed from Haxe (app version, current state/song, recent log tail) are
+//    embedded in the report.
+//  - all crash-time file IO is open()/write() only (no stdio heap use).
+//
+// Everything is async-signal-safe to the extent practical for a crash logger:
+// the base report (signal, registers, context, logs) hits the disk BEFORE any
+// backtrace/symbol work that could itself fault on a corrupted process.
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -36,8 +64,25 @@
 #  include <sys/types.h>
 #  include <fcntl.h>
 #  include <unistd.h>
+#  include <stdint.h>
+#  include <dlfcn.h>
 #  if defined(__APPLE__)
 #    include <TargetConditionals.h>
+#  endif
+#  if defined(__linux__)
+#    include <sys/ucontext.h>
+#  endif
+#  if defined(__ANDROID__)
+#    include <sys/system_properties.h>
+#  endif
+// _Unwind_Backtrace comes from the compiler-rt/libgcc unwinder that is already
+// linked into every C++ binary using exceptions; <unwind.h> is available in
+// every NDK (clang resource include dir) and on desktop Linux/macOS.
+#  if defined(__has_include)
+#    if __has_include(<unwind.h>)
+#      define SEIUN_HAS_UNWIND 1
+#      include <unwind.h>
+#    endif
 #  endif
 #  if !defined(__ANDROID__)
 #    include <execinfo.h>
@@ -74,21 +119,181 @@ static const char* seiun_signal_name(int sig)
 		default: return "SIGNAL";
 	}
 }
+
+static const char* seiun_sigcode_name(int sig, int code)
+{
+	if (sig == SIGSEGV)
+	{
+		switch (code)
+		{
+			case SEGV_MAPERR: return "SEGV_MAPERR (address not mapped to object)";
+			case SEGV_ACCERR: return "SEGV_ACCERR (invalid permissions for mapped object)";
+			default: return "unknown SEGV code";
+		}
+	}
+	if (sig == SIGBUS)
+	{
+		switch (code)
+		{
+			case BUS_ADRALN: return "BUS_ADRALN (invalid address alignment)";
+			case BUS_ADRERR: return "BUS_ADRERR (non-existent physical address)";
+			case BUS_OBJERR: return "BUS_OBJERR (object-specific hardware error)";
+			default: return "unknown BUS code";
+		}
+	}
+	if (sig == SIGFPE)
+	{
+		switch (code)
+		{
+			case FPE_INTDIV: return "FPE_INTDIV (integer divide by zero)";
+			case FPE_INTOVF: return "FPE_INTOVF (integer overflow)";
+			case FPE_FLTDIV: return "FPE_FLTDIV (float divide by zero)";
+			case FPE_FLTOVF: return "FPE_FLTOVF (float overflow)";
+			case FPE_FLTUND: return "FPE_FLTUND (float underflow)";
+			case FPE_FLTRES: return "FPE_FLTRES (float inexact result)";
+			case FPE_FLTINV: return "FPE_FLTINV (invalid float operation)";
+			default: return "unknown FPE code";
+		}
+	}
+	if (sig == SIGILL)
+	{
+		switch (code)
+		{
+			case ILL_ILLOPC: return "ILL_ILLOPC (illegal opcode)";
+			case ILL_ILLOPN: return "ILL_ILLOPN (illegal operand)";
+			case ILL_ILLADR: return "ILL_ILLADR (illegal addressing mode)";
+			default: return "unknown ILL code";
+		}
+	}
+	return "unknown si_code";
+}
 #endif
 
-static void seiun_crash_path(char* path, size_t n)
+// ── engine-injected context (fed from Haxe, normal execution context) ───────
+
+static char seiun_dir[512];          // absolute crash dir with trailing slash, or ""
+static char seiun_app_info[256];     // "SeiunEngine <version> (<platform>)"
+static char seiun_ctx_line[512];     // "state=... | song=... | glErr=..."
+static char seiun_recent_logs[12288]; // TraceManager tail
+
+void seiun_set_crash_dir(const char* dir)
 {
-	time_t t = time(NULL);
-	struct tm tmv;
-#if defined(_WIN32)
-	localtime_s(&tmv, &t);
-	CreateDirectoryA("crash", NULL);
+	if (dir == NULL || dir[0] == 0) return;
+	size_t l = strlen(dir);
+	if (l >= sizeof(seiun_dir) - 48) return;
+	memcpy(seiun_dir, dir, l + 1);
+}
+
+void seiun_set_app_info(const char* info)
+{
+	if (info == NULL) return;
+	size_t l = strlen(info);
+	if (l >= sizeof(seiun_app_info)) l = sizeof(seiun_app_info) - 1;
+	memcpy(seiun_app_info, info, l);
+	seiun_app_info[l] = 0;
+}
+
+void seiun_set_runtime_context(const char* ctx)
+{
+	if (ctx == NULL) return;
+	size_t l = strlen(ctx);
+	if (l >= sizeof(seiun_ctx_line)) l = sizeof(seiun_ctx_line) - 1;
+	memcpy(seiun_ctx_line, ctx, l);
+	seiun_ctx_line[l] = 0;
+}
+
+void seiun_set_recent_logs(const char* logs)
+{
+	if (logs == NULL) return;
+	size_t l = strlen(logs);
+	if (l >= sizeof(seiun_recent_logs)) l = sizeof(seiun_recent_logs) - 1;
+	memcpy(seiun_recent_logs, logs, l);
+	seiun_recent_logs[l] = 0;
+}
+
+// CPU ABI of the running build (compile-time constant, NOT the device's
+// primary ABI - an armeabi-v7a build on an arm64 device must still resolve to
+// the armeabi-v7a linemap). Used by the Haxe layer to pick the matching
+// linemap file.
+const char* seiun_get_cpu_abi(void)
+{
+#if defined(__ANDROID__)
+	#if defined(__aarch64__)
+		return "arm64-v8a";
+	#elif defined(__arm__)
+		return "armeabi-v7a";
+	#elif defined(__x86_64__)
+		return "x86_64";
+	#elif defined(__i386__)
+		return "x86";
+	#else
+		return "unknown";
+	#endif
 #else
-	localtime_r(&t, &tmv);
-	mkdir("crash", 0755);
+	return "unknown";
 #endif
-	snprintf(path, n, "crash/native_crash_%04d%02d%02d_%02d%02d%02d.txt",
-		tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+}
+
+// ── crash linemap (precomputed DWARF line table, see tools/gen_linemap.py) ──
+//
+// Binary format (little endian):
+//   magic 'SELM', u32 version, u32 entry_count, u32 str_table_offset
+//   entries[entry_count]: { u32 rel_addr, u32 line, u32 str_off }  (sorted by rel_addr)
+//   string table (NUL-terminated file paths)
+// rel_addr is relative to the module load base (dladdr dli_fbase).
+// Entries with line==0 are "no source info" terminators; the binary search
+// returns the last entry with rel_addr <= pc, which is exact because the
+// generator emits a row at every file:line change and at every sequence end.
+// Defined on every platform (cheap no-op on Windows where PDB lines exist) so
+// the Haxe call sites link everywhere.
+
+static const unsigned char* seiun_linemap = NULL;
+static unsigned int seiun_linemap_len = 0;
+static char seiun_linemap_lib[96] = {0};
+
+void seiun_set_linemap(const void* data, unsigned int len, const char* libName)
+{
+	if (data == NULL || len < 16) return;
+	if (libName == NULL || libName[0] == 0) return;
+	size_t ll = strlen(libName);
+	if (ll >= sizeof(seiun_linemap_lib)) ll = sizeof(seiun_linemap_lib) - 1;
+	seiun_linemap = (const unsigned char*)data;
+	seiun_linemap_len = len;
+	memcpy(seiun_linemap_lib, libName, ll);
+	seiun_linemap_lib[ll] = 0;
+}
+
+static unsigned int seiun_lm_u32(const unsigned char* p)
+{
+	return (unsigned int)p[0] | ((unsigned int)p[1] << 8) |
+	       ((unsigned int)p[2] << 16) | ((unsigned int)p[3] << 24);
+}
+
+// Returns 1 and fills out with "<file>:<line>" when a source row was found.
+static int seiun_linemap_lookup(unsigned int off, char* out, size_t cap)
+{
+	out[0] = 0;
+	if (seiun_linemap == NULL || seiun_linemap_len < 20) return 0;
+	const unsigned char* b = seiun_linemap;
+	if (b[0] != 'S' || b[1] != 'E' || b[2] != 'L' || b[3] != 'M') return 0;
+	unsigned int n = seiun_lm_u32(b + 8);
+	unsigned int strOff = seiun_lm_u32(b + 12);
+	if (n == 0 || strOff == 0 || strOff >= seiun_linemap_len) return 0;
+	// binary search: last entry with rel_addr <= off
+	unsigned int lo = 0, hi = n;
+	while (lo + 1 < hi)
+	{
+		unsigned int mid = lo + (hi - lo) / 2;
+		if (seiun_lm_u32(b + 16 + (size_t)mid * 12) <= off) lo = mid; else hi = mid;
+	}
+	if (seiun_lm_u32(b + 16 + (size_t)lo * 12) > off) return 0;
+	unsigned int line = seiun_lm_u32(b + 16 + (size_t)lo * 12 + 4);
+	unsigned int so = seiun_lm_u32(b + 16 + (size_t)lo * 12 + 8);
+	if (line == 0) return 0;
+	if (strOff + so >= seiun_linemap_len) return 0;
+	const char* file = (const char*)(b + strOff + so);
+	snprintf(out, cap, "%s:%u", file, (unsigned)line);
+	return 1;
 }
 
 // ── shared output helpers ────────────────────────────────────────────────────
@@ -96,7 +301,7 @@ static void seiun_crash_path(char* path, size_t n)
 // Single crash buffer + single crash path; only one handler ever runs (the
 // first to win the crash flag). The path is computed once so multi-phase
 // writes (basic info first, enhanced log after) land on the same file.
-static char seiun_body[16384];
+static char seiun_body[65536];
 static char seiun_path[512];
 
 #if defined(_WIN32)
@@ -105,11 +310,54 @@ static volatile LONG seiun_crash_written = 0;
 static volatile sig_atomic_t seiun_crash_written = 0;
 #endif
 
+static void seiun_ensure_crash_dir(void)
+{
+#if defined(_WIN32)
+	if (seiun_dir[0]) CreateDirectoryA(seiun_dir, NULL);
+	else CreateDirectoryA("crash", NULL);
+#else
+	if (seiun_dir[0]) mkdir(seiun_dir, 0755);
+	else mkdir("crash", 0755);
+#endif
+}
+
+static void seiun_crash_path(char* path, size_t n)
+{
+	time_t t = time(NULL);
+	struct tm tmv;
+#if defined(_WIN32)
+	localtime_s(&tmv, &t);
+#else
+	localtime_r(&t, &tmv);
+#endif
+	seiun_ensure_crash_dir();
+	if (seiun_dir[0])
+		snprintf(path, n, "%snative_crash_%04d%02d%02d_%02d%02d%02d.txt",
+			seiun_dir,
+			tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+	else
+		snprintf(path, n, "crash/native_crash_%04d%02d%02d_%02d%02d%02d.txt",
+			tmv.tm_year + 1900, tmv.tm_mon + 1, tmv.tm_mday, tmv.tm_hour, tmv.tm_min, tmv.tm_sec);
+}
+
 static const char* seiun_crash_file(void)
 {
 	if (seiun_path[0] == 0)
 		seiun_crash_path(seiun_path, sizeof(seiun_path));
 	return seiun_path;
+}
+
+// Engine context (app version / state / recent log tail) shared by every
+// handler so a below-Haxe crash still carries the gameplay situation.
+static void seiun_append(char* buf, size_t cap, int* len, const char* fmt, ...);
+static void seiun_append_engine_context(char* buf, size_t cap, int* len)
+{
+	if (seiun_app_info[0])
+		seiun_append(buf, cap, len, "App: %s\n", seiun_app_info);
+	if (seiun_ctx_line[0])
+		seiun_append(buf, cap, len, "Context: %s\n", seiun_ctx_line);
+	if (seiun_recent_logs[0])
+		seiun_append(buf, cap, len, "Recent engine logs (tail, newest last):\n%s\n\n", seiun_recent_logs);
 }
 
 // vsnprintf-based append that never lets the running length pass the buffer.
@@ -133,6 +381,7 @@ static void seiun_append(char* buf, size_t cap, int* len, const char* fmt, ...)
 
 static void seiun_mark_crash_pending(void);
 
+#if defined(_WIN32)
 static void seiun_write_crash_file(const char* body)
 {
 	FILE* f = fopen(seiun_crash_file(), "w");
@@ -144,13 +393,42 @@ static void seiun_write_crash_file(const char* body)
 	}
 	seiun_mark_crash_pending();
 }
+#else
+// POSIX: fd-based writes only (stdio may allocate; the heap can be corrupted).
+static void seiun_write_fd(const char* path, const char* body, size_t len, int append)
+{
+	int fd = open(path, O_WRONLY | O_CREAT | (append ? O_APPEND : O_TRUNC), 0644);
+	if (fd < 0) return;
+	const char* p = body;
+	while (len > 0)
+	{
+		ssize_t w = write(fd, p, len);
+		if (w <= 0) break;
+		p += w;
+		len -= (size_t)w;
+	}
+	close(fd);
+}
+
+static void seiun_write_crash_file_fd(const char* body, size_t len, int append)
+{
+	seiun_write_fd(seiun_crash_file(), body, len, append);
+	seiun_mark_crash_pending();
+}
+#endif
 
 // A one-shot marker for the Haxe layer: the native handler cannot safely run
 // FlxG / CrashCatcherState itself, so the next launch consumes this file and
 // shows the existing crash-catcher recovery screen (a graceful "rollback").
 static void seiun_mark_crash_pending(void)
 {
-	FILE* f = fopen("crash/native_crash.pending", "w");
+	char mpath[600];
+	if (seiun_dir[0])
+		snprintf(mpath, sizeof(mpath), "%snative_crash.pending", seiun_dir);
+	else
+		snprintf(mpath, sizeof(mpath), "crash/native_crash.pending");
+#if defined(_WIN32)
+	FILE* f = fopen(mpath, "w");
 	if (f != NULL)
 	{
 		if (seiun_path[0] != 0)
@@ -158,10 +436,21 @@ static void seiun_mark_crash_pending(void)
 		fputc('\n', f);
 		fclose(f);
 	}
+#else
+	char mbody[600];
+	int ml = 0;
+	if (seiun_path[0] != 0)
+		seiun_append(mbody, sizeof(mbody), &ml, "%s\n", seiun_path);
+	else
+		seiun_append(mbody, sizeof(mbody), &ml, "\n");
+	seiun_write_fd(mpath, mbody, (size_t)ml, 0);
+#endif
 }
 
 // Best-effort OS popup. The process is already fatally broken, so failure is
 // intentionally silent; after the popup the original crash path continues.
+// (Android intentionally has none - the logcat mirror + next-launch recovery
+// screen are the user-visible surface there.)
 static void seiun_native_crash_popup(const char* path)
 {
 #if defined(_WIN32)
@@ -202,6 +491,369 @@ static void seiun_native_crash_popup(const char* path)
 	(void)path;
 #endif
 }
+
+// ── Android extras: logcat mirror + device properties ───────────────────────
+
+#if defined(__ANDROID__)
+typedef int (*seiun_logprint_fn)(int prio, const char* tag, const char* fmt, ...);
+static seiun_logprint_fn seiun_log_print = NULL;
+#define SEIUN_LOGCAT_TAG "SeiunEngine-Crash"
+
+// Resolved once at install time (dlopen inside a signal handler is not safe).
+static void seiun_logcat_init(void)
+{
+	void* h = dlopen("liblog.so", RTLD_NOW | RTLD_LOCAL);
+	if (h != NULL)
+		seiun_log_print = (seiun_logprint_fn)dlsym(h, "__android_log_print");
+}
+
+// Mirror the whole report to logcat, line by line (logcat truncates long
+// entries). Called strictly after the file + pending marker are on disk.
+static void seiun_logcat_mirror(const char* body)
+{
+	if (seiun_log_print == NULL) return;
+	const char* p = body;
+	char chunk[1024];
+	while (*p)
+	{
+		const char* nl = strchr(p, '\n');
+		size_t l = nl ? (size_t)(nl - p) : strlen(p);
+		if (l == 0) { p++; continue; }
+		if (l > sizeof(chunk) - 1) l = sizeof(chunk) - 1;
+		memcpy(chunk, p, l);
+		chunk[l] = 0;
+		seiun_log_print(6 /*ANDROID_LOG_ERROR*/, SEIUN_LOGCAT_TAG, "%s", chunk);
+		p += nl ? (size_t)(nl - p) + 1 : l;
+	}
+}
+
+static void seiun_write_android_props(char* buf, size_t cap, int* len)
+{
+	char model[92] = {0}, manuf[92] = {0}, release[92] = {0}, sdk[92] = {0}, fp[128] = {0};
+	__system_property_get("ro.product.model", model);
+	__system_property_get("ro.product.manufacturer", manuf);
+	__system_property_get("ro.build.version.release", release);
+	__system_property_get("ro.build.version.sdk", sdk);
+	__system_property_get("ro.build.fingerprint", fp);
+	seiun_append(buf, cap, len, "Device: %s %s | Android %s (API %s) | ABI: %s\n",
+		manuf[0] ? manuf : "?", model[0] ? model : "?",
+		release[0] ? release : "?", sdk[0] ? sdk : "?", seiun_get_cpu_abi());
+	seiun_append(buf, cap, len, "Build fingerprint: %s\n", fp[0] ? fp : "?");
+}
+#endif // __ANDROID__
+
+// ── POSIX: register dump + backtrace ────────────────────────────────────────
+
+#if !defined(_WIN32)
+
+// Per-arch register dump from the kernel signal context; also returns the
+// faulting PC via outPc.
+static uintptr_t seiun_write_registers(char* buf, size_t cap, int* len, void* uctx)
+{
+	uintptr_t pc = 0;
+	if (uctx == NULL) return 0;
+#if defined(__APPLE__) && (defined(__aarch64__) || defined(__x86_64__))
+	ucontext_t* uc = (ucontext_t*)uctx;
+  #if defined(__aarch64__)
+	// Only stable fields are used here (__fp/__lr became opaque pointers in
+	// recent macOS SDKs).
+	const __darwin_arm_thread_state64_t* ss = &uc->uc_mcontext->__ss;
+	pc = (uintptr_t)ss->__pc;
+	seiun_append(buf, cap, len, "Registers (arm64):\n");
+	seiun_append(buf, cap, len, "  PC=0x%016llx SP=0x%016llx CPSR=0x%08x\n",
+		(unsigned long long)ss->__pc, (unsigned long long)ss->__sp,
+		(unsigned)ss->__cpsr);
+	for (int i = 0; i < 29; i += 4)
+	{
+		seiun_append(buf, cap, len, "  x%-2d=0x%016llx x%-2d=0x%016llx x%-2d=0x%016llx x%-2d=0x%016llx\n",
+			i,     (unsigned long long)ss->__x[i],
+			i + 1, (unsigned long long)ss->__x[i + 1],
+			i + 2, (unsigned long long)ss->__x[i + 2],
+			i + 3, (unsigned long long)ss->__x[i + 3]);
+	}
+  #else // apple x86_64
+	const __darwin_x86_thread_state64_t* ss = &uc->uc_mcontext->__ss;
+	pc = (uintptr_t)ss->__rip;
+	seiun_append(buf, cap, len, "Registers (x64):\n");
+	seiun_append(buf, cap, len, "  RIP=0x%016llx RSP=0x%016llx RBP=0x%016llx\n",
+		(unsigned long long)ss->__rip, (unsigned long long)ss->__rsp, (unsigned long long)ss->__rbp);
+	seiun_append(buf, cap, len, "  RAX=0x%016llx RBX=0x%016llx RCX=0x%016llx RDX=0x%016llx\n",
+		(unsigned long long)ss->__rax, (unsigned long long)ss->__rbx,
+		(unsigned long long)ss->__rcx, (unsigned long long)ss->__rdx);
+  #endif
+#elif defined(__aarch64__) // linux / android
+	ucontext_t* uc = (ucontext_t*)uctx;
+	pc = (uintptr_t)uc->uc_mcontext.pc;
+	seiun_append(buf, cap, len, "Registers (arm64):\n");
+	seiun_append(buf, cap, len, "  PC=0x%016llx SP=0x%016llx LR(x30)=0x%016llx\n",
+		(unsigned long long)uc->uc_mcontext.pc, (unsigned long long)uc->uc_mcontext.sp,
+		(unsigned long long)uc->uc_mcontext.regs[30]);
+	for (int i = 0; i < 30; i += 4)
+	{
+		seiun_append(buf, cap, len, "  x%-2d=0x%016llx x%-2d=0x%016llx x%-2d=0x%016llx x%-2d=0x%016llx\n",
+			i,     (unsigned long long)uc->uc_mcontext.regs[i],
+			i + 1, (unsigned long long)uc->uc_mcontext.regs[i + 1],
+			i + 2, (unsigned long long)uc->uc_mcontext.regs[i + 2],
+			i + 3, (unsigned long long)uc->uc_mcontext.regs[i + 3]);
+	}
+#elif defined(__arm__) // linux / android
+	ucontext_t* uc = (ucontext_t*)uctx;
+	pc = (uintptr_t)uc->uc_mcontext.arm_pc;
+	seiun_append(buf, cap, len, "Registers (arm32):\n");
+	seiun_append(buf, cap, len, "  PC=0x%08lx SP=0x%08lx LR=0x%08lx FP=0x%08lx IP=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.arm_pc, (unsigned long)uc->uc_mcontext.arm_sp,
+		(unsigned long)uc->uc_mcontext.arm_lr, (unsigned long)uc->uc_mcontext.arm_fp,
+		(unsigned long)uc->uc_mcontext.arm_ip);
+	seiun_append(buf, cap, len, "  r0=0x%08lx r1=0x%08lx r2=0x%08lx r3=0x%08lx r4=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.arm_r0, (unsigned long)uc->uc_mcontext.arm_r1,
+		(unsigned long)uc->uc_mcontext.arm_r2, (unsigned long)uc->uc_mcontext.arm_r3,
+		(unsigned long)uc->uc_mcontext.arm_r4);
+	seiun_append(buf, cap, len, "  r5=0x%08lx r6=0x%08lx r7=0x%08lx r8=0x%08lx r9=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.arm_r5, (unsigned long)uc->uc_mcontext.arm_r6,
+		(unsigned long)uc->uc_mcontext.arm_r7, (unsigned long)uc->uc_mcontext.arm_r8,
+		(unsigned long)uc->uc_mcontext.arm_r9);
+	seiun_append(buf, cap, len, "  r10=0x%08lx CPSR=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.arm_r10, (unsigned long)uc->uc_mcontext.arm_cpsr);
+#elif defined(__x86_64__) // linux / android
+	ucontext_t* uc = (ucontext_t*)uctx;
+	pc = (uintptr_t)uc->uc_mcontext.gregs[REG_RIP];
+	seiun_append(buf, cap, len, "Registers (x64):\n");
+	seiun_append(buf, cap, len, "  RIP=0x%016llx RSP=0x%016llx RBP=0x%016llx\n",
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RIP],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RSP],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RBP]);
+	seiun_append(buf, cap, len, "  RAX=0x%016llx RBX=0x%016llx RCX=0x%016llx RDX=0x%016llx\n",
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RAX],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RBX],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RCX],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RDX]);
+	seiun_append(buf, cap, len, "  RSI=0x%016llx RDI=0x%016llx\n",
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RSI],
+		(unsigned long long)uc->uc_mcontext.gregs[REG_RDI]);
+#elif defined(__i386__) // linux / android
+	ucontext_t* uc = (ucontext_t*)uctx;
+	pc = (uintptr_t)uc->uc_mcontext.gregs[REG_EIP];
+	seiun_append(buf, cap, len, "Registers (x86):\n");
+	seiun_append(buf, cap, len, "  EIP=0x%08lx ESP=0x%08lx EBP=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.gregs[REG_EIP],
+		(unsigned long)uc->uc_mcontext.gregs[REG_ESP],
+		(unsigned long)uc->uc_mcontext.gregs[REG_EBP]);
+	seiun_append(buf, cap, len, "  EAX=0x%08lx EBX=0x%08lx ECX=0x%08lx EDX=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.gregs[REG_EAX],
+		(unsigned long)uc->uc_mcontext.gregs[REG_EBX],
+		(unsigned long)uc->uc_mcontext.gregs[REG_ECX],
+		(unsigned long)uc->uc_mcontext.gregs[REG_EDX]);
+	seiun_append(buf, cap, len, "  ESI=0x%08lx EDI=0x%08lx\n",
+		(unsigned long)uc->uc_mcontext.gregs[REG_ESI],
+		(unsigned long)uc->uc_mcontext.gregs[REG_EDI]);
+#endif
+	(void)buf; (void)cap; (void)len;
+	return pc;
+}
+
+static const char* seiun_posix_basename(const char* path)
+{
+	if (path == NULL) return NULL;
+	const char* b = strrchr(path, '/');
+	return b ? b + 1 : path;
+}
+
+// Tombstone-style annotation for one PC:
+// "pc 00034abc libApplicationMain-64.so (Symbol+0x1c) [source/File.cpp:123]"
+// The bare hex offset + lib name is exactly what `ndk-stack` parses.
+static void seiun_annotate_pc(char* dst, size_t cap, uintptr_t pc)
+{
+	Dl_info info;
+	memset(&info, 0, sizeof(info));
+	if (dladdr((const void*)pc, &info) != 0 && info.dli_fname != NULL)
+	{
+		uintptr_t base = (uintptr_t)info.dli_fbase;
+		const char* lib = seiun_posix_basename(info.dli_fname);
+	#if defined(__LP64__) || defined(__arm64__) || defined(__aarch64__)
+		snprintf(dst, cap, "pc %016llx %s", (unsigned long long)(pc - base), lib ? lib : "?");
+	#else
+		snprintf(dst, cap, "pc %08lx %s", (unsigned long)(pc - base), lib ? lib : "?");
+	#endif
+		if (info.dli_sname != NULL)
+		{
+			size_t used = strlen(dst);
+			snprintf(dst + used, cap - used, " (%s+0x%llx)",
+				info.dli_sname, (unsigned long long)(pc - (uintptr_t)info.dli_saddr));
+		}
+		// Exact file:line via the precomputed linemap, only for the library it
+		// was generated from (basename prefix match covers -64/-v7 suffixes).
+		if (seiun_linemap != NULL && seiun_linemap_lib[0] != 0 && lib != NULL &&
+			strncmp(lib, seiun_linemap_lib, strlen(seiun_linemap_lib)) == 0)
+		{
+			char src[256];
+			if (seiun_linemap_lookup((unsigned int)(pc - base), src, sizeof(src)) && src[0] != 0)
+			{
+				size_t used = strlen(dst);
+				snprintf(dst + used, cap - used, " [%s]", src);
+			}
+		}
+	}
+	else
+	{
+		snprintf(dst, cap, "pc 0x%llx (unknown module)", (unsigned long long)pc);
+	}
+}
+
+#if defined(SEIUN_HAS_UNWIND)
+struct seiun_bt_state
+{
+	char* buf;
+	size_t cap;
+	int* len;
+	int count;
+};
+
+static _Unwind_Reason_Code seiun_unwind_cb(struct _Unwind_Context* ctx, void* data)
+{
+	struct seiun_bt_state* st = (struct seiun_bt_state*)data;
+	uintptr_t pc = (uintptr_t)_Unwind_GetIP(ctx);
+	if (pc == 0) return _URC_END_OF_STACK;
+	char line[512];
+	seiun_annotate_pc(line, sizeof(line), pc);
+	seiun_append(st->buf, st->cap, st->len, "  #%02d %s\n", st->count, line);
+	if (++st->count >= 64) return _URC_END_OF_STACK;
+	if (*st->len < 0 || (size_t)*st->len >= st->cap - 640) return _URC_END_OF_STACK;
+	return _URC_NO_REASON;
+}
+
+// Walks the current stack. In a signal handler the interrupted frames sit
+// right above the handler frame, so frames 0-1 are the handler + kernel
+// signal trampoline and everything after that is the real crash chain.
+static int seiun_write_unwind_backtrace(char* buf, size_t cap, int* len)
+{
+	seiun_append(buf, cap, len, "Backtrace (newest first; #00-#01 are the handler/signal trampoline):\n");
+	struct seiun_bt_state st;
+	st.buf = buf; st.cap = cap; st.len = len; st.count = 0;
+	_Unwind_Backtrace(&seiun_unwind_cb, &st);
+	if (st.count == 0)
+		seiun_append(buf, cap, len, "  (unwinder produced no frames)\n");
+	return st.count;
+}
+#else
+static int seiun_write_unwind_backtrace(char* buf, size_t cap, int* len)
+{
+	(void)buf; (void)cap; (void)len;
+	return 0;
+}
+#endif
+
+// /proc/self/maps snapshot next to the crash log: the module base of every
+// mapping, required for offline llvm-symbolizer/ndk-stack runs.
+#if defined(__linux__)
+static void seiun_dump_maps(void)
+{
+	if (seiun_path[0] == 0) return;
+	char mpath[640];
+	size_t l = strlen(seiun_path);
+	if (l > 4) l -= 4; // strip ".txt"
+	snprintf(mpath, sizeof(mpath), "%.*s_maps.txt", (int)l, seiun_path);
+	int in = open("/proc/self/maps", O_RDONLY);
+	if (in < 0) return;
+	int out = open(mpath, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+	if (out >= 0)
+	{
+		char buf[8192];
+		ssize_t r;
+		while ((r = read(in, buf, sizeof(buf))) > 0)
+		{
+			ssize_t off = 0;
+			while (off < r)
+			{
+				ssize_t w = write(out, buf + off, (size_t)(r - off));
+				if (w <= 0) break;
+				off += w;
+			}
+		}
+		close(out);
+	}
+	close(in);
+}
+#endif // __linux__
+
+static void seiun_posix_finish(const char* body, int len, int btStart)
+{
+	// Phase 2 already appended into the buffer by callers; write the tail.
+	if (len > btStart)
+		seiun_write_crash_file_fd(body + btStart, (size_t)(len - btStart), 1);
+#if defined(__linux__)
+	seiun_dump_maps();
+#endif
+#if defined(__ANDROID__)
+	seiun_logcat_mirror(body);
+#else
+	seiun_native_crash_popup(seiun_crash_file());
+#endif
+}
+
+static void seiun_posix_handler(int sig, siginfo_t* si, void* uctx)
+{
+	if (seiun_crash_written != 0)
+	{
+		signal(sig, SIG_DFL);
+		raise(sig);
+		return;
+	}
+	seiun_crash_written = 1;
+
+	char* body = seiun_body;
+	size_t cap = sizeof(seiun_body);
+	int len = 0;
+	seiun_append(body, cap, &len, "Native crash (POSIX fatal signal)\n");
+	seiun_append(body, cap, &len, "Signal: %d - %s\n", sig, seiun_signal_name(sig));
+	seiun_append(body, cap, &len, "si_code: %d (%s)\n", si ? si->si_code : 0,
+		seiun_sigcode_name(sig, si ? si->si_code : 0));
+	seiun_append(body, cap, &len, "Fault address (si_addr, memory pointer): 0x%p\n",
+		si ? si->si_addr : (void*)0);
+
+	// Registers + faulting PC from the kernel signal context.
+	uintptr_t faultPc = seiun_write_registers(body, cap, &len, uctx);
+	if (faultPc != 0)
+	{
+		char ann[512];
+		seiun_annotate_pc(ann, sizeof(ann), faultPc);
+		seiun_append(body, cap, &len, "Faulting PC annotated: %s\n", ann);
+	}
+
+#if defined(__ANDROID__)
+	seiun_write_android_props(body, cap, &len);
+#endif
+	seiun_append_engine_context(body, cap, &len);
+
+	// Phase 1 on disk: everything above is durable before any unwinding.
+	seiun_write_crash_file_fd(body, (size_t)len, 0);
+
+	// Phase 2: backtrace (appended; a fault during unwind cannot destroy the
+	// phase-1 data because the file is never truncated again).
+	int btStart = len;
+	seiun_append(body, cap, &len, "\n");
+	int n = seiun_write_unwind_backtrace(body, cap, &len);
+	if (n == 0)
+	{
+		seiun_append(body, cap, &len, "Backtrace fallback (execinfo):\n");
+#if !defined(__ANDROID__)
+		void* bt[64];
+		int bn = backtrace(bt, 64);
+		for (int i = 0; i < bn; i++)
+		{
+			char ann[512];
+			seiun_annotate_pc(ann, sizeof(ann), (uintptr_t)bt[i]);
+			seiun_append(body, cap, &len, "  #%02d %s\n", i, ann);
+		}
+#else
+		seiun_append(body, cap, &len, "  (not available)\n");
+#endif
+	}
+	seiun_posix_finish(body, len, btStart);
+
+	signal(sig, SIG_DFL);
+	raise(sig);
+}
+#endif // !_WIN32
 
 // ── dbghelp (loaded lazily at crash time, never linked) ──────────────────────
 
@@ -491,6 +1143,7 @@ static LONG WINAPI seiun_seh_handler(EXCEPTION_POINTERS* info)
 			(unsigned long long)c->Pc, (unsigned long long)c->Sp);
 #endif
 	}
+	seiun_append_engine_context(body, cap, &len);
 
 	// Phase 1 on disk: registers/exception info land even if dbghelp itself
 	// dies inside a corrupted heap while resolving symbols below.
@@ -525,54 +1178,12 @@ static void __cdecl seiun_sigabrt_handler(int sig)
 	size_t cap = sizeof(seiun_body);
 	int len = 0;
 	seiun_append(body, cap, &len, "Native crash (abort()/terminate path - SIGABRT; CRT assert, pure virtual call, etc.)\n");
+	seiun_append_engine_context(body, cap, &len);
 	len += seiun_write_live_backtrace(body + len, cap - (size_t)len);
 	seiun_write_crash_file(body);
 	seiun_native_crash_popup(seiun_crash_file());
 }
 #endif // _WIN32
-
-// ── POSIX: fatal signal handler ──────────────────────────────────────────────
-
-#if !defined(_WIN32)
-static void seiun_posix_handler(int sig, siginfo_t* si, void* uctx)
-{
-	(void)uctx;
-	if (seiun_crash_written != 0)
-	{
-		signal(sig, SIG_DFL);
-		raise(sig);
-		return;
-	}
-	seiun_crash_written = 1;
-
-	char body[4096];
-	int len = 0;
-	seiun_append(body, sizeof(body), &len, "Native crash (POSIX signal)\n");
-	seiun_append(body, sizeof(body), &len, "Signal: %d - %s, si_code=%d\n", sig, seiun_signal_name(sig), si ? si->si_code : 0);
-	seiun_append(body, sizeof(body), &len, "Fault address (si_addr, memory pointer): 0x%p\n", si ? si->si_addr : (void*)0);
-	seiun_write_crash_file(body);
-	// Popup before backtrace: backtrace/execinfo can itself be fragile after a
-	// memory corruption, but the marker/log is already on disk by now.
-	seiun_native_crash_popup(seiun_crash_file());
-
-#if !defined(__ANDROID__)
-	int fd = open(seiun_crash_file(), O_WRONLY | O_CREAT | O_TRUNC, 0644);
-	if (fd >= 0)
-	{
-		const char* head = "SeiunEngine native crash recorded\n";
-		write(fd, head, strlen(head));
-		write(fd, body, (size_t)len);
-		void* bt[64];
-		int n = backtrace(bt, 64);
-		backtrace_symbols_fd(bt, n, fd);
-		close(fd);
-	}
-#endif
-
-	signal(sig, SIG_DFL);
-	raise(sig);
-}
-#endif // !_WIN32
 
 // ── LuaJIT panic hook (both platforms) ───────────────────────────────────────
 
@@ -612,6 +1223,7 @@ static int seiun_lua_panic_handler(lua_State* L)
 		seiun_append(body, cap, &len, "Native crash (LuaJIT panic: unprotected error in call to Lua API)\n");
 		const char* msg = (L != NULL) ? lua_tolstring(L, -1, NULL) : NULL;
 		seiun_append(body, cap, &len, "Lua error message: %s\n", (msg != NULL) ? msg : "(non-string error object)");
+		seiun_append_engine_context(body, cap, &len);
 #if defined(_WIN32)
 		seiun_dbghelp_init();
 		// Phase 1: basic body + popup/marker before the (fragile) live backtrace.
@@ -622,30 +1234,19 @@ static int seiun_lua_panic_handler(lua_State* L)
 		seiun_write_crash_file(body);
 #else
 		{
-			const char* path = seiun_crash_file();
-			int fd = open(path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
-			if (fd >= 0)
-			{
-				const char* head = "SeiunEngine native crash recorded (LuaJIT panic)\n";
-				write(fd, head, strlen(head));
-				write(fd, body, (size_t)len);
-				close(fd);
-			}
-			seiun_mark_crash_pending();
-			seiun_native_crash_popup(path);
-
-			// Append the backtrace separately so a crash during backtrace still
-			// leaves the message + marker + popup behind.
-			int fd2 = open(path, O_WRONLY | O_APPEND, 0644);
-			if (fd2 >= 0)
-			{
-#if !defined(__ANDROID__)
-				void* bt[64];
-				int n = backtrace(bt, 64);
-				backtrace_symbols_fd(bt, n, fd2);
+			int btStart = len;
+			seiun_append(body, cap, &len, "\nBacktrace (stack intact at panic time):\n");
+			seiun_write_unwind_backtrace(body, cap, &len);
+			seiun_write_crash_file_fd(body, (size_t)len, 0);
+#if defined(__linux__)
+			seiun_dump_maps();
 #endif
-				close(fd2);
-			}
+#if defined(__ANDROID__)
+			seiun_logcat_mirror(body);
+#else
+			seiun_native_crash_popup(seiun_crash_file());
+#endif
+			(void)btStart;
 		}
 #endif
 	}
@@ -669,10 +1270,24 @@ static void seiun_install_native_crash_hooks()
 	// SIGABRT: the only signal UCRT abort() honors before terminating.
 	signal(SIGABRT, seiun_sigabrt_handler);
 #else
+#if defined(__ANDROID__)
+	seiun_logcat_init();
+#endif
+	// Alternate signal stack: a SIGSEGV from stack overflow has no usable stack
+	// left; SA_ONSTACK lets the handler run (and write its log) on this one.
+	{
+		static char seiun_altstack[64 * 1024];
+		stack_t ss;
+		memset(&ss, 0, sizeof(ss));
+		ss.ss_sp = seiun_altstack;
+		ss.ss_size = sizeof(seiun_altstack);
+		ss.ss_flags = 0;
+		sigaltstack(&ss, NULL);
+	}
 	struct sigaction sa;
 	memset(&sa, 0, sizeof(sa));
 	sa.sa_sigaction = seiun_posix_handler;
-	sa.sa_flags = SA_SIGINFO | SA_RESETHAND;
+	sa.sa_flags = SA_SIGINFO | SA_RESETHAND | SA_ONSTACK;
 	sigemptyset(&sa.sa_mask);
 	sigaction(SIGSEGV, &sa, NULL);
 	sigaction(SIGABRT, &sa, NULL);

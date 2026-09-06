@@ -14,6 +14,11 @@ import openfl.text.TextFormatAlign;
 import openfl.geom.Matrix;
 import states.MainMenuState;
 import backend.DeviceInfo;
+import backend.GcState;
+import backend.NativeMem;
+#if cpp
+import cpp.vm.Gc as CppGc;
+#end
 #if gl_stats
 import openfl.display._internal.stats.Context3DStats;
 import openfl.display._internal.stats.DrawCallContext;
@@ -26,55 +31,76 @@ import openfl.Lib;
 @:fileXml('tags="haxe,release"')
 @:noDebug
 #end
+
 class FPS extends Sprite
 {
 	public var currentFPS(default, null):Int;
 
-	private var cacheCount:Int;
+	public var minFPS(default, null):Int = 0;
+	public var avgFPS(default, null):Int = 0;
+
 	private var currentTime:Float;
 	private var times:Array<Float>;
-	private var maxMemory:Float = 0;
-	private var dataFont:Font;
-	private var fpsHistory:Array<Float>;
-	private var memHistory:Array<Float>;
-	private var memChartCeil:Float = 100;
 	private var sampleAccum:Float = 0;
 
-	private static inline var P:Float = 10;
-	private static inline var CH_W:Float = 280;
-	private static inline var CH_H:Float = 52;
-	private static inline var INTERVALS:Int = 6;
-	private static inline var LABEL_W:Float = 40;
-	private static inline var SAMPLE_MS:Float = 25;
-	private static inline var HISTORY_MAX:Int = 10;
+	var fpsHistory:Array<Float>;
+	var heapHistory:Array<Float>;
+	var ramHistory:Array<Float>;
+	var heapPeak:Float = 0; 
+	var ramPeak:Float = 0;  
+	var heapCeil:Float = 100;
+	var ramCeil:Float = 100;
 
 	var mode:Int = 0;
 	var baseColor:Int;
+	var dataFont:Font;
+
+	static inline var P:Float = 8;
+	static inline var CH_W:Float = 208;
+	static inline var CH_H:Float = 34;
+	static inline var INTERVALS:Int = 4;
+	static inline var LABEL_W:Float = 32;
+	static inline var SAMPLE_MS:Float = 100;
+	static inline var HISTORY_MAX:Int = 240;
+
+	static inline var BG_ALPHA:Float = 0.62;
+	static inline var C_LBL:Int  = 0xA8B0B8;
+	static inline var C_VAL:Int  = 0xFFFFFF; 
+	static inline var C_META:Int = 0x9AA4AE; 
+	static inline var C_SOFT:Int = 0xB8B8B8; 
+	static inline var C_DIM:Int  = 0xA8A8A8; 
+	static inline var C_FAINT:Int = 0x9E9E9E;
 
 	var fpsNum:TextField;
 	var fpsLbl:TextField;
-	var memPre:TextField;
-	var memNum:TextField;
-	var memUnit:TextField;
-	var memMax:TextField;
+	var fpsMinMax:TextField;
+	var turboBadge:TextField;
+	var noGcBadge:TextField;
+
+	var heapPre:TextField;
+	var heapNum:TextField;
+	var heapPeakT:TextField;
+	var heapResT:TextField;
+	var ramPre:TextField;
+	var ramNum:TextField;
+	var ramPeakT:TextField;
+	var ramTotalT:TextField;
+
 	var verText:TextField;
 	var dcText:TextField;
 	var devText:TextField;
 
 	var fpsChart:Shape;
-	var memChart:Shape;
+	var heapChart:Shape;
+	var ramChart:Shape;
 	var div1:Shape;
 	var div2:Shape;
 	var fpsCVal:TextField;
-	var memCVal:TextField;
-
+	var heapCVal:TextField;
+	var ramCVal:TextField;
 	var fpsYLab:Array<TextField>;
-	var memYLab:Array<TextField>;
-
-	var _lastFPS:Int = -1;
-	var _lastMem:Float = -1;
-	var _lastColor:Int = -1;
-	var _lastMode:Int = -1;
+	var heapYLab:Array<TextField>;
+	var ramYLab:Array<TextField>;
 
 	public function new(x:Float = 10, y:Float = 10, color:Int = 0xFFFFFF)
 	{
@@ -90,36 +116,47 @@ class FPS extends Sprite
 		mouseEnabled = false;
 		mouseChildren = false;
 
-		cacheCount = 0;
 		currentTime = 0;
 		times = [];
 		fpsHistory = [];
-		memHistory = [];
+		heapHistory = [];
+		ramHistory = [];
 
-		fpsNum   = mkField();
-		fpsLbl   = mkField();
-		memPre   = mkField();
-		memNum   = mkField();
-		memUnit  = mkField();
-		memMax   = mkField();
-		verText  = mkField();
-		dcText   = mkField();
-		devText  = mkField();
+		fpsNum     = mkField();
+		fpsLbl     = mkField();
+		fpsMinMax  = mkField();
+		turboBadge = mkField();
+		noGcBadge  = mkField();
+		heapPre    = mkField();
+		heapNum    = mkField();
+		heapPeakT  = mkField();
+		heapResT   = mkField();
+		ramPre     = mkField();
+		ramNum     = mkField();
+		ramPeakT   = mkField();
+		ramTotalT  = mkField();
+		verText    = mkField();
+		dcText     = mkField();
+		devText    = mkField();
 
 		fpsChart = new Shape();
-		memChart = new Shape();
+		heapChart = new Shape();
+		ramChart = new Shape();
 		div1 = new Shape();
 		div2 = new Shape();
 		addChild(fpsChart);
-		addChild(memChart);
+		addChild(heapChart);
+		addChild(ramChart);
 		addChild(div1);
 		addChild(div2);
 
 		fpsCVal = mkField();
-		memCVal = mkField();
+		heapCVal = mkField();
+		ramCVal = mkField();
 
 		fpsYLab = [for (i in 0...4) mkField()];
-		memYLab = [for (i in 0...4) mkField()];
+		heapYLab = [for (i in 0...4) mkField()];
+		ramYLab = [for (i in 0...4) mkField()];
 
 		#if flash
 		addEventListener(Event.ENTER_FRAME, function(e) {
@@ -165,126 +202,212 @@ class FPS extends Sprite
 		if (nowFPS > ClientPrefs.data.framerate) nowFPS = ClientPrefs.data.framerate;
 		currentFPS = nowFPS;
 
+		var sampled = false;
 		sampleAccum += deltaTime;
 		if (sampleAccum >= SAMPLE_MS)
 		{
 			sampleAccum = 0;
+			sampled = true;
+
 			fpsHistory.push(currentFPS);
 			if (fpsHistory.length > HISTORY_MAX) fpsHistory.shift();
 
-			var mem = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
-			if (mem > maxMemory) maxMemory = mem;
-			memHistory.push(mem);
-			if (memHistory.length > HISTORY_MAX) memHistory.shift();
+			var heap = Math.abs(System.totalMemory / 1000000);
+			if (heap > heapPeak) heapPeak = heap;
+			heapHistory.push(heap);
+			if (heapHistory.length > HISTORY_MAX) heapHistory.shift();
 
-			if (visible) updateDisplay();
+			NativeMem.update();
+			if (NativeMem.rssBytes >= 0)
+			{
+				var ram = Math.abs(NativeMem.rssBytes / 1048576);
+				if (ram > ramPeak) ramPeak = ram;
+				ramHistory.push(ram);
+				if (ramHistory.length > HISTORY_MAX) ramHistory.shift();
+			}
+
+			minFPS = 9999;
+			var sum:Float = 0;
+			for (v in fpsHistory)
+			{
+				if (v < minFPS) minFPS = Std.int(v);
+				sum += v;
+			}
+			if (minFPS == 9999) minFPS = 0;
+			avgFPS = fpsHistory.length > 0 ? Std.int(sum / fpsHistory.length) : 0;
 		}
+
+		if (visible) updateDisplay(sampled);
 	}
 
-	function updateDisplay():Void
+	function updateDisplay(sampled:Bool):Void
 	{
-		var mem = Math.abs(FlxMath.roundDecimal(System.totalMemory / 1000000, 1));
-		var fn  = (dataFont != null && dataFont.fontName != null) ? dataFont.fontName : "_sans";
+		var fn = fontName();
+		var heap = Math.abs(System.totalMemory / 1000000);
+		var ram:Float = NativeMem.rssBytes >= 0 ? Math.abs(NativeMem.rssBytes / 1048576) : -1;
 
 		var c = baseColor;
-		if (mem > 3000 || currentFPS <= ClientPrefs.data.framerate / 2)
+		if (heap > 3000 || currentFPS <= ClientPrefs.data.framerate / 2)
 			c = 0xFF5555;
-		else if (mem > 2000 || currentFPS <= ClientPrefs.data.framerate / 1.5)
+		else if (heap > 2000 || currentFPS <= ClientPrefs.data.framerate / 1.5)
 			c = 0xFFB347;
 
 		if (mode == 0)
-			compact(fn, c, mem);
+			compact(fn, c, heap, ram);
 		else
-			debug(fn, c, mem);
+			debug(fn, c, heap, ram, sampled);
 
 		drawBg();
 	}
 
-	function compact(fn:String, c:Int, mem:Float):Void
+
+	function compact(fn:String, c:Int, heap:Float, ram:Float):Void
 	{
 		hideDebug();
 
-		var mp = formatMemory(mem).split(" ");
 		var y0 = P;
+		var x:Float = P;
 
-		setFmt(fpsNum,  fn, 15, c,         1.0, currentFPS + "", P, y0);
-		setFmt(fpsLbl,  fn, 12, 0xAAAAAA,  0,   "FPS",  fpsNum.x + fpsNum.width + 7, y0 + 1);
-		setFmt(memNum,  fn, 15, 0xDDDDDD,  1.0, mp[0],  fpsLbl.x + fpsLbl.width + 12, y0);
-		setFmt(memUnit, fn, 12, 0xAAAAAA,  0,   mp[1],  memNum.x + memNum.width + 4, y0 + 1);
+		setFmt(fpsNum, fn, 14, c, 1.0, currentFPS + "", x, y0);
+		x = fpsNum.x + fpsNum.width + 5;
+		setFmt(fpsLbl, fn, 10, C_SOFT, 0, "FPS", x, y0 + 2);
+		x = fpsLbl.x + fpsLbl.width + 8;
 
-		setFmt(verText, fn, 10, 0x999999, 0, "v" + MainMenuState.seiunengineVersion
-			+ " | " + DeviceInfo.osName() + " " + DeviceInfo.architecture(),
-			P, y0 + fpsNum.height + 2);
+		setFmt(heapPre, fn, 10, C_LBL, 0, "HEAP", x, y0 + 2);
+		x = heapPre.x + heapPre.width + 3;
+		setFmt(heapNum, fn, 14, C_VAL, 1.0, formatCompactMem(heap), x, y0);
+		x = heapNum.x + heapNum.width + 8;
+
+		if (ram >= 0)
+		{
+			setFmt(ramPre, fn, 10, C_LBL, 0, "RAM", x, y0 + 2);
+			x = ramPre.x + ramPre.width + 3;
+			setFmt(ramNum, fn, 14, C_VAL, 1.0, formatCompactMem(ram), x, y0);
+			x = ramNum.x + ramNum.width + 8;
+		}
+		else
+			ramPre.visible = ramNum.visible = false;
+
+		x = badge(turboBadge, ClientPrefs.data.turboMode, "TURBO", 0xFFD24A, fn, x, y0 + 2);
+		badge(noGcBadge, gcOff(), "NO GC", 0xFF6666, fn, x, y0 + 2);
+
+		setFmt(verText, fn, 9, C_DIM, 0,
+			"v" + MainMenuState.seiunengineVersion + " | " + DeviceInfo.osName() + " " + DeviceInfo.architecture(),
+			P, y0 + fpsNum.height + 1);
 	}
 
-	function debug(fn:String, c:Int, mem:Float):Void
+
+	function debug(fn:String, c:Int, heap:Float, ram:Float, sampled:Bool):Void
 	{
-		var mp = formatMemory(mem).split(" ");
-		var xp = formatMemory(maxMemory).split(" ");
 		var ver = MainMenuState.seiunengineVersion;
 
 		var r1y = P;
-		setFmt(fpsNum, fn, 24, c,        1.2, currentFPS + "", P, r1y);
-		setFmt(fpsLbl, fn, 14, 0xAAAAAA, 0,   "FPS",
-			fpsNum.x + fpsNum.width + 10, r1y + 3);
+		setFmt(fpsNum, fn, 20, c, 1.0, currentFPS + "", P, r1y);
+		setFmt(fpsLbl, fn, 12, C_SOFT, 0, "FPS", fpsNum.x + fpsNum.width + 8, r1y + 3);
 
-		var r2y = r1y + fpsNum.height + 8;
-		var r2off = r2y + 2;
-		setFmt(memPre,  fn, 12, 0x888888, 0, "MEM", P, r2off);
-		setFmt(memNum,  fn, 18, c,        1.2, mp[0], memPre.x + memPre.width + 5, r2y);
-		setFmt(memUnit, fn, 12, 0xCCCCCC, 0,   mp[1], memNum.x + memNum.width + 5, r2off);
-		setFmt(memMax,  fn, 12, 0x777777, 0,
-			"/ max " + xp[0] + " " + xp[1], memUnit.x + memUnit.width + 7, r2off);
+		var bx = fpsLbl.x + fpsLbl.width + 10;
+		bx = badge(turboBadge, ClientPrefs.data.turboMode, "TURBO", 0xFFD24A, fn, bx, r1y + 6);
+		badge(noGcBadge, gcOff(), "NO GC", 0xFF6666, fn, bx, r1y + 6);
 
-		var hdrBot = r2y + memNum.height;
+		setFmt(fpsMinMax, fn, 9, C_DIM, 0,
+			"min " + minFPS + " avg " + avgFPS, P, r1y + fpsNum.height);
 
-		drawDiv(div1, hdrBot + 6, CH_W + LABEL_W);
+		var y = fpsMinMax.y + fpsMinMax.height + 4;
 
-		var chY = hdrBot + 12;
+		setFmt(heapPre, fn, 10, C_LBL, 0, "HEAP", P, y + 2);
+		setFmt(heapNum, fn, 13, C_VAL, 1.0, formatCompactMem(heap), heapPre.x + heapPre.width + 4, y);
+		setFmt(heapPeakT, fn, 9, C_META, 0, "pk " + formatCompactMem(heapPeak), heapNum.x + heapNum.width + 6, y + 3);
+		#if cpp
+		setFmt(heapResT, fn, 9, C_META, 0,
+			"rs " + formatCompactMem(CppGc.memInfo64(CppGc.MEM_INFO_RESERVED) / 1000000),
+			heapPeakT.x + heapPeakT.width + 6, y + 3);
+		#else
+		heapResT.visible = false;
+		#end
+		y = heapNum.y + heapNum.height + 2;
+
+		var ramKnown = ram >= 0;
+		if (ramKnown)
+		{
+			setFmt(ramPre, fn, 10, C_LBL, 0, "RAM", P, y + 2);
+			setFmt(ramNum, fn, 13, C_VAL, 1.0, formatCompactMem(ram), ramPre.x + ramPre.width + 4, y);
+			setFmt(ramPeakT, fn, 9, C_META, 0, "pk " + formatCompactMem(ramPeak), ramNum.x + ramNum.width + 6, y + 3);
+			if (NativeMem.totalPhysBytes > 0)
+				setFmt(ramTotalT, fn, 9, C_META, 0, "/ " + formatCompactMem(NativeMem.totalPhysBytes / 1048576),
+					ramPeakT.x + ramPeakT.width + 6, y + 3);
+			else
+				ramTotalT.visible = false;
+			y = ramNum.y + ramNum.height + 2;
+		}
+		else
+			ramPre.visible = ramNum.visible = ramPeakT.visible = ramTotalT.visible = false;
+
+		drawDiv(div1, y + 3, CH_W + LABEL_W);
+
+		var chartX = P + LABEL_W;
+		var chY = y + 9;
+
 		fpsChart.visible = true;
-		fpsChart.x = P + LABEL_W;
+		fpsChart.x = chartX;
 		fpsChart.y = chY;
-		var fpsMax:Float = ClientPrefs.data.framerate;
-		drawChart(fpsChart, fpsHistory, fpsMax, CH_W, CH_H, 0x44FF66, 0.9, true);
-		layoutYLabels(fpsYLab, chY, ClientPrefs.data.framerate, fn, 0x44FF66);
-		setFmt(fpsCVal, fn, 10, 0x44FF66, 0, currentFPS + " fps",
-			P + LABEL_W + CH_W - 59, chY + 3);
+		if (sampled) drawChart(fpsChart, fpsHistory, ClientPrefs.data.framerate, CH_W, CH_H, 0x55FF77, 0.9, true);
+		layoutYLabels(fpsYLab, chY, ClientPrefs.data.framerate, fn);
+		setFmt(fpsCVal, fn, 8, 0x77EE88, 0, currentFPS + " fps", chartX, chY + 2);
+		fpsCVal.x = chartX + CH_W - fpsCVal.width - 3;
+		chY += CH_H + 6;
 
-		memChartCeil = computeCeil(memHistory);
-		var mcy = chY + CH_H + 10;
-		memChart.visible = true;
-		memChart.x = P + LABEL_W;
-		memChart.y = mcy;
-		drawChart(memChart, memHistory, memChartCeil, CH_W, CH_H, 0xFFB347, 0.8, false);
-		layoutYLabels(memYLab, mcy, memChartCeil, fn, 0xFFB347);
-		setFmt(memCVal, fn, 10, 0xFFB347, 0, formatCompactMem(mem),
-			P + LABEL_W + CH_W - 59, mcy + 3);
+		heapChart.visible = true;
+		heapChart.x = chartX;
+		heapChart.y = chY;
+		heapCeil = computeCeil(heapHistory, heapCeil);
+		if (sampled) drawChart(heapChart, heapHistory, heapCeil, CH_W, CH_H, 0xFFB347, 0.85);
+		layoutYLabels(heapYLab, chY, heapCeil, fn);
+		setFmt(heapCVal, fn, 8, 0xFFC46B, 0, formatCompactMem(heap), chartX, chY + 2);
+		heapCVal.x = chartX + CH_W - heapCVal.width - 3;
+		chY += CH_H + 6;
 
-		var cBot = mcy + CH_H;
-		drawDiv(div2, cBot + 6, CH_W + LABEL_W);
+		if (ramKnown)
+		{
+			ramChart.visible = true;
+			ramChart.x = chartX;
+			ramChart.y = chY;
+			ramCeil = computeCeil(ramHistory, ramCeil);
+			if (sampled) drawChart(ramChart, ramHistory, ramCeil, CH_W, CH_H, 0x66BBFF, 0.85);
+			layoutYLabels(ramYLab, chY, ramCeil, fn);
+			setFmt(ramCVal, fn, 8, 0x88CCFF, 0, formatCompactMem(ram), chartX, chY + 2);
+			ramCVal.x = chartX + CH_W - ramCVal.width - 3;
+			chY += CH_H + 6;
+		}
+		else
+		{
+			ramChart.visible = false;
+			ramCVal.visible = false;
+			for (tf in ramYLab) tf.visible = false;
+		}
 
-		var fy = cBot + 12;
+		// ── 页脚 ──
+		drawDiv(div2, chY + 1, CH_W + LABEL_W);
+		var fy = chY + 6;
+
 		#if (gl_stats && !disable_cffi && (!html5 || !canvas))
 		var dc = "DC tot:" + Context3DStats.totalDrawCalls()
-			+ "  stg:" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE)
-			+ "  3D:" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE3D);
-		setFmt(dcText, fn, 11, 0x777777, 0, dc, P, fy);
-		fy += dcText.height + 4;
+			+ " stg:" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE)
+			+ " 3D:" + Context3DStats.contextDrawCalls(DrawCallContext.STAGE3D);
+		setFmt(dcText, fn, 9, C_FAINT, 0, dc, P, fy);
+		fy += dcText.height + 3;
 		dcText.visible = true;
 		#else
 		dcText.visible = false;
 		#end
 
-		setFmt(verText, fn, 12, 0x999999, 0, "SeiunEngine v" + ver, P, fy);
-		fy += verText.height + 4;
-		setFmt(devText, fn, 10, 0x666666, 0,
-			DeviceInfo.shortSummary(48),
-			P, fy);
+		setFmt(verText, fn, 10, C_DIM, 0,
+			"SeiunEngine v" + ver + " | GC " + (gcOff() ? "OFF" : "ON"), P, fy);
+		fy += verText.height + 2;
+		setFmt(devText, fn, 9, C_FAINT, 0, DeviceInfo.shortSummary(48), P, fy);
 		devText.visible = true;
 	}
 
-	function layoutYLabels(labels:Array<TextField>, chartY:Float, maxVal:Float,
-			fn:String, col:Int):Void
+	function layoutYLabels(labels:Array<TextField>, chartY:Float, maxVal:Float, fn:String):Void
 	{
 		var fracs:Array<Float> = [1.0, 2.0/3.0, 1.0/3.0, 0.0];
 		for (i in 0...labels.length)
@@ -301,10 +424,10 @@ class FPS extends Sprite
 			var tf = labels[i];
 			tf.visible = true;
 			tf.text = labelText;
-			var f = new TextFormat(fn, 8, 0x777777);
+			var f = new TextFormat(fn, 7, C_META);
 			f.align = TextFormatAlign.RIGHT;
 			tf.setTextFormat(f);
-			tf.x = P + LABEL_W - tf.width - 4;
+			tf.x = P + LABEL_W - tf.width - 3;
 			var frac:Float = fracs[i];
 			tf.y = chartY + CH_H * (1 - frac) - tf.height / 2;
 		}
@@ -312,49 +435,62 @@ class FPS extends Sprite
 
 	function hideDebug():Void
 	{
-		memPre.visible   = false;
-		memMax.visible   = false;
-		dcText.visible   = false;
-		devText.visible  = false;
-		fpsChart.visible = false;
-		memChart.visible = false;
-		div1.visible     = false;
-		div2.visible     = false;
-		fpsCVal.visible  = false;
-		memCVal.visible  = false;
+		fpsMinMax.visible = false;
+		heapPre.visible = heapNum.visible = heapPeakT.visible = heapResT.visible = false;
+		ramPre.visible = ramNum.visible = ramPeakT.visible = ramTotalT.visible = false;
+		dcText.visible = devText.visible = false;
+		fpsChart.visible = heapChart.visible = ramChart.visible = false;
+		div1.visible = div2.visible = false;
+		fpsCVal.visible = heapCVal.visible = ramCVal.visible = false;
 		for (tf in fpsYLab) tf.visible = false;
-		for (tf in memYLab) tf.visible = false;
+		for (tf in heapYLab) tf.visible = false;
+		for (tf in ramYLab) tf.visible = false;
 	}
 
+	
 	function setFmt(tf:TextField, font:String, size:Int, color:Int,
 			letter:Float, text:String, px:Float, py:Float):Void
 	{
-		var sameText = (tf.text == text && tf.x == px && tf.y == py);
-		var sameSize = (tf.textWidth > 0 && Std.int(tf.getTextFormat().size) == size);
-		if (!sameText || !tf.visible || !sameSize)
+		if (tf.visible && tf.text == text && tf.x == px && tf.y == py)
 		{
-			tf.visible = true;
-			tf.text = text;
-			var f = new TextFormat(font, size, color);
-			if (letter > 0) f.letterSpacing = letter;
-			tf.setTextFormat(f);
-			tf.x = px;
-			tf.y = py;
+			var f = tf.getTextFormat();
+			if (Std.int(f.size) == size && Std.int(f.color) == color
+				&& (letter <= 0 || f.letterSpacing == letter))
+				return;
 		}
+		tf.visible = true;
+		tf.text = text;
+		var f = new TextFormat(font, size, color);
+		if (letter > 0) f.letterSpacing = letter;
+		tf.setTextFormat(f);
+		tf.x = px;
+		tf.y = py;
 	}
 
-	function computeCeil(h:Array<Float>):Float
+	function badge(tf:TextField, on:Bool, text:String, color:Int,
+			fn:String, x:Float, y:Float):Float
 	{
-		if (h.length == 0) return 100;
+		if (!on)
+		{
+			tf.visible = false;
+			return x;
+		}
+		setFmt(tf, fn, 10, color, 0.5, text, x, y);
+		return tf.x + tf.width + 6;
+	}
+
+	function computeCeil(hist:Array<Float>, cur:Float):Float
+	{
+		if (hist.length == 0) return 100;
 		var pk:Float = 0;
-		var s:Int = h.length - 60;
+		var s = hist.length - 120; // 只看最近 12s
 		if (s < 0) s = 0;
-		for (i in s...h.length)
-			if (h[i] > pk) pk = h[i];
+		for (i in s...hist.length)
+			if (hist[i] > pk) pk = hist[i];
 		var prop = Math.ceil(pk * 1.2 / 100) * 100;
 		if (prop < 100) prop = 100;
-		if (prop > memChartCeil) return prop;
-		return FlxMath.lerp(memChartCeil, prop, 0.03);
+		if (prop > cur) return prop;
+		return FlxMath.lerp(cur, prop, 0.03);
 	}
 
 	function drawDiv(sh:Shape, y:Float, w:Float):Void
@@ -362,7 +498,7 @@ class FPS extends Sprite
 		sh.visible = true;
 		var g = sh.graphics;
 		g.clear();
-		g.lineStyle(1, 0xFFFFFF, 0.06);
+		g.lineStyle(1, 0xFFFFFF, 0.10);
 		g.moveTo(P, y);
 		g.lineTo(P + w, y);
 	}
@@ -382,17 +518,17 @@ class FPS extends Sprite
 
 		if (mode == 1)
 		{
-			// Dynamic size: charts give the minimum width, but long lines
-			// (device info / draw calls) may be wider - measure every visible
-			// debug text so nothing overflows the rounded box.
 			w = CH_W + LABEL_W + P * 2;
 			var bot = P;
-			for (k in [fpsNum, fpsLbl, memPre, memNum, memUnit, memMax,
-				fpsCVal, memCVal, dcText, verText, devText])
+			var fields = [fpsNum, fpsLbl, fpsMinMax, turboBadge, noGcBadge,
+				heapPre, heapNum, heapPeakT, heapResT,
+				ramPre, ramNum, ramPeakT, ramTotalT,
+				fpsCVal, heapCVal, ramCVal, dcText, verText, devText];
+			for (k in fields)
 			{
 				if (k == null || !k.visible) continue;
 				var right = k.x + k.width;
-				if (right > w) w = right + P;
+				if (right + P > w) w = right + P;
 				if (k.y + k.height > bot) bot = k.y + k.height;
 			}
 			h = bot + P;
@@ -400,7 +536,8 @@ class FPS extends Sprite
 		else
 		{
 			var right = P, bot = P;
-			for (k in [fpsNum, fpsLbl, memNum, memUnit, verText])
+			for (k in [fpsNum, fpsLbl, heapPre, heapNum, ramPre, ramNum,
+				turboBadge, noGcBadge, verText])
 			{
 				if (!k.visible) continue;
 				if (k.x + k.width > right) right = k.x + k.width;
@@ -410,17 +547,25 @@ class FPS extends Sprite
 			h = bot + P;
 		}
 
-		graphics.beginFill(0x000000, 0.45);
-		graphics.drawRoundRect(0, 0, w, h, 8, 8);
+		graphics.beginFill(0x000000, BG_ALPHA);
+		graphics.drawRoundRect(0, 0, w, h, 6, 6);
 		graphics.endFill();
-		graphics.lineStyle(1, 0xFFFFFF, 0.06);
-		graphics.drawRoundRect(0, 0, w, h, 8, 8);
+		graphics.lineStyle(1, 0xFFFFFF, 0.10);
+		graphics.drawRoundRect(0, 0, w, h, 6, 6);
 	}
 
-	function formatMemory(megas:Float):String
+	function fontName():String
 	{
-		if (megas >= 1024) return FlxMath.roundDecimal(megas / 1024, 2) + " GB";
-		return megas + " MB";
+		return (dataFont != null && dataFont.fontName != null) ? dataFont.fontName : "_sans";
+	}
+
+	inline function gcOff():Bool
+	{
+		#if cpp
+		return GcState.disabled;
+		#else
+		return false;
+		#end
 	}
 
 	function getColorForFPS(fps:Float, maxFPS:Float):Int
@@ -447,12 +592,12 @@ class FPS extends Sprite
 		{
 			var frac:Float = k / INTERVALS;
 			var gy = h * (1 - frac);
-			gfx.lineStyle(1, 0xFFFFFF, 0.04);
+			gfx.lineStyle(1, 0xFFFFFF, 0.05);
 			gfx.moveTo(0, gy);
 			gfx.lineTo(w, gy);
 		}
 
-		gfx.lineStyle(1, 0xFFFFFF, 0.08);
+		gfx.lineStyle(1, 0xFFFFFF, 0.10);
 		gfx.drawRect(0, 0, w, h);
 
 		var points:Array<{x:Float, y:Float}> = [];
@@ -491,19 +636,17 @@ class FPS extends Sprite
 			{
 				var avg = (data[i] + data[i+1]) / 2;
 				var lineCol = getColorForFPS(avg, maxFPS);
-				gfx.lineStyle(3, lineCol, alpha);
+				gfx.lineStyle(2, lineCol, alpha);
 				gfx.moveTo(points[i].x, points[i].y);
 				gfx.lineTo(points[i+1].x, points[i+1].y);
 			}
 		}
 		else
 		{
-			gfx.lineStyle(3, col, alpha);
+			gfx.lineStyle(2, col, alpha);
 			gfx.moveTo(points[0].x, points[0].y);
 			for (i in 1...len)
 				gfx.lineTo(points[i].x, points[i].y);
 		}
 	}
-
-	static inline function max(a:Float, b:Float):Float { return a > b ? a : b; }
 }

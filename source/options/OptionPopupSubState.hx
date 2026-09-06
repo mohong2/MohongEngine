@@ -89,14 +89,15 @@ class OptionPopupSubState extends MusicBeatSubstate
 		FlxTween.tween(panel, {alpha: 1}, 0.2, {ease: FlxEase.backOut});
 
 		titleText = new FlxText(panelX + 24, panelY + 18, panelW - 48, option.name, 26);
-		titleText.setFormat(Paths.optionsfont(), 26, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		titleText.setFormat(Paths.optionsfont(), 26, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		titleText.borderSize = 2.2;
 		titleText.alpha = 0;
 		add(titleText);
 		FlxTween.tween(titleText, {alpha: 1}, 0.18, {ease: FlxEase.quadOut});
 
 		valueText = new FlxText(panelX + 24, panelY + 54, panelW - 48, "", 18);
-		valueText.setFormat(Paths.optionsfont(), 18, FlxColor.fromRGB(180, 200, 220), LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		// OUTLINE_FAST: 滑条拖动时 valueText 每帧变化, OUTLINE 每帧 16 次全宽位图拷贝太重
+		valueText.setFormat(Paths.optionsfont(), 18, FlxColor.fromRGB(180, 200, 220), LEFT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		valueText.borderSize = 2.0;
 		valueText.alpha = 0;
 		add(valueText);

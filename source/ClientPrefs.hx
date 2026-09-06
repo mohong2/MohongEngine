@@ -684,6 +684,11 @@ class ClientPrefs {
 		#end
 	}
 
+	// 上次写盘时的数据快照。设置菜单里每次返回/关弹窗都会调 saveSettings(),
+	// 同步 flush 在移动端是明显的掉帧源; 内容没变时直接跳过两次磁盘写入。
+	static var _lastDataSnapshot:String = null;
+	static var _lastKeyBindsSnapshot:String = null;
+
 	public static function saveSettings()
 	{
 		// 启动早期保护: loadPrefs 之前写盘会把默认 data/keyBinds 存进存档,
@@ -697,16 +702,29 @@ class ClientPrefs {
 		for (key in Reflect.fields(data))
 			Reflect.setField(FlxG.save.data, key, Reflect.field(data, key));
 
-		FlxG.save.flush();
+		// MusicBeatState 每帧把 fullscreen 写进 FlxG.save.data, 快照需覆盖它
+		var dataSnapshot:String = Std.string(FlxG.save.data) + '|' + (FlxG.fullscreen ? '1' : '0');
+		if (dataSnapshot != _lastDataSnapshot)
+		{
+			FlxG.save.flush();
+			_lastDataSnapshot = dataSnapshot;
+		}
 
 		// Placing this in a separate save so that it can be manually deleted without removing your Score and stuff
-		var save:FlxSave = new FlxSave();
-		save.bind('controls_v3', 'ninjamuffin99');
-		save.data.keyboard = keyBinds;
-		#if !android
-		save.data.gamepad = gamepadBinds;
-		#end
-		save.flush();
+		// 键位只在改键/重置时变化, 未变化时跳过这整个存档的序列化+写盘。
+		var bindsSnapshot:String = keyBinds.toString()
+			+ (#if !android gamepadBinds.toString() #else '' #end);
+		if (bindsSnapshot != _lastKeyBindsSnapshot)
+		{
+			var save:FlxSave = new FlxSave();
+			save.bind('controls_v3', 'ninjamuffin99');
+			save.data.keyboard = keyBinds;
+			#if !android
+			save.data.gamepad = gamepadBinds;
+			#end
+			save.flush();
+			_lastKeyBindsSnapshot = bindsSnapshot;
+		}
 		FlxG.log.add("Settings saved!");
 	}
 

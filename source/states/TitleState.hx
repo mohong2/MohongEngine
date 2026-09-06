@@ -508,6 +508,8 @@ class TitleState extends MusicBeatState
 			// 仅凭标记误判为"已就绪"。
 			if (!FileSystem.exists(root + 'assets') || !FileSystem.isDirectory(root + 'assets'))
 				return false;
+			if (FileSystem.exists(root + 'assets/assets') || FileSystem.exists(root + 'assets/mods'))
+				return false;
 			var stored:String = File.getContent(marker).trim();
 			var version:String = null;
 			try
@@ -548,6 +550,16 @@ class TitleState extends MusicBeatState
 			var cleanPath = (idx >= 0) ? file.substr(idx + 1) : file;
 			if (cleanPath.startsWith('assets/') || cleanPath.startsWith('mods/'))
 			{
+
+				for (rootName in ['assets', 'mods'])
+				{
+					var doubled:String = rootName + '/' + rootName + '/';
+					if (cleanPath.startsWith(doubled))
+					{
+						cleanPath = cleanPath.substr(rootName.length + 1);
+						break;
+					}
+				}
 				if (!normalized.contains(cleanPath))
 					normalized.push(cleanPath);
 			}
@@ -747,6 +759,19 @@ class TitleState extends MusicBeatState
 	var titleText:FlxSprite;
 	var swagShader:ColorSwap = null;
 
+	// ── Title entrance / idle rock / exit animation state ──
+	var titleBG:FlxSprite;
+	var logoBaseX:Float = 0;
+	var logoBaseY:Float = 0;
+	var titleBaseX:Float = 0;
+	var titleBaseY:Float = 0;
+	var swaySpeed:Float = 1.8;
+	var logoSwayTime:Float = 0;
+	var logoSwayReady:Bool = false;
+	var titleTextReady:Bool = false;
+	var entranceStarted:Bool = false;
+	var exitStarted:Bool = false;
+
 	function startIntro()
 	{
 		#if HSCRIPT_ALLOWED
@@ -762,15 +787,15 @@ class TitleState extends MusicBeatState
 		Conductor.changeBPM(titleJSON.bpm);
 		persistentUpdate = true;
 
-		var bg:FlxSprite = new FlxSprite();
+		titleBG = new FlxSprite();
 
 		if (titleJSON.backgroundSprite != null && titleJSON.backgroundSprite.length > 0 && titleJSON.backgroundSprite != "none"){
-			bg.loadGraphic(Paths.image(titleJSON.backgroundSprite));
+			titleBG.loadGraphic(Paths.image(titleJSON.backgroundSprite));
 		}else{
-			bg.makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
+			titleBG.makeGraphic(FlxG.width, FlxG.height, FlxColor.BLACK);
 		}
 
-		add(bg);
+		add(titleBG);
 
 		logoBl = new FlxSprite(titleJSON.titlex, titleJSON.titley);
 		logoBl.frames = Paths.getSparrowAtlas('logoBumpin');
@@ -858,6 +883,18 @@ class TitleState extends MusicBeatState
 		titleText.updateHitbox();
 		add(titleText);
 
+		// Remember resting poses for the entrance/rock/exit tweens.
+		logoBaseX = logoBl.x;
+		logoBaseY = logoBl.y;
+		titleBaseX = titleText.x;
+		titleBaseY = titleText.y;
+
+		var swayBPM:Float = 102;
+		if (titleJSON.bpm > 0)
+			swayBPM = titleJSON.bpm;
+		// One full left-right rock every 4 beats keeps the swing in sync with the music.
+		swaySpeed = Math.PI * 2 / ((60 / swayBPM) * 4);
+
 		var logo:FlxSprite = new FlxSprite().loadGraphic(Paths.image('logo'));
 		logo.screenCenter();
 		logo.antialiasing = ClientPrefs.data.globalAntialiasing;
@@ -889,6 +926,80 @@ class TitleState extends MusicBeatState
 		else
 			initialized = true;
 	}
+
+	function flashReveal(duration:Float = 0.6):Void
+	{
+		// Short, soft flash so the slide-up entrance stays visible underneath it.
+		FlxG.camera.flash(ClientPrefs.data.flashing ? FlxColor.WHITE : 0x77FFFFFF, duration);
+	}
+
+	function startTitleEntrance():Void
+	{
+		if (entranceStarted || logoBl == null) return;
+		entranceStarted = true;
+		exitStarted = false;
+		logoSwayReady = titleTextReady = false;
+		logoSwayTime = 0;
+
+		var dropY:Float = FlxG.height + 140;
+
+		// Logo: rockets up from below the screen, slams to a stop, dips once from the impact.
+		logoBl.x = logoBaseX;
+		logoBl.y = dropY;
+		FlxTween.tween(logoBl, {y: logoBaseY}, 0.65, {startDelay: 0.2, ease: FlxEase.expoOut, onComplete:
+			function(twn:FlxTween)
+			{
+				logoBl.animation.play('bump', true); // impact pulse right on the hard stop
+				FlxTween.tween(logoBl, {y: logoBaseY + 9}, 0.05, {ease: FlxEase.quadIn, onComplete:
+					function(twn2:FlxTween)
+					{
+						FlxTween.tween(logoBl, {y: logoBaseY}, 0.14, {ease: FlxEase.quadOut, onComplete:
+							function(twn3:FlxTween)
+							{
+								logoSwayReady = true;
+							}});
+					}});
+			}
+		});
+
+		// "Press Enter" text: rises last and fades in; the idle pulse takes over afterwards.
+		titleText.x = titleBaseX;
+		titleText.y = dropY + 40;
+		titleText.alpha = 0;
+		FlxTween.tween(titleText, {y: titleBaseY, alpha: 1}, 0.55, {startDelay: 0.6, ease: FlxEase.expoOut, onComplete:
+			function(twn:FlxTween)
+			{
+				titleTextReady = true;
+			}});
+	}
+
+	function startTitleExit():Void
+	{
+		if (exitStarted || logoBl == null) return;
+		exitStarted = true;
+		logoSwayReady = titleTextReady = false;
+
+		// Kill any in-flight entrance tweens and snap to the resting pose.
+		FlxTween.cancelTweensOf(logoBl);
+		FlxTween.cancelTweensOf(titleText);
+		logoBl.y = logoBaseY;
+		logoBl.angle = 0;
+		titleText.y = titleBaseY;
+		titleText.alpha = 1;
+
+		// The screen drops away like a floor giving way: the background sinks
+		// first, everything else follows with a slight lag so the fall reads
+		// as a chain. Distance covers the highest top edge so nothing stays visible.
+		var minTop:Float = Math.min(gfDance.y, Math.min(logoBl.y, titleText.y));
+		if (titleBG != null)
+			minTop = Math.min(minTop, titleBG.y);
+		var dropDist:Float = FlxG.height + 60 - minTop;
+		FlxTween.tween(titleBG, {y: titleBG.y + dropDist}, 0.55, {ease: FlxEase.quadIn});
+		FlxTween.tween(gfDance, {y: gfDance.y + dropDist}, 0.55, {startDelay: 0.05, ease: FlxEase.quadIn});
+		FlxTween.tween(logoBl, {y: logoBl.y + dropDist}, 0.55, {startDelay: 0.1, ease: FlxEase.quadIn});
+		FlxTween.tween(titleText, {y: titleText.y + dropDist}, 0.55, {startDelay: 0.15, ease: FlxEase.quadIn});
+	}
+
 	function getIntroTextShit():Array<Array<String>>
 	{
 		var fullText:String = Assets.getText(Paths.txt('introText'));
@@ -1014,7 +1125,7 @@ class TitleState extends MusicBeatState
 
 		if (initialized && !transitioning && skippedIntro)
 		{
-			if (newTitle && !pressedEnter)
+			if (newTitle && !pressedEnter && titleTextReady)
 			{
 				var timer:Float = titleTimer;
 				if (timer >= 1)
@@ -1033,8 +1144,11 @@ class TitleState extends MusicBeatState
 
 				if(titleText != null) titleText.animation.play('press');
 
-				FlxG.camera.flash(ClientPrefs.data.flashing ? FlxColor.WHITE : 0x4CFFFFFF, 1);
+				FlxG.camera.flash(ClientPrefs.data.flashing ? FlxColor.WHITE : 0x4CFFFFFF, 0.5);
 				FlxG.sound.play(Paths.sound('confirmMenu'), 0.7);
+
+				// Slide the whole title screen out before the state switch kicks in.
+				startTitleExit();
 
 				transitioning = true;
 
@@ -1101,6 +1215,13 @@ class TitleState extends MusicBeatState
 		if (initialized && pressedEnter && !skippedIntro)
 		{
 			skipIntro();
+		}
+
+		// Idle rock: once settled, the logo gently swings left-right around its center.
+		if (logoSwayReady && !exitStarted && logoBl != null)
+		{
+			logoSwayTime += elapsed;
+			logoBl.angle = Math.sin(logoSwayTime * swaySpeed) * 3;
 		}
 
 		if(swagShader != null)
@@ -1257,7 +1378,8 @@ class TitleState extends MusicBeatState
 					default:
 						remove(ngSpr);
 						remove(credGroup);
-						FlxG.camera.flash(FlxColor.WHITE, 2);
+						flashReveal(0.6);
+						startTitleEntrance();
 						skippedIntro = true;
 						playJingle = false;
 
@@ -1273,7 +1395,8 @@ class TitleState extends MusicBeatState
 					{
 						remove(ngSpr);
 						remove(credGroup);
-						FlxG.camera.flash(FlxColor.WHITE, 0.6);
+						flashReveal(0.6);
+						startTitleEntrance();
 						transitioning = false;
 					});
 				}
@@ -1281,7 +1404,8 @@ class TitleState extends MusicBeatState
 				{
 					remove(ngSpr);
 					remove(credGroup);
-					FlxG.camera.flash(FlxColor.WHITE, 3);
+					flashReveal(0.6);
+					startTitleEntrance();
 					sound.onComplete = function() {
 						FlxG.sound.playMusic(Paths.music('freakyMenu'), 0);
 						FlxG.sound.music.fadeIn(4, 0, 0.7);
@@ -1294,7 +1418,8 @@ class TitleState extends MusicBeatState
 			{
 				remove(ngSpr);
 				remove(credGroup);
-				FlxG.camera.flash(FlxColor.WHITE, 4);
+				flashReveal(0.6);
+				startTitleEntrance();
 
 				var easteregg:String = FlxG.save.data.psychDevsEasterEgg;
 				if (easteregg == null) easteregg = '';

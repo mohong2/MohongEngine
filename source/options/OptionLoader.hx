@@ -74,6 +74,22 @@ class OptionLoader
 	static final GLOBAL_ROOT_SOURCE:String = '__GLOBAL__';
 	static var _cachedCategories:Array<OptionCategoryDef> = null;
 	static var _callbacks:Map<String, Void->Void> = new Map();
+	/** mergeAllTextsNamed 结果缓存 (语言/打击音/皮肤列表)。reloadAll() 时清空以保留模组热重载。 */
+	static var _listCache:Map<String, Array<String>> = new Map();
+
+	/** 带缓存的 Paths.mergeAllTextNamed: 设置页每次进出都会取这些列表, 移动端读盘不便宜。 */
+	static function mergedListCached(path:String, ?defaultDirectory:String):Array<String>
+	{
+		var key:String = path + '|' + (defaultDirectory != null ? defaultDirectory : '');
+		var cached:Array<String> = _listCache.get(key);
+		if (cached == null)
+		{
+			cached = Paths.mergeAllTextsNamed(path, defaultDirectory);
+			if (cached == null) return null;
+			_listCache.set(key, cached);
+		}
+		return cached.copy();
+	}
 
 	/** Register a callback for JSON onChange. */
 	public static function setCallback(name:String, fn:Void->Void):Void
@@ -249,7 +265,7 @@ class OptionLoader
 			switch (opt.variable)
 			{
 				case 'language':
-					var langs:Array<String> = Paths.mergeAllTextsNamed('lang/list.txt', 'assets');
+					var langs:Array<String> = mergedListCached('lang/list.txt', 'assets');
 					if (langs != null && langs.length > 0)
 					{
 						// Filter languages if the active mod has disableLanguages=true
@@ -271,7 +287,7 @@ class OptionLoader
 				case 'hitsound':
 					// LeatherEngine 移植: 击打音效列表来自 data/hitsoundList.txt,
 					// 玩家/模组可以往 txt 里加名字并放入 sounds/hitsounds/ 实现自定义音效
-					var hs:Array<String> = Paths.mergeAllTextsNamed('data/hitsoundList.txt', 'assets');
+					var hs:Array<String> = mergedListCached('data/hitsoundList.txt', 'assets');
 					if (hs != null && hs.length > 0)
 					{
 						opt.options = hs;
@@ -307,7 +323,7 @@ class OptionLoader
 
 				case 'noteSkin':
 					// 0.7.3+ 自由切换 Note 皮肤: 列表来自 images/noteSkins/list.txt (模组可追加)
-					var skins:Array<String> = Paths.mergeAllTextsNamed('images/noteSkins/list.txt');
+					var skins:Array<String> = mergedListCached('images/noteSkins/list.txt');
 					if (skins != null && skins.length > 0)
 					{
 						if (skins.indexOf(ClientPrefs.defaultData.noteSkin) < 0)
@@ -319,7 +335,7 @@ class OptionLoader
 
 				case 'splashSkin':
 					// 0.7.3+ 自由切换溅射皮肤: 列表来自 images/noteSplashes/list.txt
-					var skins:Array<String> = Paths.mergeAllTextsNamed('images/noteSplashes/list.txt');
+					var skins:Array<String> = mergedListCached('images/noteSplashes/list.txt');
 					if (skins != null && skins.length > 0)
 					{
 						if (skins.indexOf(ClientPrefs.defaultData.splashSkin) < 0)
@@ -343,6 +359,7 @@ class OptionLoader
 	public static function reloadAll():Void
 	{
 		_cachedCategories = null;
+		_listCache = new Map();
 	}
 
 	#if MODS_ALLOWED

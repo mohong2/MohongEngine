@@ -88,6 +88,7 @@ class MusicBeatState extends FlxUIState
 	var virtualPad:FlxVirtualPad;
 	var trackedinputsUI:Array<FlxActionInput> = [];
 	var trackedinputsNOTES:Array<FlxActionInput> = [];
+	var padCamera:FlxCamera;
 
 	/**
 	 * 创建菜单虚拟按键。安卓/iOS 始终启用; 桌面端只有开启"触屏支持"后才显示。
@@ -114,15 +115,24 @@ class MusicBeatState extends FlxUIState
 			remove(virtualPad);
 			virtualPad = FlxDestroyUtil.destroy(virtualPad);
 		}
+
+		if (padCamera != null)
+		{
+			FlxG.cameras.remove(padCamera, true);
+			padCamera = null;
+		}
 	}
 
 	public function addPadCamera(DefaultDrawTarget:Bool = false)
 	{
 		if (virtualPad != null) {
-			var camControls:FlxCamera = new FlxCamera();
-			FlxG.cameras.add(camControls, DefaultDrawTarget);
-			camControls.bgColor.alpha = 0;
-			virtualPad.cameras = [camControls];
+			if (padCamera == null)
+			{
+				padCamera = new FlxCamera();
+				FlxG.cameras.add(padCamera, DefaultDrawTarget);
+				padCamera.bgColor.alpha = 0;
+			}
+			virtualPad.cameras = [padCamera];
 		}
 	}
 
@@ -608,6 +618,7 @@ class MusicBeatState extends FlxUIState
 		super.destroy();
 		if (virtualPad != null) { virtualPad = FlxDestroyUtil.destroy(virtualPad); virtualPad = null; }
 		if (androidControls != null) { androidControls = FlxDestroyUtil.destroy(androidControls); androidControls = null; }
+		if (padCamera != null) { FlxG.cameras.remove(padCamera, true); padCamera = null; }
 
 	}
 }

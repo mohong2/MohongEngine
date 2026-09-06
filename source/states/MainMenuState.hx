@@ -73,6 +73,7 @@ class MainMenuState extends SeiunMenuState
 	var auroraGlowA:FlxSprite;
 	var auroraGlowB:FlxSprite;
 	var itemBaseY:Array<Float> = [];
+	var itemRestY:Array<Float> = [];
 	var itemBaseWidth:Array<Float> = [];
 	var itemBaseHeight:Array<Float> = [];
 	var ambientTimer:Float = 0;
@@ -201,9 +202,10 @@ class MainMenuState extends SeiunMenuState
 			itemBaseWidth.push(menuItem.width);
 			itemBaseHeight.push(menuItem.height);
 			
-			var leftMargin = 100; 
+			var leftMargin = 100;
 			menuItem.x = leftMargin;
 			itemBaseY.push(menuItem.y);
+			itemRestY.push(menuItem.y);
 
 			if (MenuFX.enabled())
 			{
@@ -282,15 +284,24 @@ class MainMenuState extends SeiunMenuState
 
 		changeItem();
 
-		// ── Entry animation: items fade in with a stagger. No x/angle motion,
-		//    so their on-screen position is always the fixed `leftMargin`. ──
+		// ── Entry animation: items stream up from below their slot, top option
+		//    first with the rest trailing behind (lag). The Y motion goes through
+		//    `itemBaseY` because update() drives item.y from it every frame. ──
 		for (i in 0...menuItems.length)
 		{
 			var item:FlxSprite = menuItems.members[i];
-			var delay:Float = Math.min(Math.abs(i - curSelected) * 0.05, 0.35);
+			var idx:Int = i;
+			var delay:Float = Math.min(i * 0.07, 0.5) + 0.05;
+			var restY:Float = itemRestY[i];
+
 			FlxTween.cancelTweensOf(item, ['alpha']);
 			item.alpha = 0;
 			FlxTween.tween(item, {alpha: itemAlphaFor(i)}, 0.35, {startDelay: delay, ease: FlxEase.sineOut});
+
+			itemBaseY[i] = restY + 460; // start well below the resting slot
+			item.y = itemBaseY[i];
+			FlxTween.num(itemBaseY[i], restY, 0.6, {startDelay: delay, ease: FlxEase.expoOut},
+				function(v:Float) { itemBaseY[idx] = v; });
 		}
 		#if ACHIEVEMENTS_ALLOWED
 		Achievements.loadAchievements();
@@ -574,9 +585,14 @@ class MainMenuState extends SeiunMenuState
 				if(menuItems.length > 4) {
 					add = menuItems.length * 8;
 				}
+				// Aim the camera at the resting slot, never at wherever the
+				// entry animation currently has the item mid-flight.
+				var midY:Float = (spr.ID < itemRestY.length)
+					? itemRestY[spr.ID] + spr.height * 0.5
+					: spr.getGraphicMidpoint().y;
 				camFollow.setPosition(
-					FlxG.width / 2, 
-					spr.getGraphicMidpoint().y - add
+					FlxG.width / 2,
+					midY - add
 				);
 				spr.centerOffsets();
 			}

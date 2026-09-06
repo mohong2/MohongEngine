@@ -1,6 +1,9 @@
 package backend;
 
 import StringTools;
+import haxe.io.Bytes;
+import openfl.Assets;
+import mohong.TraceManager;
 
 #if sys
 import sys.FileSystem;
@@ -16,9 +19,20 @@ import sys.io.File;
  * as before; the marker left behind lets the next launch roll into the
  * existing crash-catcher recovery screen:
  *   - Windows SEH: exception code, faulting instruction pointer, access
- *     target pointer, faulting module, registers -> crash/native_crash_*.txt
- *   - POSIX (Linux/macOS): SIGSEGV/SIGABRT/SIGBUS/SIGFPE/SIGILL -> signal,
- *     si_addr memory pointer and backtrace, then re-raise
+ *     target pointer, faulting module, registers, dbghelp backtrace
+ *     -> crash/native_crash_*.txt
+ *   - POSIX (Linux/macOS/Android): SIGSEGV/SIGABRT/SIGBUS/SIGFPE/SIGILL ->
+ *     signal, si_addr, full register dump, backtrace annotated with dladdr +
+ *     the precomputed crash linemap (exact cpp file:line), /proc/self/maps
+ *     snapshot, device properties (Android), logcat mirror (Android)
+ *
+ * The C++ handler cannot safely call back into Haxe, so the Haxe layer feeds
+ * it context while the engine is still healthy:
+ *   setCrashDir()      - absolute crash/ dir (Android has no usable cwd)
+ *   setAppInfo()       - engine version string
+ *   setRuntimeContext()- current state/song, refreshed periodically
+ *   setRecentLogs()    - TraceManager tail, refreshed periodically
+ *   setLinemap()       - address->file:line table (see tools/gen_linemap.py)
  */
 #if cpp
 @:cppInclude('./native_crash.inc')
@@ -26,6 +40,9 @@ import sys.io.File;
 class NativeCrash
 {
 	static var installed:Bool = false;
+
+	/** Keeps the linemap bytes alive so the raw pointer stored C-side stays valid. */
+	static var linemapBytes:haxe.io.Bytes;
 
 	/** Install native crash hooks first thing in Main.main() so even early startup faults are captured. */
 	public static function install():Void
@@ -44,6 +61,124 @@ class NativeCrash
 		}
 		catch (e:Dynamic) {}
 		#end
+	}
+
+	/**
+	 * Absolute crash directory (with trailing slash), e.g. "<storage>crash/".
+	 * On Android the process cwd is not usable for early crashes, so every
+	 * native log/marker path is anchored here instead of "crash/".
+	 */
+	public static function setCrashDir(dir:String):Void
+	{
+		#if cpp
+		if (dir == null || dir.length == 0) return;
+		try { untyped __cpp__('::seiun_set_crash_dir({0}.__CStr())', dir); } catch (e:Dynamic) {}
+		#end
+	}
+
+	/** One-line app identity, written into every native crash report. */
+	public static function setAppInfo(info:String):Void
+	{
+		#if cpp
+		if (info == null || info.length == 0) return;
+		try { untyped __cpp__('::seiun_set_app_info({0}.__CStr())', info); } catch (e:Dynamic) {}
+		#end
+	}
+
+	/**
+	 * Current engine situation (state / song / GL errors). Refreshed every few
+	 * seconds by SystemDiag so a native crash report shows the exact gameplay
+	 * context even though the process died below the Haxe layer.
+	 */
+	public static function setRuntimeContext(context:String):Void
+	{
+		#if cpp
+		if (context == null || context.length == 0) return;
+		try { untyped __cpp__('::seiun_set_runtime_context({0}.__CStr())', context); } catch (e:Dynamic) {}
+		#end
+	}
+
+	/** Recent TraceManager log tail; embedded into native crash reports. */
+	public static function setRecentLogs(logs:String):Void
+	{
+		#if cpp
+		if (logs == null || logs.length == 0) return;
+		try { untyped __cpp__('::seiun_set_recent_logs({0}.__CStr())', logs); } catch (e:Dynamic) {}
+		#end
+	}
+
+	/**
+	 * Load the crash linemap for this build's ABI (exact cpp file:line at
+	 * crash time). Sources, in priority order:
+	 *   1. <storage>/linemap/<abi>.bin      (adb push, no APK changes)
+	 *   2. embedded asset assets/linemap/<abi>.bin (needs -DCRASH_LINEMAP)
+	 * Generated from the unstripped .so by tools/gen_linemap.py.
+	 */
+	public static function loadLinemap(storageDir:String, libName:String = 'libApplicationMain'):Void
+	{
+		#if (cpp && sys)
+		if (linemapBytes != null) return; // already loaded
+		var abi:String = getCpuAbi();
+		if (abi == null || abi == 'unknown') return;
+
+		// 1) file pushed next to the game storage (dev workflow)
+		#if android
+		try
+		{
+			var diskPath:String = storageDir + 'linemap/' + abi + '.bin';
+			if (sys.FileSystem.exists(diskPath))
+			{
+				var bytes:Bytes = File.getBytes(diskPath);
+				applyLinemap(bytes, libName);
+				TraceManager.info('trace.crash.linemapDisk', 'Crash linemap loaded from disk ({0} KB).', [Std.int(bytes.length / 1024)]);
+				return;
+			}
+		}
+		catch (e:Dynamic) {}
+		#end
+
+		// 2) embedded asset (opt-in via -DCRASH_LINEMAP in Project.xml)
+		try
+		{
+			var assetPath:String = 'assets/linemap/' + abi + '.bin';
+			if (Assets.exists(assetPath))
+			{
+				var bytes:Bytes = Assets.getBytes(assetPath);
+				applyLinemap(bytes, libName);
+				TraceManager.info('trace.crash.linemapAsset', 'Crash linemap loaded from embedded assets ({0} KB).', [Std.int(bytes.length / 1024)]);
+			}
+		}
+		catch (e:Dynamic) {}
+		#end
+	}
+
+	static function applyLinemap(bytes:Bytes, libName:String):Void
+	{
+		#if cpp
+		if (bytes == null || bytes.length < 20) return;
+		linemapBytes = bytes; // keep alive: the C side stores the raw pointer
+		try
+		{
+			// {0} = bytes.getData() -> ::Array<unsigned char> handle;
+			// operator-> reaches Array_obj::Pointer() for the raw uchar storage.
+			untyped __cpp__('::seiun_set_linemap((const void*){0}->Pointer(), (unsigned int){1}, {2}.__CStr())',
+				bytes.getData(), bytes.length, libName);
+		}
+		catch (e:Dynamic)
+		{
+			linemapBytes = null;
+		}
+		#end
+	}
+
+	/** ABI of the running build ("arm64-v8a" / "armeabi-v7a" / ...), or "unknown". */
+	public static function getCpuAbi():String
+	{
+		#if cpp
+		try { return untyped __cpp__('::seiun_get_cpu_abi()'); }
+		catch (e:Dynamic) {}
+		#end
+		return 'unknown';
 	}
 
 	/**

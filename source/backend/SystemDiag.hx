@@ -366,9 +366,33 @@ class SystemDiag
 				if (now < nextHeartbeatAt) return;
 				nextHeartbeatAt = now + 5;
 				writeHeartbeat();
+				feedNativeCrash();
 			});
 		}
 		catch (e:Dynamic) {}
+	}
+
+	/**
+	 * Push the current engine situation + recent log tail into the native
+	 * crash handler (fixed-size C buffers, refreshed every ~5s while healthy).
+	 * A crash below the Haxe layer then still reports the current state/song,
+	 * GL errors and the last log lines, instead of a bare signal number.
+	 */
+	static function feedNativeCrash():Void
+	{
+		#if sys
+		try
+		{
+			var stateName:String = 'null';
+			try { if (FlxG.state != null) stateName = Type.getClassName(Type.getClass(FlxG.state)); } catch (e:Dynamic) {}
+			var song:String = 'null';
+			try { if (PlayState.SONG != null) song = Std.string(PlayState.SONG.song); } catch (e:Dynamic) {}
+
+			NativeCrash.setRuntimeContext('state=' + stateName + ' | song=' + song + ' | glErr=' + GlErrorWatchdog.snapshot());
+			NativeCrash.setRecentLogs(TraceManager.getRecentCrashText());
+		}
+		catch (e:Dynamic) {}
+		#end
 	}
 
 	public static function writeHeartbeat():Void

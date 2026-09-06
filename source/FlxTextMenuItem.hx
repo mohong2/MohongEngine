@@ -32,7 +32,7 @@ class FlxTextMenuItem extends FlxText
 		this.startPosition.x = x;
 		this.startPosition.y = y;
 
-		setFormat(Paths.languageFont(), size, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		setFormat(Paths.languageFont(), size, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		this.borderSize = 4;
 		antialiasing = ClientPrefs.data.globalAntialiasing;
 	}
@@ -100,7 +100,7 @@ class FlxTextAttached extends FlxText
 		this.offsetX = offsetX;
 		this.offsetY = offsetY;
 		
-		setFormat(Paths.languageFont(), size, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		setFormat(Paths.languageFont(), size, FlxColor.WHITE, LEFT, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		this.borderSize = 4;
 		antialiasing = ClientPrefs.data.globalAntialiasing;
 	}

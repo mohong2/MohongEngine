@@ -30,7 +30,12 @@
 	<window if="desktop" orientation="landscape" fullscreen="false" resizable="true" vsync="false" allow-high-dpi="true"/>
 
 	<!--Mobile-specific-->
-	<window if="mobile" orientation="landscape" fullscreen="true" resizable="false" allow-shaders="true" require-shaders="true" allow-high-dpi="true"/>
+	<!--allow-high-dpi="false": render at 1280x720 and let the compositor scale, instead of
+	    rasterizing at the device's native resolution (2-4x fill-rate savings on phones).
+	    depth/stencil="false": flixel's 2D renderer never uses depth/stencil buffers, dropping
+	    the extra attachments saves VRAM and bandwidth per frame. Remove them only if a mod
+	    relies on DisplayObject masks (openfl implements those with stencil).-->
+	<window if="mobile" orientation="landscape" fullscreen="true" resizable="false" allow-shaders="true" require-shaders="true" allow-high-dpi="false" depth="false" stencil="false"/>
 
 	<!--Switch-specific-->
 	<window if="switch" orientation="landscape" fullscreen="true" width="0" height="0" resizable="true" />
@@ -129,6 +134,9 @@
 	-->
 	<assets path="assets/fonts"/>
 	<assets path="assets/lang"/>
+	<!-- 崩溃行号映射(可选,调试用):先运行 tools\gen_linemap.bat 生成 .bin,再用
+	     "lime build android -DCRASH_LINEMAP" 打包嵌入 APK;不用该 define 时完全不影响包体。 -->
+	<assets path="assets/linemap" rename="assets/linemap" include="*.bin" embed="true" if="CRASH_LINEMAP" />
 	<!-- _______________________________ Libraries ______________________________ -->
 
 	<haxelib name="flixel"/>

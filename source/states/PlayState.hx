@@ -7,6 +7,7 @@ import substates.PlayStateResultsSubstate;
 import script.hscript.HScript;
 import backend.CompatEngine;
 import backend.GfxPolicy;
+import backend.GcState;
 import haxe.display.Display.GotoDefinitionResult;
 import flixel.graphics.FlxGraphic;
 #if cpp
@@ -1958,12 +1959,10 @@ class PlayState extends MusicBeatState
 		if (ClientPrefs.data.disableGC)
 		{
 			_gcDisabledForSong = true;
-			cpp.vm.Gc.enable(true);
+			GcState.setDisabled(false);
 			cpp.vm.Gc.run(true);
-			// 压缩式回收: 把加载期空闲块归还 OS, 避免大谱面加载峰值残留为常驻 RSS。
-			// 纯 GC 操作, 无任何逻辑影响。
 			cpp.vm.Gc.compact();
-			cpp.vm.Gc.enable(false);
+			GcState.setDisabled(true);
 		}
 		#end
 
@@ -4924,13 +4923,11 @@ class PlayState extends MusicBeatState
 	public var isDead:Bool = false; //Don't mess with this on Lua!!!
 	function doDeathCheck(?skipHealthCheck:Bool = false) {
 		#if ONLINE_ALLOWED
-		// PsychOnline 式实时对战: 共享血量归零不单方面判死, 双方都打完整首歌,
-		// 最终由服务器汇总的成绩排名分胜负。
 		if (seiunOnline && OnlineSession.active
 			&& OnlineSession.mode == online.shared.OnlineTypes.OnlineConst.MODE_REALTIME)
 			return false;
 		#end
-		if (((skipHealthCheck && instakillOnMiss) || (playOpponent ? health >= 2 : health <= 0)) && !practiceMode && !isDead && !replayMode)
+		if (((skipHealthCheck && instakillOnMiss) || (playOpponent ? health >= 2 : health <= 0)) && !practiceMode && !isDead && !replayMode && !cpuControlled)
 		{
 			var ret:Dynamic = callOnScripts('onGameOver', [], false);
 			if(ret != FunkinLua.Function_Stop) {
@@ -8422,22 +8419,11 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 				}
 				else
 				{
-					//操你妈的傻逼，终于调好了
+					//操你妈的傻逼，怎么又让我修一遍？
 					var stepCrochet:Float = (daNote.genStepCrochet > 0) ? daNote.genStepCrochet : Conductor.stepCrochet;
-					var isEnd:Bool = (daNote.isSustainEnd
-						|| (daNote.animation.curAnim != null
-							&& (daNote.animation.curAnim.name.endsWith('end') || daNote.animation.curAnim.name.endsWith('holdend'))));
-					var stepPx:Float = 0.45 * stepCrochet * songSpeed * daNote.multSpeed * maniaScale;
-
-					var bodyH:Float = 44.0 * (stepCrochet / 100.0) * 1.05 * songSpeed * daNote.multSpeed * maniaScale + 2.0;
-					var noOverlapAnchor:Float = stepPx - bodyH;
-					var anchor:Float;
-					if (stepCrochet >= 150.0)
-						anchor = (Note.swagWidth / 2) * maniaScale;
-					else
-						anchor = Math.min((Note.swagWidth / 2) * maniaScale - bodyH, noOverlapAnchor);
-					if (isEnd)
-						anchor += stepPx - daNote.height;
+					var anchor:Float = (Note.swagWidth / 2) * maniaScale
+						+ 0.45 * stepCrochet * daNote.multSpeed * maniaScale
+						- daNote.height;
 					var contentOffsetY:Float = (daNote.frame != null) ? daNote.frame.offset.y * daNote.scale.y : 0.0;
 					daNote.y += anchor - contentOffsetY;
 				}
@@ -9396,7 +9382,7 @@ if (CompatEngine.isModern() && hasActiveScripts()) {
 		if (_gcDisabledForSong)
 		{
 			_gcDisabledForSong = false;
-			cpp.vm.Gc.enable(true);
+			GcState.setDisabled(false);
 			cpp.vm.Gc.run(true);
 		}
 		#end

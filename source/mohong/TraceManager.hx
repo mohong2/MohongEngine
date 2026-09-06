@@ -525,6 +525,31 @@ class TraceManager
 	}
 
 	/**
+	 * Plain-text tail of the ring buffer for the native crash handler.
+	 * The C side keeps it in a fixed buffer, so it is capped on both entry
+	 * count and total characters.
+	 */
+	public static function getRecentCrashText(?maxEntries:Int = 30, ?maxChars:Int = 8000):String
+	{
+		var all:Array<TraceEntry> = getAll();
+		var start:Int = all.length - maxEntries;
+		if (start < 0) start = 0;
+
+		var lines:Array<String> = [];
+		for (i in start...all.length)
+		{
+			var e:TraceEntry = all[i];
+			var msg:String = e.message != null ? e.message : '';
+			if (msg.length > 200) msg = msg.substr(0, 200) + '...';
+			var file:String = e.fileName != null ? e.fileName : '?';
+			lines.push(levelNames[e.level] + ' | ' + file + ':' + e.lineNumber + ' | ' + msg);
+		}
+		var text:String = lines.join('\n');
+		if (text.length > maxChars) text = '... ' + text.substr(text.length - maxChars);
+		return text;
+	}
+
+	/**
 	 * Filter by level/module/text; limit 0 = all.
 	 */
 	public static function getFiltered(?levels:Array<TraceLevel>, ?moduleName:String, ?search:String, ?limit:Int = 0):Array<TraceEntry>

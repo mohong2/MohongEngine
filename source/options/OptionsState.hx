@@ -153,7 +153,7 @@ class OptionsState extends MusicBeatState
 		playEnterAnimation();
 		syncDragToWheel();
 
-		ClientPrefs.saveSettings();
+		// 不在 create() 里保存设置: 数据尚未变化, 同步 flush 在移动端只会白卡片一帧
 
 		#if (TOUCH_CONTROLS || desktop)
 		addVirtualPad(UP_DOWN, A_B_C);
@@ -226,7 +226,7 @@ class OptionsState extends MusicBeatState
 		{
 			var txt = new FlxText(150, 0, 0, optionTexts[i], 32);
 			txt.setFormat(Paths.optionsfont(), 50, FlxColor.WHITE, LEFT,
-				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+				FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 			txt.borderSize = 2.5;
 			txt.ID = i;
 			catGrpOptions.add(txt);
@@ -235,14 +235,14 @@ class OptionsState extends MusicBeatState
 
 		catSelectorLeft = new FlxText(0, 0, 0, ">", 32);
 		catSelectorLeft.setFormat(Paths.optionsfont(), 50, FlxColor.WHITE, LEFT,
-			FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		catSelectorLeft.borderSize = 2.5;
 		add(catSelectorLeft);
 		categorySprites.push(catSelectorLeft);
 
 		catSelectorRight = new FlxText(0, 0, 0, "<", 32);
 		catSelectorRight.setFormat(Paths.optionsfont(), 50, FlxColor.WHITE, LEFT,
-			FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+			FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		catSelectorRight.borderSize = 2.5;
 		add(catSelectorRight);
 		categorySprites.push(catSelectorRight);
@@ -253,7 +253,7 @@ class OptionsState extends MusicBeatState
 			catTipText = new FlxText(10, FlxG.height - 24, 0,
 				Language.get("option.tipText", "Press C to customize your mobile controls"), 16);
 			catTipText.setFormat(Paths.optionsfont(), 16, FlxColor.WHITE, LEFT,
-				FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+				FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 			catTipText.borderSize = 2.4;
 			catTipText.scrollFactor.set();
 			add(catTipText);
@@ -615,7 +615,7 @@ class OptionsState extends MusicBeatState
 		setOptionsArray = optionsArray;
 		setCurSelected = 0;
 		setCurOption = null;
-		setBoyfriend = null;
+		// setBoyfriend 不清空: bf 构建开销大 (角色 JSON+图集+全部动画), 跨页面复用
 		nextAccept = 5;
 		holdTime = 0;
 		holdValue = 0;
@@ -645,7 +645,9 @@ class OptionsState extends MusicBeatState
 		settingsSprites.push(setTitleText);
 
 		setDescText = new FlxText(50, 600, 1180, "", 32);
-		setDescText.setFormat(Paths.optionsfont(), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+		// OUTLINE_FAST: 描述文本每次选中行都会变, OUTLINE 边框一次重光栅要 16 次全宽位图拷贝,
+		// 移动端每次上下移动选项都卡; OUTLINE_FAST 由 shader 画边, 光栅成本约 1/4。
+		setDescText.setFormat(Paths.optionsfont(), 32, FlxColor.WHITE, CENTER, FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 		setDescText.scrollFactor.set();
 		setDescText.borderSize = 2.4;
 		add(setDescText);
@@ -691,7 +693,7 @@ class OptionsState extends MusicBeatState
 			}
 			settingsSprites.push(optionText);
 
-			if (setOptionsArray[i].showBoyfriend && setBoyfriend == null)
+			if (setOptionsArray[i].showBoyfriend)
 			{
 				settingsReloadBoyfriend();
 			}
@@ -781,7 +783,12 @@ class OptionsState extends MusicBeatState
 		if (setGrpOptions != null) { remove(setGrpOptions); setGrpOptions.destroy(); setGrpOptions = null; }
 		if (setGrpTexts != null) { remove(setGrpTexts); setGrpTexts.destroy(); setGrpTexts = null; }
 		if (setCheckboxGroup != null) { remove(setCheckboxGroup); setCheckboxGroup.destroy(); setCheckboxGroup = null; }
-		if (setBoyfriend != null) { remove(setBoyfriend); setBoyfriend.destroy(); setBoyfriend = null; }
+		// bf 不销毁: 留在场景里隐藏待复用 (重建成本高), state 销毁时随场景一起释放
+		if (setBoyfriend != null)
+		{
+			setBoyfriend.visible = false;
+			setBoyfriend.active = false;
+		}
 		if (settingsNotes != null) { remove(settingsNotes); settingsNotes.destroy(); settingsNotes = null; }
 		for (t in settingsNotesTween) if (t != null) t.cancel();
 		settingsNotesTween = [];
@@ -1143,18 +1150,23 @@ class OptionsState extends MusicBeatState
 
 	function settingsReloadBoyfriend()
 	{
-		if (setBoyfriend != null)
+		// bf 构建要解析角色 JSON + 加载图集 + 重建全部动画, 移动端上一次就要几十毫秒。
+		// OptionsState 存活期间只构建一次, 之后进出设置页/来回切换直接复用同一实例。
+		if (setBoyfriend == null)
 		{
-			remove(setBoyfriend);
-			setBoyfriend.destroy();
+			setBoyfriend = new Character(840, 170, 'bf', true);
+			setBoyfriend.setGraphicSize(Std.int(setBoyfriend.width * 0.75));
+			setBoyfriend.updateHitbox();
+			add(setBoyfriend);
 		}
-
-		setBoyfriend = new Character(840, 170, 'bf', true);
-		setBoyfriend.setGraphicSize(Std.int(setBoyfriend.width * 0.75));
-		setBoyfriend.updateHitbox();
+		else
+		{
+			// 之前可能挂过预览相机 (previewMode), 复用时回到默认相机
+			setBoyfriend.cameras = null;
+			setBoyfriend.active = true;
+		}
 		if (!setBoyfriend.isAnimationNull())
 			setBoyfriend.dance();
-		add(setBoyfriend);
 		setBoyfriend.visible = false;
 	}
 
@@ -1710,7 +1722,7 @@ class OptionsState extends MusicBeatState
 			{
 				item.text = optionTexts[i];
 				item.setFormat(Paths.optionsfont(), 50, FlxColor.WHITE, LEFT,
-					FlxTextBorderStyle.OUTLINE, FlxColor.BLACK);
+					FlxTextBorderStyle.OUTLINE_FAST, FlxColor.BLACK);
 				item.borderSize = 2.5;
 			}
 		}
