@@ -69,7 +69,7 @@
 #  if defined(__APPLE__)
 #    include <TargetConditionals.h>
 #  endif
-#  if defined(__linux__)
+#  if defined(__linux__) || defined(__APPLE__)
 #    include <sys/ucontext.h>
 #  endif
 #  if defined(__ANDROID__)
@@ -557,7 +557,9 @@ static uintptr_t seiun_write_registers(char* buf, size_t cap, int* len, void* uc
   #if defined(__aarch64__)
 	// Only stable fields are used here (__fp/__lr became opaque pointers in
 	// recent macOS SDKs).
-	const __darwin_arm_thread_state64_t* ss = &uc->uc_mcontext->__ss;
+	// SDK names the struct __darwin_arm_thread_state64 (mach/arm/_structs.h);
+	// there is no __darwin_arm_thread_state64_t typedef.
+	const struct __darwin_arm_thread_state64* ss = &uc->uc_mcontext->__ss;
 	pc = (uintptr_t)ss->__pc;
 	seiun_append(buf, cap, len, "Registers (arm64):\n");
 	seiun_append(buf, cap, len, "  PC=0x%016llx SP=0x%016llx CPSR=0x%08x\n",
@@ -572,7 +574,9 @@ static uintptr_t seiun_write_registers(char* buf, size_t cap, int* len, void* uc
 			i + 3, (unsigned long long)ss->__x[i + 3]);
 	}
   #else // apple x86_64
-	const __darwin_x86_thread_state64_t* ss = &uc->uc_mcontext->__ss;
+	// SDK names the struct __darwin_x86_thread_state64 (mach/i386/_structs.h);
+	// there is no __darwin_x86_thread_state64_t typedef.
+	const struct __darwin_x86_thread_state64* ss = &uc->uc_mcontext->__ss;
 	pc = (uintptr_t)ss->__rip;
 	seiun_append(buf, cap, len, "Registers (x64):\n");
 	seiun_append(buf, cap, len, "  RIP=0x%016llx RSP=0x%016llx RBP=0x%016llx\n",
