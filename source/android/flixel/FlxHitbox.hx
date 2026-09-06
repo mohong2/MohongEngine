@@ -8,6 +8,7 @@ import android.flixel.FlxButton;
 import flixel.FlxSprite;
 import openfl.display.BitmapData;
 import openfl.display.Shape;
+import openfl.events.KeyboardEvent;
 import Replay;
 
 /**
@@ -148,6 +149,7 @@ class FlxHitbox extends FlxSpriteGroup
 		hint.alpha = idleAlpha;
 
 		var notifyKeyName:String = null;
+		var simKey:FlxKey = FlxKey.NONE;
 		var isMultiK:Bool = (PlayState.SONG != null && PlayState.SONG.mania != null && PlayState.SONG.mania != Note.defaultMania);
 		if (isMultiK)
 		{
@@ -178,9 +180,9 @@ class FlxHitbox extends FlxSpriteGroup
 			}
 		}
 		else if (Color == 0xFFFF00)
-			notifyKeyName = Std.string(FlxKey.SPACE);
+			simKey = FlxKey.SPACE;
 		else if (Color == 0x00FFFF)
-			notifyKeyName = Std.string(FlxKey.SHIFT);
+			simKey = FlxKey.SHIFT;
 
 		// 多k: 4K 以上轨道 (或整个多k Hitbox) → 直接驱动 PlayState 按键
 		if (hintIndex >= 4 || isMultiK)
@@ -189,7 +191,28 @@ class FlxHitbox extends FlxSpriteGroup
 				notifyKeyName = Std.string(FlxKey.NONE);
 		}
 
-		if (notifyKeyName != null)
+		if (simKey != FlxKey.NONE)
+		{
+			var keyCode:Int = simKey;
+			var charCode:Int = (simKey == FlxKey.SPACE) ? 32 : 0;
+			var isDown:Bool = false;
+			var pressSim:Void->Void = function()
+			{
+				if (isDown) return;
+				isDown = true;
+				FlxG.stage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_DOWN, true, false, charCode, keyCode));
+			};
+			var releaseSim:Void->Void = function()
+			{
+				if (!isDown) return; 
+				isDown = false;
+				FlxG.stage.dispatchEvent(new KeyboardEvent(KeyboardEvent.KEY_UP, true, false, charCode, keyCode));
+			};
+			hint.onDown.callback = pressSim;
+			hint.onUp.callback = releaseSim;
+			hint.onOut.callback = releaseSim;
+		}
+		else if (notifyKeyName != null)
 		{
 			hint.onDown.callback = function() { Replay.notifyPress(notifyKeyName); };
 			hint.onUp.callback = function() { Replay.notifyRelease(notifyKeyName); };
